@@ -34,7 +34,7 @@
 
 ## Этап 3. Собрать зависимости Kimera
 
-- [ ] Собрать / установить GTSAM совместимой версии
+- [x] Собрать / установить GTSAM совместимой версии — GTSAM 4.2, tag 4.2 / commit 4f66a491ffc83cf092d0d818b11dc35135521612, Release, system Eigen, TBB, Pose3/Rot3 ExpMap ON, tangent preintegration OFF, установлен в /usr/local
 - [ ] Собрать / установить OpenGV
 - [ ] Собрать / установить DBoW2
 - [ ] Собрать / установить Kimera-RPGO

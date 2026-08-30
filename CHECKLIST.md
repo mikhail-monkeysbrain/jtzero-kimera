@@ -34,13 +34,13 @@
 
 ## Этап 3. Собрать зависимости Kimera
 
-- [x] Собрать / установить GTSAM совместимой версии — GTSAM 4.2, tag 4.2 / commit 4f66a491ffc83cf092d0d818b11dc35135521612, Release, system Eigen, TBB, Pose3/Rot3 ExpMap ON, tangent preintegration OFF, установлен в /usr/local
+- [ ] Собрать / установить GTSAM совместимой версии — GTSAM 4.2, tag 4.2 / commit 4f66a491ffc83cf092d0d818b11dc35135521612, Release, system Eigen, TBB, Pose3/Rot3 ExpMap ON, tangent preintegration OFF, установлен в /usr/local; требуется пересборка с GTSAM_BUILD_UNSTABLE=ON, поскольку текущий Kimera-VIO master требует GTSAM_UNSTABLE
 - [x] Собрать / установить OpenGV — commit 91f4b19c73450833a40e463ad3648aae80b3a7f3, Release, system Eigen /usr/include/eigen3, tests/python OFF, ARM64 -march=armv8-a, статическая libopengv.a установлена в /usr/local
 - [x] Собрать / установить DBoW2 — commit 3924753db6145f12618e7de09b7e6b258db93c6e, Release, demo OFF, OpenCV 4.10.0, shared libDBoW2.so установлена в /usr/local
 - [x] Собрать / установить Kimera-RPGO — commit d28b4df0570d642a2bb00e511344ce1110f87519, Release, GTSAM из /usr/local/lib/cmake/GTSAM, tests OFF, shared libKimeraRPGO.so установлена в /usr/local
 - [x] Проверить обнаружение OpenCV, Eigen, glog и gflags через CMake — smoke-test успешно обнаружил OpenCV 4.10.0, Eigen 3.4.0, glog и gflags; также GTSAM, OpenGV, DBoW2 и Kimera-RPGO
-- [x] Сохранить версии и параметры сборки зависимостей — версии, commit SHA и ключевые параметры зафиксированы в этом чеклисте; итоговый smoke-test успешно собран и запущен
-- [x] **Этап 3 завершён**
+- [ ] Сохранить версии и параметры сборки зависимостей — требуется дополнить итоговую конфигурацию параметром GTSAM_BUILD_UNSTABLE=ON и проверить GTSAM_UNSTABLE через CMake
+- [ ] **Этап 3 завершён**
 
 ## Этап 4. Собрать Kimera-VIO без ROS
 

@@ -55,8 +55,8 @@
 
 ## Этап 5. Первый запуск на EuRoC
 
-- [x] Скачать / подготовить EuRoC V1_01_easy — архив V1_01_easy.zip (~1.1 GiB) скачан в /home/vio/datasets/euroc, проверен unzip -t без ошибок; подтверждена структура mav0 с camera/IMU/ground-truth данными; распаковка выполняется следующим шагом
-- [ ] Настроить режим Mono + IMU
+- [x] Скачать / подготовить EuRoC V1_01_easy — распакованный датасет /home/vio/datasets/euroc/V1_01_easy, 2912 кадров cam0 + 2912 cam1, IMU и ground truth; все 7 sensor YAML подготовлены штатным yamelize.bash и имеют OpenCV-заголовок %YAML:1.0
+- [x] Настроить режим Mono + IMU — params/EurocMono; Regular VIO Backend; loop closure, 3D visualizer и frontend image visualization отключены для headless RPi5; smoke-test frames 50..200 завершён с exit code 0 и `Pipeline successful? Yes!`
 - [ ] Запустить полный pipeline без критических ошибок
 - [ ] Проверить обработку всех кадров
 - [ ] Измерить средний FPS

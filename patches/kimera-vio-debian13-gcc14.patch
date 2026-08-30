@@ -1,0 +1,50 @@
+# Kimera-VIO compatibility patch for jtzero-kimera
+# Upstream: MIT-SPARK/Kimera-VIO
+# Base commit: ce8c59b7b273ab5ac29db7e5572e1623760e19c7
+# Verified environment: Debian 13 ARM64, GCC 14.2, OpenCV 4.10.0
+#
+# Fixes:
+# 1. Avoid an unnecessary cv::viz::Color dependency in RgbdCamera.cpp.
+# 2. Explicitly include OpenCV Viz where MeshOptimization declares cv::viz types.
+# 3. Explicitly include <cstdint> and <vector> in UtilsNumerical.h instead of
+#    relying on transitive standard-library includes.
+#
+# Apply from the Kimera-VIO repository root:
+#   git apply /path/to/kimera-vio-debian13-gcc14.patch
+#
+# The patch is intentionally pinned to the upstream base commit above.
+
+diff --git a/src/frontend/RgbdCamera.cpp b/src/frontend/RgbdCamera.cpp
+--- a/src/frontend/RgbdCamera.cpp
++++ b/src/frontend/RgbdCamera.cpp
+@@ -50,7 +50,7 @@
+   cv::Mat_<cv::Point3f> cloud_out =
+       cv::Mat(img_rows, img_cols, CV_32FC3, cv::Scalar(0.0, 0.0, 0.0));
+   cv::Mat colors_out =
+-      cv::Mat(img_rows, img_cols, CV_8UC3, cv::viz::Color::red());
++      cv::Mat(img_rows, img_cols, CV_8UC3, cv::Scalar(0, 0, 255));
+ 
+   for (int v = 0u; v < img_rows; ++v) {
+     for (int u = 0u; u < img_cols; ++u) {
+diff --git a/include/kimera-vio/mesh/MeshOptimization.h b/include/kimera-vio/mesh/MeshOptimization.h
+--- a/include/kimera-vio/mesh/MeshOptimization.h
++++ b/include/kimera-vio/mesh/MeshOptimization.h
+@@ -21,6 +21,7 @@
+ #include <Eigen/Core>
+ 
+ #include <opencv2/opencv.hpp>
++#include <opencv2/viz.hpp>
+ 
+ #include <gtsam/geometry/Cal3_S2.h>
+ #include <gtsam/geometry/Pose3.h>
+diff --git a/include/kimera-vio/utils/UtilsNumerical.h b/include/kimera-vio/utils/UtilsNumerical.h
+--- a/include/kimera-vio/utils/UtilsNumerical.h
++++ b/include/kimera-vio/utils/UtilsNumerical.h
+@@ -16,6 +16,8 @@
+ 
+ #include <algorithm>
+ #include <iostream>
++#include <cstdint>
++#include <vector>
+ 
+ namespace VIO {

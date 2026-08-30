@@ -35,7 +35,7 @@
 ## Этап 3. Собрать зависимости Kimera
 
 - [x] Собрать / установить GTSAM совместимой версии — GTSAM 4.2, tag 4.2 / commit 4f66a491ffc83cf092d0d818b11dc35135521612, Release, system Eigen, TBB, Pose3/Rot3 ExpMap ON, tangent preintegration OFF, установлен в /usr/local
-- [ ] Собрать / установить OpenGV
+- [x] Собрать / установить OpenGV — commit 91f4b19c73450833a40e463ad3648aae80b3a7f3, Release, system Eigen /usr/include/eigen3, tests/python OFF, ARM64 -march=armv8-a, статическая libopengv.a установлена в /usr/local
 - [ ] Собрать / установить DBoW2
 - [ ] Собрать / установить Kimera-RPGO
 - [ ] Проверить обнаружение OpenCV, Eigen, glog и gflags через CMake

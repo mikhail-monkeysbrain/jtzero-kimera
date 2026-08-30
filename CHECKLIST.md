@@ -58,8 +58,8 @@
 - [x] Скачать / подготовить EuRoC V1_01_easy — распакованный датасет /home/vio/datasets/euroc/V1_01_easy, 2912 кадров cam0 + 2912 cam1, IMU и ground truth; все 7 sensor YAML подготовлены штатным yamelize.bash и имеют OpenCV-заголовок %YAML:1.0
 - [x] Настроить режим Mono + IMU — params/EurocMono; Regular VIO Backend; loop closure, 3D visualizer и frontend image visualization отключены для headless RPi5; smoke-test frames 50..200 завершён с exit code 0 и `Pipeline successful? Yes!`
 - [x] Запустить полный pipeline без критических ошибок — frames 0..2912, exit status 0, `Pipeline successful? Yes!`, FATAL/ERROR/segfault отсутствуют; Spin took 40057 ms
-- [ ] Проверить обработку всех кадров
-- [ ] Измерить средний FPS
+- [x] Проверить обработку всех кадров — вход cam0 содержит 2912 кадров за 145.550 s; pipeline запущен на диапазоне 0..2912 и завершён штатно; последний VIO/frontend timestamp 1403715418712143104 находится за 100 ms до последнего входного кадра, что соответствует keyframe/backend cadence, а не преждевременной остановке
+- [x] Измерить средний FPS — offline throughput 2912 / 40.057 s = 72.7 input frames/s, примерно 3.64x от реального времени EuRoC 20 FPS; /usr/bin/time wall 40.96 s, CPU 338%, max RSS ~1.03 GiB, swaps 0
 - [ ] Проверить пропуски кадров
 - [ ] Проверить стабильность выходной траектории
 - [ ] Сохранить результаты первого теста

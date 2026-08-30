@@ -50,8 +50,8 @@
 - [x] Успешно выполнить CMake configure — Release, Ninja, KIMERA_BUILD_TESTS=OFF; GTSAM/GTSAM_UNSTABLE/OpenGV/DBoW2/Kimera-RPGO обнаружены; Pangolin отсутствует и является optional
 - [x] Успешно собрать Kimera-VIO на ARM64 — Debian 13 / GCC 14.2; после минимальных compatibility fixes успешно собраны libkimera_vio.so и stereoVIOEuroc
 - [x] Сохранить build log — /home/vio/Kimera-VIO/build_kimera_vio.log
-- [ ] Проверить запуск основных исполняемых файлов
-- [ ] **Этап 4 завершён**
+- [x] Проверить запуск основных исполняемых файлов — stereoVIOEuroc является ARM64 ELF, все shared libraries найдены через ldd, --help выполняется с exit code 0
+- [x] **Этап 4 завершён**
 
 ## Этап 5. Первый запуск на EuRoC
 
@@ -169,7 +169,7 @@
 
 ## Контрольные точки
 
-- [ ] **CP1:** Kimera-VIO нативно собрана на текущем Raspberry Pi 5
+- [x] **CP1:** Kimera-VIO нативно собрана на текущем Raspberry Pi 5 — ARM64 build и запуск stereoVIOEuroc проверены, динамические зависимости разрешены
 - [ ] **CP2:** EuRoC V1_01_easy успешно проходит в Mono+IMU
 - [ ] **CP3:** OV9281 + RAW IMU работают с общей временной шкалой
 - [ ] **CP4:** Получена стабильная live VIO-одометрия на стенде

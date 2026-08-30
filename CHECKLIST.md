@@ -36,7 +36,7 @@
 
 - [x] Собрать / установить GTSAM совместимой версии — GTSAM 4.2, tag 4.2 / commit 4f66a491ffc83cf092d0d818b11dc35135521612, Release, system Eigen, TBB, Pose3/Rot3 ExpMap ON, tangent preintegration OFF, установлен в /usr/local
 - [x] Собрать / установить OpenGV — commit 91f4b19c73450833a40e463ad3648aae80b3a7f3, Release, system Eigen /usr/include/eigen3, tests/python OFF, ARM64 -march=armv8-a, статическая libopengv.a установлена в /usr/local
-- [ ] Собрать / установить DBoW2
+- [x] Собрать / установить DBoW2 — commit 3924753db6145f12618e7de09b7e6b258db93c6e, Release, demo OFF, OpenCV 4.10.0, shared libDBoW2.so установлена в /usr/local
 - [ ] Собрать / установить Kimera-RPGO
 - [ ] Проверить обнаружение OpenCV, Eigen, glog и gflags через CMake
 - [ ] Сохранить версии и параметры сборки зависимостей

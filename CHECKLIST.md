@@ -46,8 +46,8 @@
 
 - [x] Клонировать Kimera-VIO — shallow clone текущего master в /home/vio/Kimera-VIO
 - [x] Зафиксировать используемый commit/tag Kimera-VIO — master, commit ce8c59b7b273ab5ac29db7e5572e1623760e19c7
-- [ ] Создать отдельный build-каталог
-- [ ] Успешно выполнить CMake configure
+- [x] Создать отдельный build-каталог — /home/vio/Kimera-VIO/build
+- [x] Успешно выполнить CMake configure — Release, Ninja, KIMERA_BUILD_TESTS=OFF; GTSAM/GTSAM_UNSTABLE/OpenGV/DBoW2/Kimera-RPGO обнаружены; Pangolin отсутствует и является optional
 - [ ] Успешно собрать Kimera-VIO на ARM64
 - [ ] Сохранить build log
 - [ ] Проверить запуск основных исполняемых файлов

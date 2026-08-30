@@ -48,8 +48,8 @@
 - [x] Зафиксировать используемый commit/tag Kimera-VIO — master, commit ce8c59b7b273ab5ac29db7e5572e1623760e19c7
 - [x] Создать отдельный build-каталог — /home/vio/Kimera-VIO/build
 - [x] Успешно выполнить CMake configure — Release, Ninja, KIMERA_BUILD_TESTS=OFF; GTSAM/GTSAM_UNSTABLE/OpenGV/DBoW2/Kimera-RPGO обнаружены; Pangolin отсутствует и является optional
-- [ ] Успешно собрать Kimera-VIO на ARM64
-- [ ] Сохранить build log
+- [x] Успешно собрать Kimera-VIO на ARM64 — Debian 13 / GCC 14.2; после минимальных compatibility fixes успешно собраны libkimera_vio.so и stereoVIOEuroc
+- [x] Сохранить build log — /home/vio/Kimera-VIO/build_kimera_vio.log
 - [ ] Проверить запуск основных исполняемых файлов
 - [ ] **Этап 4 завершён**
 

@@ -38,9 +38,9 @@
 - [x] Собрать / установить OpenGV — commit 91f4b19c73450833a40e463ad3648aae80b3a7f3, Release, system Eigen /usr/include/eigen3, tests/python OFF, ARM64 -march=armv8-a, статическая libopengv.a установлена в /usr/local
 - [x] Собрать / установить DBoW2 — commit 3924753db6145f12618e7de09b7e6b258db93c6e, Release, demo OFF, OpenCV 4.10.0, shared libDBoW2.so установлена в /usr/local
 - [x] Собрать / установить Kimera-RPGO — commit d28b4df0570d642a2bb00e511344ce1110f87519, Release, GTSAM из /usr/local/lib/cmake/GTSAM, tests OFF, shared libKimeraRPGO.so установлена в /usr/local
-- [ ] Проверить обнаружение OpenCV, Eigen, glog и gflags через CMake
-- [ ] Сохранить версии и параметры сборки зависимостей
-- [ ] **Этап 3 завершён**
+- [x] Проверить обнаружение OpenCV, Eigen, glog и gflags через CMake — smoke-test успешно обнаружил OpenCV 4.10.0, Eigen 3.4.0, glog и gflags; также GTSAM, OpenGV, DBoW2 и Kimera-RPGO
+- [x] Сохранить версии и параметры сборки зависимостей — версии, commit SHA и ключевые параметры зафиксированы в этом чеклисте; итоговый smoke-test успешно собран и запущен
+- [x] **Этап 3 завершён**
 
 ## Этап 4. Собрать Kimera-VIO без ROS
 

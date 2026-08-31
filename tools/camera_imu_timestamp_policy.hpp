@@ -4,7 +4,12 @@
 
 namespace jtzero::timesync {
 
-// Measured on OV9281 USB 640x480 MJPEG @ 120 FPS + Matek H743 HIGHRES_IMU @ 200 Hz.
+// Measured specifically for the current camera transport/configuration:
+//   OV9281 USB UVC, 640x480 MJPEG @ 120 FPS
+//   Matek H743 HIGHRES_IMU @ 200 Hz
+// This correction is NOT a sensor-intrinsic constant. Recalibrate it if the
+// camera interface, USB bridge, capture mode, resolution, FPS or timestamp
+// semantics change (especially when moving from USB UVC to CSI).
 // Dedicated start/stop yaw test:
 //   raw global offset: -10.55 ms
 //   15 segment median: -10.15 ms
@@ -14,11 +19,16 @@ namespace jtzero::timesync {
 //   camera -10.5 ms -> residual -21.05 ms
 constexpr int64_t kCameraToImuCorrectionNs = 10'500'000LL;
 
-// Runtime continuity policy for OV9281 USB @ 120 FPS.
-// A frame pair is valid only when the V4L2 sequence is contiguous and the
-// corrected camera timestamps advance by a physically plausible interval.
+// SOURCE-stream continuity policy for OV9281 USB UVC @ 120 FPS.
+// IMPORTANT: this 20 ms ceiling applies only to consecutive raw/source V4L2
+// frames BEFORE temporal decimation. It MUST NOT be applied to the ~30 FPS
+// frames selected for Kimera, whose normal interval is about 33.3 ms.
+//
+// A source-frame pair is valid only when the V4L2 sequence is contiguous and
+// the corrected camera timestamps advance by a physically plausible interval.
 // The 20 ms ceiling is intentionally above the observed normal 8/12 ms UVC
-// cadence, while still rejecting long gaps before they reach visual tracking.
+// cadence, while still rejecting long source-stream gaps before they reach
+// visual tracking.
 constexpr int64_t kMaxCameraFrameDtNs = 20'000'000LL;
 
 struct CameraFrameStamp {

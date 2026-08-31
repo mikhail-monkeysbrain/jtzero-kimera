@@ -68,14 +68,28 @@ Segment-level analyzer v2:
 
 Все 15 сегментов выбрали ту же ось `Z` и отрицательную корреляцию. Специальный старт/стоп тест существенно уменьшил неопределённость по сравнению с плавными yaw-прогонами.
 
+## Проверка знака компенсации
+
+Отдельный verifier был запущен на той же специальной записи. Результат:
+
+- raw measured offset = `-10.550 ms`
+- raw correlation = `-0.996`
+- camera timestamp shift `+10.500 ms` → residual `-0.050 ms`
+- camera timestamp shift `-10.500 ms` → residual `-21.050 ms`
+
+Следовательно, знак компенсации подтверждён экспериментально. Рабочая формула:
+
+`camera_timestamp_corrected_ns = camera_v4l2_timestamp_ns + 10_500_000 ns`
+
+IMU timestamp после affine TIMESYNC mapping дополнительного постоянного сдвига не получает.
+
+В репозитории добавлена единая политика `tools/camera_imu_timestamp_policy.hpp` с константой `kCameraToImuCorrectionNs = 10'500'000`.
+
 ## Вывод
 
-Физический camera-to-IMU time offset экспериментально обнаружен и yaw-синхронизация подтверждена. Для текущей конфигурации `OV9281 USB 120 FPS + HIGHRES_IMU 200 Hz + TIMESYNC affine mapping` рабочая оценка постоянного offset принимается приблизительно как `-10.5 ms` в соглашении текущего анализатора:
+Физический camera-to-IMU time offset экспериментально обнаружен, yaw-синхронизация подтверждена, знак компенсации подтверждён. Для текущей конфигурации `OV9281 USB 120 FPS + HIGHRES_IMU 200 Hz + TIMESYNC affine mapping` рабочая компенсация камеры равна `+10.5 ms`.
 
-- positive offset = camera measurement occurs later than IMU;
-- negative offset = camera measurement occurs earlier than IMU.
-
-Перед внесением компенсации в live timestamp path необходимо отдельно проверить математический знак применения offset. Поэтому сама компенсация пока не считается реализованной.
+Пункт реализации компенсации в чеклисте считается завершённым только после запуска модифицированного logger/live timestamp path и повторного yaw-теста, который должен дать остаточный offset около нуля.
 
 Текущие диагностические файлы на RPi:
 

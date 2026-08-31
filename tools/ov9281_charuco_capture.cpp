@@ -24,6 +24,17 @@ constexpr float kSquareLengthMm = 27.324F;
 constexpr float kMarkerLengthMm = 20.043F;
 constexpr int kMinCharucoCorners = 12;
 constexpr double kMinSaveIntervalSec = 0.35;
+constexpr const char* kWindowName = "OV9281 ChArUco calibration capture";
+
+struct MouseState {
+    bool save_requested = false;
+};
+
+void onMouse(int event, int, int, int, void* userdata) {
+    if (event == cv::EVENT_LBUTTONDOWN && userdata != nullptr) {
+        static_cast<MouseState*>(userdata)->save_requested = true;
+    }
+}
 
 std::string frameName(int index) {
     std::ostringstream ss;
@@ -71,7 +82,12 @@ int main(int argc, char** argv) {
               << "squareLength: " << kSquareLengthMm << " mm\n"
               << "markerLength: " << kMarkerLengthMm << " mm\n"
               << "output: " << out_dir << '\n'
-              << "SPACE = save detected frame, Q/ESC = quit\n";
+              << "SAVE: SPACE / S / ENTER / left mouse click\n"
+              << "QUIT: Q / ESC\n";
+
+    MouseState mouse_state;
+    cv::namedWindow(kWindowName, cv::WINDOW_AUTOSIZE);
+    cv::setMouseCallback(kWindowName, onMouse, &mouse_state);
 
     int saved = 0;
     auto last_save = std::chrono::steady_clock::now() - std::chrono::seconds(1);
@@ -96,7 +112,7 @@ int main(int argc, char** argv) {
         if (!marker_ids.empty()) {
             cv::aruco::drawDetectedMarkers(view, marker_corners, marker_ids);
         }
-        const int corner_count = charuco_ids.empty() ? 0 : charuco_ids.total();
+        const int corner_count = charuco_ids.empty() ? 0 : static_cast<int>(charuco_ids.total());
         if (corner_count > 0) {
             cv::aruco::drawDetectedCornersCharuco(view, charuco_corners,
                                                    charuco_ids,
@@ -110,27 +126,41 @@ int main(int argc, char** argv) {
         cv::putText(view, status.str(), cv::Point(12, 28),
                     cv::FONT_HERSHEY_SIMPLEX, 0.65,
                     good ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 0, 255), 2);
-        cv::putText(view, "SPACE save | Q/ESC quit", cv::Point(12, 456),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.55, cv::Scalar(255, 255, 255), 1);
+        cv::putText(view, "SAVE: click / SPACE / S / ENTER", cv::Point(12, 432),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.52, cv::Scalar(255, 255, 255), 1);
+        cv::putText(view, "QUIT: Q / ESC", cv::Point(12, 456),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.52, cv::Scalar(255, 255, 255), 1);
 
-        cv::imshow("OV9281 ChArUco calibration capture", view);
+        cv::imshow(kWindowName, view);
         const int key = cv::waitKey(1) & 0xff;
         if (key == 27 || key == 'q' || key == 'Q') break;
 
-        if (key == ' ' && good) {
+        const bool keyboard_save =
+            key == ' ' || key == 's' || key == 'S' || key == 10 || key == 13;
+        const bool save_requested = keyboard_save || mouse_state.save_requested;
+        mouse_state.save_requested = false;
+
+        if (save_requested) {
+            if (!good) {
+                std::cout << "SKIP: board not ready, corners=" << corner_count << '\n';
+                continue;
+            }
+
             const auto now = std::chrono::steady_clock::now();
             const double since_last = std::chrono::duration<double>(now - last_save).count();
-            if (since_last >= kMinSaveIntervalSec) {
-                ++saved;
-                const fs::path image_path = out_dir / frameName(saved);
-                if (!cv::imwrite(image_path.string(), gray)) {
-                    std::cerr << "ERROR: cannot save " << image_path << '\n';
-                    return 3;
-                }
-                last_save = now;
-                std::cout << "SAVE " << saved << ": " << image_path
-                          << " corners=" << corner_count << '\n';
+            if (since_last < kMinSaveIntervalSec) {
+                continue;
             }
+
+            ++saved;
+            const fs::path image_path = out_dir / frameName(saved);
+            if (!cv::imwrite(image_path.string(), gray)) {
+                std::cerr << "ERROR: cannot save " << image_path << '\n';
+                return 3;
+            }
+            last_save = now;
+            std::cout << "SAVE " << saved << ": " << image_path
+                      << " corners=" << corner_count << '\n';
         }
     }
 

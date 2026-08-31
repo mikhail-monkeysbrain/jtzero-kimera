@@ -27,8 +27,8 @@ namespace {
 constexpr const char* CAMERA_DEVICE = "/dev/video0";
 constexpr const char* SERIAL_DEVICE = "/dev/ttyAMA0";
 constexpr const char* OUTPUT_CSV = "/home/vio/camera_imu_extrinsics.csv";
-constexpr const char* OUTPUT_MJPEG = "/home/vio/camera_imu_extrinsics.mjpg";
-constexpr const char* OUTPUT_CAMERA_INDEX = "/home/vio/camera_imu_extrinsics_camera.csv";
+constexpr const char* OUTPUT_MJPEG = "/dev/shm/camera_imu_extrinsics.mjpg";
+constexpr const char* OUTPUT_CAMERA_INDEX = "/dev/shm/camera_imu_extrinsics_camera.csv";
 
 constexpr int CAMERA_WIDTH = 640;
 constexpr int CAMERA_HEIGHT = 480;

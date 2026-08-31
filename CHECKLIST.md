@@ -93,15 +93,15 @@
 
 ## Этап 8. Получить RAW IMU с Matek H743
 
-- [ ] Определить MAVLink-сообщение / источник raw gyro и accelerometer
-- [ ] Получить angular velocity X/Y/Z
-- [ ] Получить linear acceleration X/Y/Z
-- [ ] Получить timestamp для каждого IMU sample
-- [ ] Добиться стабильной частоты не менее 200 Hz
-- [ ] Проверить возможность работы в диапазоне 200–400 Hz
-- [ ] Проверить пропуски и jitter потока IMU
-- [ ] Сохранить сырой IMU-лог
-- [ ] **Этап 8 завершён**
+- [x] Определить MAVLink-сообщение / источник raw gyro и accelerometer — `HIGHRES_IMU` (MAVLink message id 105) от Matek H743 через UART3 → `/dev/ttyAMA0`, MAVLink2
+- [x] Получить angular velocity X/Y/Z — `xgyro/ygyro/zgyro` в rad/s
+- [x] Получить linear acceleration X/Y/Z — `xacc/yacc/zacc` в m/s²
+- [x] Получить timestamp для каждого IMU sample — `HIGHRES_IMU.time_usec`; контрольный лог не содержит non-positive timestamp deltas
+- [x] Добиться стабильной частоты не менее 200 Hz — UART3 460800 baud, запрос 200 Hz; 30 s validation: RX 199.591 Hz, IMU timestamp rate 200.001 Hz
+- [x] Проверить возможность работы в диапазоне 200–400 Hz — 200 Hz воспроизводится точно; запрос 300 Hz квантуется примерно в 333.4 Hz с большим jitter; 400 Hz отклоняется `MAV_RESULT_DENIED`; рабочая частота зафиксирована 200 Hz
+- [x] Проверить пропуски и jitter потока IMU — 5988 samples за 30.002 s; dt mean 5.000 ms, P95 5.275 ms, P99 5.374 ms, max 5.769 ms; absolute jitter P95 0.325 ms, P99 0.581 ms, max 0.769 ms; large_gaps=0, estimated_missing=0
+- [x] Сохранить сырой IMU-лог — `/home/vio/highres_imu_200hz_30s.csv`; результаты и рабочая конфигурация зафиксированы в `results/matek_h743_highres_imu_200hz.md`
+- [x] **Этап 8 завершён**
 
 ## Этап 9. Временная синхронизация камеры и IMU
 

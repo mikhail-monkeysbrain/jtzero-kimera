@@ -25,7 +25,7 @@
 - [x] Установить базовые build-инструменты — build-essential, CMake 3.31.6, Ninja 1.12.1, pkg-config
 - [x] Установить Eigen — 3.4.0-5
 - [x] Установить OpenCV development packages — OpenCV 4.10.0
-- [x] Установить glog и gflags — glog 0.6.0-2.1+b2, gflags 2.2.2-2.1+b1
+- [x] Установить glog и gflags — glog 0.6.0-2.1+b2, gflags 2.2.2-2+b1
 - [x] Установить Boost — 1.83.0.2+b2
 - [x] Установить SuiteSparse — 1:7.10.1+dfsg-1
 - [x] Установить TBB — 2022.1.0-1+deb13u1
@@ -109,11 +109,11 @@
 - [x] Измерить постоянный camera-to-IMU time offset — yaw correlation на общей временной шкале подтверждён; специальный start/stop yaw-тест дал global `-10.55 ms`, segment median `-10.15 ms`, MAD `0.80 ms`, P05..P95 `-13.19..-9.11 ms`, median |corr| `0.992`; рабочая оценка `≈ -10.5 ms`, результаты в `results/camera_imu_yaw_sync.md`
 - [x] Измерить jitter камеры — 120 s validation; при исключённом блокирующем disk I/O: 14475 frames, 4 source drops, delivery median `8.029 ms`, P95 `8.063 ms`, P99 `8.084 ms`, max `12.304 ms`; отдельный disk-backed прогон выявил диагностические stalls до `1.6 s`, устраняющиеся при записи MJPEG в `/dev/shm`; результаты в `results/camera_imu_jitter_120s.md`
 - [x] Измерить jitter IMU / MAVLink / serial — 120 s validation; 23951 samples, transport median `0.718 ms`, P95 `1.206 ms`, P99 `1.276 ms`, max `4.501 ms` при записи MJPEG в `/dev/shm`; mapped IMU dt median `5.011 ms`, absolute jitter P95 `0.328 ms`, P99 `0.593 ms`, max `0.821 ms`; disk-backed stalls диагностического logger не являются jitter FC/IMU; результаты в `results/camera_imu_jitter_120s.md`
-- [x] Реализовать компенсацию постоянного offset при необходимости — camera timestamp сдвигается вперёд на `+10.5 ms`; компенсированный start/stop yaw validation дал residual global offset `-0.150 ms`, global corr `-0.964`, segment median `-0.150 ms`; знак компенсации подтверждён отдельным verifier
+- [x] Реализовать компенсацию постоянного offset при необходимости — camera timestamp сдвигается вперёд на `+10.5 ms`; компенсированный start/stop yaw validation дал residual global offset `-0.150 ms`, global corr `-0.964`, segment median `-0.150 ms`; знак компенсации подтверждён отдельным verifier; значение относится к текущему OV9281 USB UVC 640x480 MJPEG @ 120 FPS и подлежит повторной калибровке при смене интерфейса/режима
 - [x] Проверить синхронизацию на yaw-движении — во всех независимых тестах лучшая ось `Z`, знак корреляции отрицательный; специальный start/stop тест: global corr `-0.996`, 15/15 segment accepted, median |corr| `0.992`
-- [x] Исключить крупные скачки межкадрового угла из-за timestamp mismatch — runtime policy проверяет непрерывность `V4L2 sequence`, положительный corrected timestamp delta и верхнюю границу `20 ms`; при любом разрыве межкадровая visual-пара отвергается и tracking должен быть переинициализирован. Проверено `camera_timestamp_policy_check`: 3620 frames, 1 потерянный source frame обнаружен по sequence при `dt=7.998 ms`, rejected pairs=1, corrected timestamp mismatches=0, `RESULT: PASS`
-- [ ] Зафиксировать итоговую схему timestamping
-- [ ] **Этап 9 завершён**
+- [x] Исключить крупные скачки межкадрового угла из-за timestamp mismatch — source runtime policy до temporal decimation проверяет непрерывность `V4L2 sequence`, положительный corrected timestamp delta и верхнюю границу `20 ms` только для исходного 120 FPS UVC-потока; этот порог не применяется к выбранному ~30 FPS потоку Kimera. Проверено `camera_timestamp_policy_check`: 3620 frames, 1 потерянный source frame обнаружен по sequence при `dt=7.998 ms`, rejected pairs=1, corrected timestamp mismatches=0, `RESULT: PASS`
+- [x] Зафиксировать итоговую схему timestamping — `results/camera_imu_timestamp_scheme.md`: единый `CLOCK_MONOTONIC`; camera=`V4L2 source timestamp + 10.5 ms` для текущей USB-конфигурации; selected ~30 FPS кадры сохраняют реальные corrected source timestamps без синтетического cadence; IMU=`HIGHRES_IMU.time_usec` через непрерывный affine TIMESYNC mapping; receive-time только diagnostic; при невалидном/stale TIMESYNC mapping синхронизированный IMU не подаётся и receive-time fallback запрещён
+- [x] **Этап 9 завершён**
 
 ## Этап 10. Калибровка камеры
 
@@ -171,6 +171,6 @@
 
 - [x] **CP1:** Kimera-VIO нативно собрана на текущем Raspberry Pi 5 — ARM64 build и запуск stereoVIOEuroc проверены, динамические зависимости разрешены
 - [x] **CP2:** EuRoC V1_01_easy успешно проходит в Mono+IMU — полный pipeline frames 0..2912 завершён с exit 0, неожиданных пропусков кадров не выявлено, throughput 72.7 input fps, выходная траектория и её ошибки относительно GT измерены и сохранены
-- [ ] **CP3:** OV9281 + RAW IMU работают с общей временной шкалой
+- [x] **CP3:** OV9281 + RAW IMU работают с общей временной шкалой — camera corrected V4L2 timestamps и affine-mapped `HIGHRES_IMU.time_usec` сведены в RPi `CLOCK_MONOTONIC`, offset/jitter/yaw validation и source continuity policy проверены; итоговый timestamp contract зафиксирован в `results/camera_imu_timestamp_scheme.md`
 - [ ] **CP4:** Получена стабильная live VIO-одометрия на стенде
 - [ ] **CP5:** Kimera-VIO сравнена с `jtzero-optical-flow-mvp` на одинаковых тестах

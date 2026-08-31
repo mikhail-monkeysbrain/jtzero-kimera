@@ -25,7 +25,7 @@
 - [x] Установить базовые build-инструменты — build-essential, CMake 3.31.6, Ninja 1.12.1, pkg-config
 - [x] Установить Eigen — 3.4.0-5
 - [x] Установить OpenCV development packages — OpenCV 4.10.0
-- [x] Установить glog и gflags — glog 0.6.0-2.1+b2, gflags 2.2.2-2+b1
+- [x] Установить glog и gflags — glog 0.6.0-2.1+b2, gflags 2.2.2-2.1+b1
 - [x] Установить Boost — 1.83.0.2+b2
 - [x] Установить SuiteSparse — 1:7.10.1+dfsg-1
 - [x] Установить TBB — 2022.1.0-1+deb13u1
@@ -111,7 +111,7 @@
 - [x] Измерить jitter IMU / MAVLink / serial — 120 s validation; 23951 samples, transport median `0.718 ms`, P95 `1.206 ms`, P99 `1.276 ms`, max `4.501 ms` при записи MJPEG в `/dev/shm`; mapped IMU dt median `5.011 ms`, absolute jitter P95 `0.328 ms`, P99 `0.593 ms`, max `0.821 ms`; disk-backed stalls диагностического logger не являются jitter FC/IMU; результаты в `results/camera_imu_jitter_120s.md`
 - [x] Реализовать компенсацию постоянного offset при необходимости — camera timestamp сдвигается вперёд на `+10.5 ms`; компенсированный start/stop yaw validation дал residual global offset `-0.150 ms`, global corr `-0.964`, segment median `-0.150 ms`; знак компенсации подтверждён отдельным verifier
 - [x] Проверить синхронизацию на yaw-движении — во всех независимых тестах лучшая ось `Z`, знак корреляции отрицательный; специальный start/stop тест: global corr `-0.996`, 15/15 segment accepted, median |corr| `0.992`
-- [ ] Исключить крупные скачки межкадрового угла из-за timestamp mismatch
+- [x] Исключить крупные скачки межкадрового угла из-за timestamp mismatch — runtime policy проверяет непрерывность `V4L2 sequence`, положительный corrected timestamp delta и верхнюю границу `20 ms`; при любом разрыве межкадровая visual-пара отвергается и tracking должен быть переинициализирован. Проверено `camera_timestamp_policy_check`: 3620 frames, 1 потерянный source frame обнаружен по sequence при `dt=7.998 ms`, rejected pairs=1, corrected timestamp mismatches=0, `RESULT: PASS`
 - [ ] Зафиксировать итоговую схему timestamping
 - [ ] **Этап 9 завершён**
 

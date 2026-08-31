@@ -129,7 +129,7 @@
 
 ## Этап 11. Калибровка Camera ↔ IMU
 
-- [ ] Зафиксировать системы координат камеры и IMU
+- [x] Зафиксировать системы координат камеры и IMU — IMU/body frame экспериментально подтверждён как FRD (`+X` forward, `+Y` right, `+Z` down) по отдельным roll/pitch/yaw тестам и проверке знаков; camera frame зафиксирован как OpenCV (`+X` right, `+Y` down, `+Z` optical forward); результаты сохранены в `results/camera_imu_extrinsics.md`
 - [ ] Определить Camera↔IMU rotation
 - [ ] Определить Camera↔IMU translation
 - [ ] Проверить направления и знаки всех осей

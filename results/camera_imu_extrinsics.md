@@ -2,9 +2,9 @@
 
 ## Stage 11 status
 
-This document records the experimentally verified coordinate-frame convention used for OV9281 ↔ Matek H743 extrinsic calibration.
+This document records the experimentally verified coordinate-frame convention and the calibrated Camera↔IMU rotation for OV9281 ↔ Matek H743 extrinsic calibration.
 
-At this point only the coordinate frames are fixed. Camera↔IMU rotation and translation are not yet calibrated and must not be inferred from the approximate physical mounting.
+Coordinate frames and Camera↔IMU rotation are now fixed. Camera↔IMU translation is not yet calibrated. The final Kimera `T_BS` serialization direction must still be verified before writing the complete extrinsic calibration file.
 
 ## IMU / body frame B
 
@@ -48,33 +48,154 @@ The OV9281 camera frame is fixed to the standard OpenCV camera convention:
 - `+C_Y` = down in the image
 - `+C_Z` = forward along the optical axis, away from the camera
 
-The camera is physically mounted looking downward, so `+C_Z` is approximately aligned with vehicle/body down (`+B_Z`). This approximate mounting relation is descriptive only and must not be used as the calibrated extrinsic rotation.
+The camera is physically mounted looking downward, so `+C_Z` is expected to be approximately aligned with vehicle/body down (`+B_Z`). The calibrated rotation below confirms this independently from synchronized visual and gyro motion.
 
 ## Transform convention
 
-For the remainder of Stage 11:
+For Stage 11 rotation calibration:
 
 - `B` denotes the experimentally verified IMU/body FRD frame above.
 - `C` denotes the OpenCV OV9281 camera frame above.
-- Exact Camera↔IMU rotation will be estimated from synchronized camera and gyro motion.
-- Exact Camera↔IMU translation will be measured/calibrated separately.
-- The final matrix direction and serialization into Kimera `T_BS` must be verified against Kimera/GTSAM conventions before the calibration file is written.
+- `R_CB` maps a body-frame angular-velocity vector into the camera frame: `ω_C = R_CB ω_B`.
+- `R_BC = R_CB^T` is the inverse rotation and maps camera-frame vectors into the body frame.
+- Camera↔IMU translation will be measured/calibrated separately.
+- The final matrix direction and serialization into Kimera `T_BS` must be verified against Kimera/GTSAM conventions before the complete calibration file is written.
 
-No numeric extrinsic transform is claimed by this document yet.
+## Timing configuration used during rotation calibration
 
-## Timing configuration used during verification
-
-The tests used the Stage 9 synchronized logger configuration:
+Both rotation runs used the Stage 9 synchronized logger configuration:
 
 - OV9281 USB UVC 640x480 MJPEG @ 120 FPS
 - camera timestamp correction `+10.5 ms`
 - `HIGHRES_IMU` requested @ 200 Hz
 - FC clock mapped to RPi `CLOCK_MONOTONIC` by MAVLink TIMESYNC affine mapping
+- camera MJPEG and camera-index output written to `/dev/shm` to avoid storage-induced camera/UART stalls
 
-The 45 s axis-identification run contained 5429 camera frames, 0 camera source drops, 8982 IMU samples and 444/444 good TIMESYNC exchanges.
+### Calibration run
 
-The dedicated sign run used the same sensor/timestamp configuration. The final dedicated nose-right yaw test produced `+0.662092 rad` (`+37.94 deg`) on `zgyro`, resolving the previously inconclusive short yaw interval.
+Logger quality:
+
+- camera frames: 7238
+- camera source drops: 0
+- camera delivery median / max: 8.029 / 8.420 ms
+- IMU samples: 11975
+- IMU transport median / p99 / max: 0.675 / 1.229 / 2.274 ms
+- TIMESYNC good: 596/596
+- TIMESYNC affine clock ratio `A = 1.002046381109`
+
+Rotation-calibrator statistics:
+
+- valid ChArUco poses: 1784 / 1810 attempts
+- candidate pairs: 646
+- robust inliers: 579
+- pose reprojection median / p95: 0.525164 / 0.664801 px
+- gyro-vector residual median / p95: 0.043923 / 0.098450 rad/s
+- direction error median / p95: 3.499315 / 13.634251 deg
+
+Measured rotation:
+
+```text
+R_CB =
+-0.010624404   0.995285416   0.096405718
+-0.998107308  -0.016395603   0.059270445
+ 0.060571639  -0.095593539   0.993575841
+
+RPY_CB = (-5.495604269, -3.472624953, -90.609864790) deg
+```
+
+Inverse:
+
+```text
+R_BC =
+-0.010624404  -0.998107308   0.060571639
+ 0.995285416  -0.016395603  -0.095593539
+ 0.096405718   0.059270445   0.993575841
+
+RPY_BC = (3.413857845, -5.532232935, 90.611593783) deg
+```
+
+`det(R_CB) = 1.0`; reported orthogonality error was 0 at printed precision.
+
+### Independent validation run
+
+The second 60 s run used a different motion ordering and was processed independently.
+
+Logger quality:
+
+- camera frames: 7238
+- camera source drops: 2
+- camera delivery median / max: 8.029 / 8.343 ms
+- IMU samples: 11976
+- IMU transport median / p99 / max: 0.499 / 1.049 / 1.870 ms
+- TIMESYNC good: 592/592
+- TIMESYNC affine clock ratio `A = 1.002047409444`
+
+Rotation-calibrator statistics:
+
+- valid ChArUco poses: 1810 / 1810 attempts
+- candidate pairs: 839
+- robust inliers: 759
+- continuity rejects: 2
+- pose reprojection median / p95: 0.542697 / 0.699334 px
+- gyro-vector residual median / p95: 0.045341 / 0.099169 rad/s
+- direction error median / p95: 3.837891 / 13.433409 deg
+
+Independent measured rotation:
+
+```text
+R_CB(validation) =
+-0.009841887   0.996767522   0.079734833
+-0.997747339  -0.015080480   0.065366862
+ 0.066358004  -0.078911884   0.994670563
+
+R_BC(validation) =
+-0.009841887  -0.997747339   0.066358004
+ 0.996767522  -0.015080480  -0.078911884
+ 0.079734833   0.065366862   0.994670563
+
+RPY_BC(validation) = (3.759905826, -4.573324098, 90.565708918) deg
+```
+
+The relative rotation between the primary and validation `R_BC` estimates,
+
+`R_delta = R_BC(validation) * R_BC(calibration)^T`,
+
+has rotation angle approximately `1.019 deg`.
+
+This is within the Stage 11 acceptance target of approximately 1–2 degrees for an independently repeated run.
+
+The physical-axis sanity check is also consistent: in the independent run camera optical `+C_Z` maps to approximately `[+0.0664, -0.0789, +0.9947]_B`, so the downward-looking optical axis is almost aligned with body `+B_Z` as expected.
+
+## Accepted Camera↔IMU rotation
+
+The primary calibration estimate is accepted as the Stage 11 Camera↔IMU rotation:
+
+```text
+R_CB =
+-0.010624404   0.995285416   0.096405718
+-0.998107308  -0.016395603   0.059270445
+ 0.060571639  -0.095593539   0.993575841
+
+R_BC =
+-0.010624404  -0.998107308   0.060571639
+ 0.995285416  -0.016395603  -0.095593539
+ 0.096405718   0.059270445   0.993575841
+```
+
+Acceptance basis:
+
+- two independent 60 s captures
+- independent motion ordering in the validation run
+- relative 3D rotation disagreement approximately 1.019 deg
+- proper rotation matrices with determinant 1
+- axis orientation physically consistent with the downward camera mount
+- no camera/IMU transport stalls in either accepted run
+- raw camera discontinuities explicitly rejected by the calibrator
 
 ## Result
 
-Coordinate systems are fixed and experimentally verified sufficiently to proceed with Camera↔IMU rotation calibration.
+Camera and IMU coordinate systems are fixed and experimentally verified.
+
+Camera↔IMU rotation is calibrated and independently validated. The accepted primary estimate is the `R_CB` / `R_BC` pair above.
+
+Camera↔IMU translation remains uncalibrated. Full axis/sign validation of the complete 6-DoF extrinsic transform and final Kimera `T_BS` serialization remain open until translation is obtained.

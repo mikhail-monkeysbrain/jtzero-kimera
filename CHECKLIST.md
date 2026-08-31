@@ -80,15 +80,15 @@
 
 ## Этап 7. Подключить OV9281
 
-- [ ] Подключить OV9281 к RPi5
-- [ ] Подтвердить стабильный захват grayscale
-- [ ] Настроить 640x480
-- [ ] Настроить начальные 30 FPS
-- [ ] Зафиксировать короткую экспозицию
-- [ ] Зафиксировать gain
+- [x] Подключить OV9281 к RPi5 — USB UVC, `/dev/video0`, драйвер `uvcvideo`
+- [x] Подтвердить стабильный захват grayscale — MJPEG декодируется в 640x480 `CV_8UC1`; в проверенном v2-прогоне 891 выбранный кадр, `decode_errors=0`
+- [x] Настроить 640x480 — вход 640x480 MJPEG
+- [x] Настроить начальные 30 FPS — USB-камера работает 640x480 MJPEG @ 120 FPS; native temporal selector формирует ~30 FPS с сохранением реальных V4L2 timestamps; проверено `output_fps=29.997`
+- [x] Зафиксировать короткую экспозицию — manual `exposure_time_absolute=50`; тест движения не выявил критичного directional blur
+- [x] Зафиксировать gain — `gain=0`
 - [ ] Отключить нежелательные автоматические изменения изображения
-- [ ] Проверить стабильность timestamps кадров
-- [ ] Сохранить тестовую последовательность кадров
+- [x] Проверить стабильность timestamps кадров — native v2: `source_frames=3610`, `source_drops=0`, `skipped_targets=0`, `dt_mean=33.336 ms`, target error P95=3.967 ms; V4L2 flags monotonic/SOE; sensor-native semantics USB bridge будут отдельно проверены на этапе 9
+- [x] Сохранить тестовую последовательность кадров — `/home/vio/ov9281_motion_10s.mjpg`, `/home/vio/ov9281_motion_10s_timestamps.txt`, `/home/vio/ov9281_native_capture_v2.csv`, `/home/vio/ov9281_native_frames_v2`; результаты v2 сохранены в `results/ov9281_native_capture_v2.md`
 - [ ] **Этап 7 завершён**
 
 ## Этап 8. Получить RAW IMU с Matek H743

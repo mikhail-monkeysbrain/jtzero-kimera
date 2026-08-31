@@ -12,12 +12,15 @@
 - manual exposure: 50
 - gain: 0
 - dynamic framerate: off
+- automatic white balance: off
+- power-line frequency compensation: off
+- backlight compensation: off
 - выходной поток: grayscale `CV_8UC1`, target 30 FPS
 - temporal selection: ближайший реальный кадр к сетке 33.333333 ms
 - timestamp выбранного кадра не синтезируется: сохраняется исходный V4L2 timestamp
 - MJPEG декодируется только для выбранных кадров; отброшенные source frames не копируются и не декодируются
 
-## Проверенный прогон
+## Проверенный прогон v2
 
 Команда:
 
@@ -28,7 +31,7 @@ cd ~/Kimera-VIO
 
 Во время 30-секундного теста камера перемещалась, сцена и яркость существенно менялись.
 
-Результат:
+Результат исходного квалификационного прогона:
 
 ```text
 source_frames     = 3610
@@ -51,11 +54,50 @@ CSV: `/home/vio/ov9281_native_capture_v2.csv`
 
 Сохранённые grayscale-кадры: `/home/vio/ov9281_native_frames_v2`
 
+## Проверка deterministic auto-controls
+
+После ручной проверки через `v4l2-ctl` камера принимает и сохраняет следующие значения:
+
+```text
+auto_exposure                 = 1 (Manual Mode)
+exposure_dynamic_framerate    = 0
+exposure_time_absolute        = 50
+gain                          = 0
+white_balance_automatic       = 0
+power_line_frequency          = 0
+backlight_compensation        = 0
+```
+
+Эти параметры добавлены в `tools/ov9281_native_capture.cpp` и теперь выставляются программой при каждом запуске.
+
+Контрольный 30-секундный прогон после добавления auto-controls:
+
+```text
+source_frames     = 3610
+source_drops      = 1
+selected_frames   = 891
+decode_errors     = 0
+skipped_targets   = 0
+timestamp_span    = 29.669353 s
+output_fps        = 29.997
+dt_min_ms         = 24.003
+dt_mean_ms        = 33.336
+dt_p95_ms         = 40.016
+dt_max_ms         = 40.028
+target_abs_mean_ms= 2.137
+target_abs_p95_ms = 3.971
+target_abs_max_ms = 5.966
+```
+
+Один source sequence gap на 3610 кадров не нарушил 30-Hz output: `skipped_targets=0`, `decode_errors=0`, `output_fps=29.997`. Для текущего USB UVC стендового захвата это не является блокирующим дефектом; статистика потерь и latency будет отдельно контролироваться при синхронизации камеры и IMU.
+
 ## Вывод
 
-Native V4L2 capture v2 прошёл проверку. За 3610 исходных кадров не обнаружено V4L2 sequence gaps, ошибок MJPEG decode или пропущенных 30-Hz target slots. Средняя выходная частота по реальным timestamps составляет 29.997 FPS, средний межкадровый интервал 33.336 ms.
+Native V4L2 capture v2 прошёл проверку. В квалификационном прогоне за 3610 исходных кадров не обнаружено V4L2 sequence gaps, ошибок MJPEG decode или пропущенных 30-Hz target slots. Средняя выходная частота по реальным timestamps составляет 29.997 FPS, средний межкадровый интервал 33.336 ms.
 
-`dt_min_ms` и `dt_max_ms` не должны искусственно приводиться к 33.333 ms: live VIO должен получать реальные timestamps выбранных кадров. P95 абсолютной ошибки выбора относительно целевой 30-Hz сетки составляет 3.967 ms, максимум 5.955 ms.
+Контрольный прогон после фиксации auto-controls также сохранил 29.997 FPS, `decode_errors=0` и `skipped_targets=0`; зарегистрирован один source sequence gap из 3610 кадров.
+
+`dt_min_ms` и `dt_max_ms` не должны искусственно приводиться к 33.333 ms: live VIO должен получать реальные timestamps выбранных кадров. P95 абсолютной ошибки выбора относительно целевой 30-Hz сетки составляет около 3.97 ms, максимум около 5.97 ms.
 
 V4L2 маркирует timestamps как monotonic/SOE. Это пока не считается доказательством физического sensor exposure timestamp через USB UVC bridge; связь с camera metadata и RAW IMU clock должна быть проверена отдельно на этапе временной синхронизации.
 

@@ -107,9 +107,9 @@
 
 - [x] Привести camera и IMU timestamps к общей временной шкале — единый native C++ logger использует RPi `CLOCK_MONOTONIC`; camera V4L2 timestamp уже monotonic/SOE, FC `HIGHRES_IMU.time_usec` переводится affine mapping `t_rpi = RPi_ref + A*(t_fc-FC_ref)` по MAVLink TIMESYNC; 30 s native validation: A=1.002061378243, drift=2061.378 ppm, TIMESYNC 300/300 good; 300 s independent validation: A=1.002066836, drift=2066.836 ppm; результаты в `results/camera_imu_common_clock.md`
 - [x] Измерить постоянный camera-to-IMU time offset — yaw correlation на общей временной шкале подтверждён; специальный start/stop yaw-тест дал global `-10.55 ms`, segment median `-10.15 ms`, MAD `0.80 ms`, P05..P95 `-13.19..-9.11 ms`, median |corr| `0.992`; рабочая оценка `≈ -10.5 ms`, результаты в `results/camera_imu_yaw_sync.md`
-- [ ] Измерить jitter камеры
-- [ ] Измерить jitter IMU / MAVLink / serial
-- [ ] Реализовать компенсацию постоянного offset при необходимости
+- [x] Измерить jitter камеры — 120 s validation; при исключённом блокирующем disk I/O: 14475 frames, 4 source drops, delivery median `8.029 ms`, P95 `8.063 ms`, P99 `8.084 ms`, max `12.304 ms`; отдельный disk-backed прогон выявил диагностические stalls до `1.6 s`, устраняющиеся при записи MJPEG в `/dev/shm`; результаты в `results/camera_imu_jitter_120s.md`
+- [x] Измерить jitter IMU / MAVLink / serial — 120 s validation; 23951 samples, transport median `0.718 ms`, P95 `1.206 ms`, P99 `1.276 ms`, max `4.501 ms` при записи MJPEG в `/dev/shm`; mapped IMU dt median `5.011 ms`, absolute jitter P95 `0.328 ms`, P99 `0.593 ms`, max `0.821 ms`; disk-backed stalls диагностического logger не являются jitter FC/IMU; результаты в `results/camera_imu_jitter_120s.md`
+- [x] Реализовать компенсацию постоянного offset при необходимости — camera timestamp сдвигается вперёд на `+10.5 ms`; компенсированный start/stop yaw validation дал residual global offset `-0.150 ms`, global corr `-0.964`, segment median `-0.150 ms`; знак компенсации подтверждён отдельным verifier
 - [x] Проверить синхронизацию на yaw-движении — во всех независимых тестах лучшая ось `Z`, знак корреляции отрицательный; специальный start/stop тест: global corr `-0.996`, 15/15 segment accepted, median |corr| `0.992`
 - [ ] Исключить крупные скачки межкадрового угла из-за timestamp mismatch
 - [ ] Зафиксировать итоговую схему timestamping

@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <regex>
 #include <sstream>
 #include <string>
 
@@ -40,6 +41,25 @@ std::string frameName(int index) {
     std::ostringstream ss;
     ss << "frame_" << std::setw(3) << std::setfill('0') << index << ".png";
     return ss.str();
+}
+
+int findLastFrameIndex(const fs::path& out_dir) {
+    static const std::regex pattern(R"(^frame_([0-9]+)\.png$)");
+    int max_index = 0;
+    if (!fs::exists(out_dir)) return max_index;
+
+    for (const auto& entry : fs::directory_iterator(out_dir)) {
+        if (!entry.is_regular_file()) continue;
+        std::smatch match;
+        const std::string name = entry.path().filename().string();
+        if (std::regex_match(name, match, pattern)) {
+            try {
+                max_index = std::max(max_index, std::stoi(match[1].str()));
+            } catch (...) {
+            }
+        }
+    }
+    return max_index;
 }
 }
 
@@ -75,6 +95,8 @@ int main(int argc, char** argv) {
                                   dictionary);
     cv::aruco::CharucoDetector detector(board);
 
+    int saved = findLastFrameIndex(out_dir);
+
     std::cout << "=== OV9281 CHARUCO CAPTURE ===\n"
               << "device: " << device << '\n'
               << "mode: " << width << 'x' << height << " MJPEG @ " << fps << " FPS\n"
@@ -82,6 +104,7 @@ int main(int argc, char** argv) {
               << "squareLength: " << kSquareLengthMm << " mm\n"
               << "markerLength: " << kMarkerLengthMm << " mm\n"
               << "output: " << out_dir << '\n'
+              << "existing frames: " << saved << '\n'
               << "SAVE: SPACE / S / ENTER / left mouse click\n"
               << "QUIT: Q / ESC\n";
 
@@ -89,7 +112,7 @@ int main(int argc, char** argv) {
     cv::namedWindow(kWindowName, cv::WINDOW_AUTOSIZE);
     cv::setMouseCallback(kWindowName, onMouse, &mouse_state);
 
-    int saved = 0;
+    const int initial_saved = saved;
     auto last_save = std::chrono::steady_clock::now() - std::chrono::seconds(1);
 
     for (;;) {
@@ -154,6 +177,10 @@ int main(int argc, char** argv) {
 
             ++saved;
             const fs::path image_path = out_dir / frameName(saved);
+            if (fs::exists(image_path)) {
+                std::cerr << "ERROR: refusing to overwrite existing " << image_path << '\n';
+                return 4;
+            }
             if (!cv::imwrite(image_path.string(), gray)) {
                 std::cerr << "ERROR: cannot save " << image_path << '\n';
                 return 3;
@@ -165,8 +192,10 @@ int main(int argc, char** argv) {
     }
 
     cv::destroyAllWindows();
-    std::cout << "Saved frames: " << saved << '\n';
-    if (saved < 30) {
+    std::cout << "Existing frames at start: " << initial_saved << '\n'
+              << "New frames saved: " << (saved - initial_saved) << '\n'
+              << "Total frames: " << saved << '\n';
+    if (saved < 40) {
         std::cout << "WARNING: collect at least 40-60 geometrically diverse frames.\n";
     }
     return 0;

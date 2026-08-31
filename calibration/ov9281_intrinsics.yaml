@@ -1,0 +1,26 @@
+%YAML:1.0
+---
+camera_name: OV9281_USB_UVC
+image_width: 640
+image_height: 480
+camera_model: pinhole
+distortion_model: radtan_5
+board_squares_x: 7
+board_squares_y: 5
+board_square_length_mm: 27.323999404907227
+board_marker_length_mm: 20.042999267578125
+camera_matrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 568.53170752165227, 0., 315.98271077441063, 0.,
+       569.68005562865858, 239.88148589100641, 0., 0., 1. ]
+distortion_coefficients: !!opencv-matrix
+   rows: 5
+   cols: 1
+   dt: d
+   data: [ 0.073569192194028493, -0.095253893789117,
+       -0.010810530757187299, -0.0022843373576970235,
+       0.082177400802757483 ]
+rms_reprojection_error_px: 0.34732173182114762
+usable_views: 63

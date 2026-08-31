@@ -105,7 +105,7 @@
 
 ## Этап 9. Временная синхронизация камеры и IMU
 
-- [ ] Привести camera и IMU timestamps к общей временной шкале
+- [x] Привести camera и IMU timestamps к общей временной шкале — единый native C++ logger использует RPi `CLOCK_MONOTONIC`; camera V4L2 timestamp уже monotonic/SOE, FC `HIGHRES_IMU.time_usec` переводится affine mapping `t_rpi = RPi_ref + A*(t_fc-FC_ref)` по MAVLink TIMESYNC; 30 s native validation: A=1.002061378243, drift=2061.378 ppm, TIMESYNC 300/300 good; 300 s independent validation: A=1.002066836, drift=2066.836 ppm; результаты в `results/camera_imu_common_clock.md`
 - [ ] Измерить постоянный camera-to-IMU time offset
 - [ ] Измерить jitter камеры
 - [ ] Измерить jitter IMU / MAVLink / serial

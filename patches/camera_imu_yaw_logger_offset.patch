@@ -1,0 +1,75 @@
+--- tools/camera_imu_yaw_logger.cpp
++++ tools/camera_imu_yaw_logger.cpp
+@@ -20,6 +20,7 @@
+ #include <vector>
+ 
+ #include "common/mavlink.h"
++#include "camera_imu_timestamp_policy.hpp"
+ 
+ namespace {
+ 
+@@ -56,6 +57,7 @@
+ struct CameraSample {
+     int64_t recv_ns = 0;
+     int64_t v4l2_ns = 0;
++    int64_t corrected_ns = 0;
+     uint32_t sequence = 0;
+     uint32_t flags = 0;
+     uint32_t bytes_used = 0;
+@@ -659,6 +661,9 @@
+             << "IMU:            HIGHRES_IMU @ 200 Hz\n"
+             << "TIMESYNC:       10 Hz\n"
+             << "clock:          CLOCK_MONOTONIC\n"
++            << "camera offset:  +" 
++            << jtzero::timesync::cameraToImuCorrectionMs()
++            << " ms\n"
+             << "output:         " << OUTPUT_CSV << "\n\n";
+ 
+         while (monotonicNs() < end_ns) {
+@@ -716,6 +721,10 @@
+                     const int64_t v4l2_ns =
+                         timevalToNs(buf.timestamp);
+ 
++                    const int64_t corrected_ns =
++                        jtzero::timesync::correctCameraTimestampNs(
++                            v4l2_ns);
++
+                     if (have_camera_sequence) {
+                         const uint32_t expected =
+                             previous_camera_sequence + 1;
+@@ -769,6 +778,7 @@
+                     camera_samples.push_back({
+                         recv_ns,
+                         v4l2_ns,
++                        corrected_ns,
+                         buf.sequence,
+                         buf.flags,
+                         buf.bytesused,
+@@ -950,8 +960,8 @@
+                 "Cannot create camera index CSV");
+ 
+         camera_index
+-            << "sequence,v4l2_timestamp_ns,recv_rpi_ns,"
+-            << "delivery_latency_ms,"
++            << "sequence,v4l2_timestamp_ns,camera_timestamp_corrected_ns,"
++            << "recv_rpi_ns,delivery_latency_ms,"
+             << "mjpeg_offset,bytes_used,flags\n";
+ 
+         camera_index
+@@ -962,6 +972,7 @@
+             camera_index
+                 << s.sequence << ','
+                 << s.v4l2_ns << ','
++                << s.corrected_ns << ','
+                 << s.recv_ns << ','
+                 << nsToMs(s.recv_ns - s.v4l2_ns) << ','
+                 << s.mjpeg_offset << ','
+@@ -998,7 +1009,7 @@
+                 << "CAMERA,"
+                 << s.recv_ns << ','
+                 << s.v4l2_ns << ','
+-                << s.v4l2_ns << ','
++                << s.corrected_ns << ','
+                 << nsToMs(s.recv_ns - s.v4l2_ns) << ','
+                 << s.sequence << ','
+                 << cameraTimestampFlags(s.flags) << ','

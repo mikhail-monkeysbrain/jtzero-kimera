@@ -172,6 +172,13 @@ void configureCamera(int fd) {
     setControl(fd, V4L2_CID_EXPOSURE_ABSOLUTE, EXPOSURE_ABSOLUTE,
                "exposure_absolute");
     setControl(fd, V4L2_CID_GAIN, GAIN, "gain");
+    setControl(fd, V4L2_CID_AUTO_WHITE_BALANCE, 0,
+               "white_balance_automatic");
+    setControl(fd, V4L2_CID_POWER_LINE_FREQUENCY,
+               V4L2_CID_POWER_LINE_FREQUENCY_DISABLED,
+               "power_line_frequency");
+    setControl(fd, V4L2_CID_BACKLIGHT_COMPENSATION, 0,
+               "backlight_compensation");
 }
 
 std::vector<MmapBuffer> initMmap(int fd) {

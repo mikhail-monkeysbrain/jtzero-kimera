@@ -20,7 +20,7 @@
              << "IMU:            HIGHRES_IMU @ 200 Hz\n"
              << "TIMESYNC:       10 Hz\n"
              << "clock:          CLOCK_MONOTONIC\n"
-+            << "camera offset:  +" 
++            << "camera offset:  +"
 +            << jtzero::timesync::cameraToImuCorrectionMs()
 +            << " ms\n"
              << "output:         " << OUTPUT_CSV << "\n\n";
@@ -50,10 +50,9 @@
  
          camera_index
 -            << "sequence,v4l2_timestamp_ns,recv_rpi_ns,"
--            << "delivery_latency_ms,"
+-            << "delivery_latency_ms,mjpeg_offset,bytes_used,flags\n";
 +            << "sequence,v4l2_timestamp_ns,camera_timestamp_corrected_ns,"
-+            << "recv_rpi_ns,delivery_latency_ms,"
-             << "mjpeg_offset,bytes_used,flags\n";
++            << "recv_rpi_ns,delivery_latency_ms,mjpeg_offset,bytes_used,flags\n";
  
          camera_index
 @@ -962,6 +972,7 @@

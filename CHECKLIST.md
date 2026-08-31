@@ -130,7 +130,7 @@
 ## Этап 11. Калибровка Camera ↔ IMU
 
 - [x] Зафиксировать системы координат камеры и IMU — IMU/body frame экспериментально подтверждён как FRD (`+X` forward, `+Y` right, `+Z` down) по отдельным roll/pitch/yaw тестам и проверке знаков; camera frame зафиксирован как OpenCV (`+X` right, `+Y` down, `+Z` optical forward); результаты сохранены в `results/camera_imu_extrinsics.md`
-- [ ] Определить Camera↔IMU rotation
+- [x] Определить Camera↔IMU rotation — калибровано по синхронизированным ChArUco + HIGHRES_IMU данным; две независимые 60 s оценки согласуются с относительным 3D rotation error 1.019 deg; принята матрица R_BC из `results/camera_imu_extrinsics.md`
 - [ ] Определить Camera↔IMU translation
 - [ ] Проверить направления и знаки всех осей
 - [ ] Проверить extrinsics экспериментально

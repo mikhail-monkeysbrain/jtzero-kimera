@@ -60,10 +60,10 @@
 - [x] Запустить полный pipeline без критических ошибок — frames 0..2912, exit status 0, `Pipeline successful? Yes!`, FATAL/ERROR/segfault отсутствуют; Spin took 40057 ms
 - [x] Проверить обработку всех кадров — вход cam0 содержит 2912 кадров за 145.550 s; pipeline запущен на диапазоне 0..2912 и завершён штатно; последний VIO/frontend timestamp 1403715418712143104 находится за 100 ms до последнего входного кадра, что соответствует keyframe/backend cadence, а не преждевременной остановке
 - [x] Измерить средний FPS — offline throughput 2912 / 40.057 s = 72.7 input frames/s, примерно 3.64x от реального времени EuRoC 20 FPS; /usr/bin/time wall 40.96 s, CPU 338%, max RSS ~1.03 GiB, swaps 0
-- [ ] Проверить пропуски кадров
-- [ ] Проверить стабильность выходной траектории
-- [ ] Сохранить результаты первого теста
-- [ ] **Этап 5 завершён**
+- [x] Проверить пропуски кадров — `ThreadsafeQueue::push()` не удаляет элементы при росте очереди; Mono EuRoC callback использует неограниченный `fillLeftFrameQueue`; в полном логе отсутствуют `Dropping frame`, ошибки IMU sync и IMU wait events; неожиданных пропусков кадров не выявлено
+- [x] Проверить стабильность выходной траектории — 728 VIO states с ровным 0.200 s cadence и без irregular gaps; ATE RMSE 0.921396 m, final common error 1.714645 m, path length error -3.86%; absolute orientation error растёт с 0.2249 до 5.2351 deg; RPE 1 s translation RMSE 0.085976 m / rotation RMSE 0.4457 deg, RPE 10 s 0.466713 m / 3.1551 deg; pipeline не расходится катастрофически, но накопленный drift заметен
+- [x] Сохранить результаты первого теста — `results/euroc_v1_01_easy_mono_imu_rpi5.md`
+- [x] **Этап 5 завершён**
 
 ## Этап 6. Профилирование Raspberry Pi 5
 
@@ -170,7 +170,7 @@
 ## Контрольные точки
 
 - [x] **CP1:** Kimera-VIO нативно собрана на текущем Raspberry Pi 5 — ARM64 build и запуск stereoVIOEuroc проверены, динамические зависимости разрешены
-- [ ] **CP2:** EuRoC V1_01_easy успешно проходит в Mono+IMU
+- [x] **CP2:** EuRoC V1_01_easy успешно проходит в Mono+IMU — полный pipeline frames 0..2912 завершён с exit 0, неожиданных пропусков кадров не выявлено, throughput 72.7 input fps, выходная траектория и её ошибки относительно GT измерены и сохранены
 - [ ] **CP3:** OV9281 + RAW IMU работают с общей временной шкалой
 - [ ] **CP4:** Получена стабильная live VIO-одометрия на стенде
 - [ ] **CP5:** Kimera-VIO сравнена с `jtzero-optical-flow-mvp` на одинаковых тестах

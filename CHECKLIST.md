@@ -86,10 +86,10 @@
 - [x] Настроить начальные 30 FPS — USB-камера работает 640x480 MJPEG @ 120 FPS; native temporal selector формирует ~30 FPS с сохранением реальных V4L2 timestamps; проверено `output_fps=29.997`
 - [x] Зафиксировать короткую экспозицию — manual `exposure_time_absolute=50`; тест движения не выявил критичного directional blur
 - [x] Зафиксировать gain — `gain=0`
-- [ ] Отключить нежелательные автоматические изменения изображения
+- [x] Отключить нежелательные автоматические изменения изображения — `white_balance_automatic=0`, `power_line_frequency=0`, `backlight_compensation=0`; также manual exposure, `exposure_dynamic_framerate=0`, exposure=50 и gain=0 выставляются программой при каждом запуске; контрольный прогон подтверждён
 - [x] Проверить стабильность timestamps кадров — native v2: `source_frames=3610`, `source_drops=0`, `skipped_targets=0`, `dt_mean=33.336 ms`, target error P95=3.967 ms; V4L2 flags monotonic/SOE; sensor-native semantics USB bridge будут отдельно проверены на этапе 9
 - [x] Сохранить тестовую последовательность кадров — `/home/vio/ov9281_motion_10s.mjpg`, `/home/vio/ov9281_motion_10s_timestamps.txt`, `/home/vio/ov9281_native_capture_v2.csv`, `/home/vio/ov9281_native_frames_v2`; результаты v2 сохранены в `results/ov9281_native_capture_v2.md`
-- [ ] **Этап 7 завершён**
+- [x] **Этап 7 завершён**
 
 ## Этап 8. Получить RAW IMU с Matek H743
 

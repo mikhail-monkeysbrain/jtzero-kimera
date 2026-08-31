@@ -117,15 +117,15 @@
 
 ## Этап 10. Калибровка камеры
 
-- [ ] Зафиксировать финальную оптику OV9281
-- [ ] Зафиксировать рабочее разрешение
-- [ ] Выполнить калибровку intrinsic parameters
-- [ ] Получить fx и fy
-- [ ] Получить cx и cy
-- [ ] Получить distortion coefficients
-- [ ] Проверить reprojection error
-- [ ] Сохранить calibration-файл в репозитории
-- [ ] **Этап 10 завершён**
+- [x] Зафиксировать финальную оптику OV9281 — текущая линза и фокус зафиксированы; после калибровки оптика больше не изменяется
+- [x] Зафиксировать рабочее разрешение — OV9281 USB UVC, 640x480; calibration и independent validation выполнены в этом разрешении
+- [x] Выполнить калибровку intrinsic parameters — ChArUco 7x5, DICT_4X4_50, squareLength=27.324 mm, markerLength=20.043 mm; 63 usable views
+- [x] Получить fx и fy — fx=568.53170752165227, fy=569.68005562865858
+- [x] Получить cx и cy — cx=315.98271077441063, cy=239.88148589100641
+- [x] Получить distortion coefficients — radtan_5: k1=0.073569192194028493, k2=-0.095253893789117, p1=-0.010810530757187299, p2=-0.0022843373576970235, k3=0.082177400802757483
+- [x] Проверить reprojection error — calibration RMS=0.3473217318 px; independent validation на 49 новых кадрах: aggregate view RMSE=0.407339 px, median=0.379265 px, max=0.686381 px, 0 views >0.75 px, RESULT=PASS; визуальный undistortion check также PASS
+- [x] Сохранить calibration-файл в репозитории — `calibration/ov9281_intrinsics.yaml`; итоговый отчёт `results/ov9281_intrinsics_validation.md`
+- [x] **Этап 10 завершён**
 
 ## Этап 11. Калибровка Camera ↔ IMU
 

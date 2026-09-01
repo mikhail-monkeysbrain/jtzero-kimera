@@ -24,7 +24,7 @@
 namespace {
 
 constexpr const char* kSerial = "/dev/ttyAMA0";
-constexpr int kBaud = B921600;
+constexpr int kBaud = B460800;
 constexpr int kAttitudeHz = 50;
 constexpr double kInitSec = 5.0;
 constexpr double kRunSec = 30.0;
@@ -45,31 +45,53 @@ double wrap180(double d) {
 }
 
 int openSerial() {
-  const int fd = open(kSerial, O_RDWR | O_NOCTTY | O_NONBLOCK);
+  int fd = open(kSerial, O_RDWR | O_NOCTTY | O_NONBLOCK);
   if (fd < 0) throw std::runtime_error("cannot open /dev/ttyAMA0");
   termios tio{};
   if (tcgetattr(fd, &tio) != 0) throw std::runtime_error("tcgetattr failed");
   cfmakeraw(&tio);
-  cfsetispeed(&tio, kBaud);
-  cfsetospeed(&tio, kBaud);
+  if (cfsetispeed(&tio, kBaud) || cfsetospeed(&tio, kBaud))
+    throw std::runtime_error("baud setup failed");
   tio.c_cflag |= CLOCAL | CREAD;
-  tio.c_cflag &= ~CSTOPB;
   tio.c_cflag &= ~CRTSCTS;
+  tio.c_cflag &= ~PARENB;
+  tio.c_cflag &= ~CSTOPB;
+  tio.c_cflag &= ~CSIZE;
+  tio.c_cflag |= CS8;
+  tio.c_cc[VMIN] = 0;
+  tio.c_cc[VTIME] = 0;
   if (tcsetattr(fd, TCSANOW, &tio) != 0) throw std::runtime_error("tcsetattr failed");
-  tcflush(fd, TCIOFLUSH);
+  tcflush(fd, TCIFLUSH);
   return fd;
+}
+
+void serialWriteAll(int fd, const uint8_t* data, size_t size) {
+  for (size_t pos = 0; pos < size;) {
+    const ssize_t n = write(fd, data + pos, size - pos);
+    if (n > 0) {
+      pos += static_cast<size_t>(n);
+      continue;
+    }
+    if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      pollfd p{fd, POLLOUT, 0};
+      poll(&p, 1, 10);
+      continue;
+    }
+    if (n == -1 && errno == EINTR) continue;
+    throw std::runtime_error("MAVLink write failed");
+  }
 }
 
 void requestRate(int fd, uint8_t sys, uint8_t comp, uint32_t msgid, int hz) {
   mavlink_message_t m{};
-  const float interval_us = hz > 0 ? 1000000.0f / static_cast<float>(hz) : -1.0f;
+  const float interval_us = hz > 0 ? 1000000.0f / static_cast<float>(hz) : 0.0f;
   mavlink_msg_command_long_pack(
       255, 190, &m, sys, comp,
       MAV_CMD_SET_MESSAGE_INTERVAL, 0,
       static_cast<float>(msgid), interval_us, 0, 0, 0, 0, 0);
   uint8_t buf[MAVLINK_MAX_PACKET_LEN];
   const uint16_t n = mavlink_msg_to_send_buffer(buf, &m);
-  if (write(fd, buf, n) != n) throw std::runtime_error("MAVLink write failed");
+  serialWriteAll(fd, buf, n);
 }
 
 struct Sample {

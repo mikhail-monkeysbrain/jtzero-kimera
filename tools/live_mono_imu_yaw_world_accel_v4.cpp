@@ -242,6 +242,33 @@ void renderV4Hud(const cv::Mat& gray,
   std::snprintf(b,sizeof(b),"Крен %+.1f°   Тангаж %+.1f°",dr,dp);v3Text(panel,b,18,140,.52,rp_bad?red:white,2);
   std::snprintf(b,sizeof(b),"XY %.0f мм   Vxy %.0f мм/с",false_xy*1000,vxy*1000);v3Text(panel,b,18,178,.55,false_xy>.20?red:white,2);
 
+  // Large yaw progress bar under the camera image.
+  // Green: normal rotation, red: braking/stop zone. Target marker is 80 degrees.
+  if(ref.valid && direction!=0 && phase!="INIT") {
+    const double directed=std::max(0.0,direction*dyaw);
+    constexpr double kBarMaxDeg=100.0;
+    constexpr double kRedStartDeg=70.0;
+    const int bx=40, by=700, bw=680, bh=34;
+    const int red_x=bx+static_cast<int>(bw*(kRedStartDeg/kBarMaxDeg));
+    const int target_x=bx+static_cast<int>(bw*(kV4YawTriggerDeg/kBarMaxDeg));
+    cv::rectangle(canvas,{bx,by},{red_x,by+bh},green,cv::FILLED);
+    cv::rectangle(canvas,{red_x,by},{bx+bw,by+bh},red,cv::FILLED);
+    cv::rectangle(canvas,{bx,by},{bx+bw,by+bh},white,2);
+    cv::line(canvas,{target_x,by-10},{target_x,by+bh+10},white,3);
+    const int marker_x=bx+static_cast<int>(bw*(std::min(directed,kBarMaxDeg)/kBarMaxDeg));
+    cv::line(canvas,{marker_x,by-7},{marker_x,by+bh+7},yellow,5);
+    std::snprintf(b,sizeof(b),"YAW %.1f° / ЦЕЛЬ 80°",directed);
+    v3Text(canvas,b,40,690,.58,directed>=70.0?red:white,2);
+    v3Text(canvas,"0°",36,760,.42,white,1);
+    v3Text(canvas,"70°",red_x-18,760,.42,white,1);
+    v3Text(canvas,"80°",target_x-18,760,.42,white,2);
+    v3Text(canvas,"100°",bx+bw-38,760,.42,white,1);
+    if(phase=="YAW" && directed>=kV4YawTriggerDeg)
+      v3Text(canvas,"СТОП!",300,680,.82,red,3);
+    else if(phase=="YAW" && directed>=70.0)
+      v3Text(canvas,"ТОРМОЗИ — ЦЕЛЬ БЛИЗКО",190,680,.68,red,3);
+  }
+
   if(have){
     v3Text(panel,"УСКОРЕНИЕ FLU [м/с²]",18,220,.51,yellow,2);
     std::snprintf(b,sizeof(b),"RAW    %+.3f  %+.3f  %+.3f",s.ax,s.ay,s.az);v3Text(panel,b,18,250,.46,white,1);
@@ -263,10 +290,11 @@ void renderV4Hud(const cv::Mat& gray,
     if(direction==0) v3Text(panel,"ВРАЩАЙТЕ YAW В ОДНУ СТОРОНУ",18,640,.55,yellow,2);
     else {
       const double directed=direction*dyaw;
-      std::snprintf(b,sizeof(b),"ДО ЦЕЛИ: %.1f°",std::max(0.0,kV4YawTriggerDeg-directed));v3Text(panel,b,18,640,.62,yellow,2);
+      std::snprintf(b,sizeof(b),"ДО ЦЕЛИ: %.1f°",std::max(0.0,kV4YawTriggerDeg-directed));v3Text(panel,b,18,640,.62,directed>=70.0?red:yellow,2);
       v3Text(panel,direction>0?"НАПРАВЛЕНИЕ ЗАФИКСИРОВАНО: +YAW":"НАПРАВЛЕНИЕ ЗАФИКСИРОВАНО: -YAW",18,674,.47,white,1);
     }
     if(reversed) v3Text(panel,"НЕ МЕНЯЙТЕ НАПРАВЛЕНИЕ!",18,714,.60,red,2);
+    else if(direction!=0 && direction*dyaw>=70.0) v3Text(panel,"ТОРМОЗИ. НА 80° — СТОП!",18,714,.60,red,2);
     else v3Text(panel,"НА 80° СРАЗУ ОСТАНОВИТЕСЬ",18,714,.52,yellow,2);
   } else v3Text(panel,"СТОП. НЕ ДВИГАТЬ 10 СЕКУНД",18,660,.58,green,2);
   v3Text(panel,"ESC / Q — прервать",18,765,.44,white,1);

@@ -130,11 +130,11 @@
 ## Этап 11. Калибровка Camera ↔ IMU
 
 - [x] Зафиксировать системы координат камеры и IMU — IMU/body frame экспериментально подтверждён как FRD (`+X` forward, `+Y` right, `+Z` down) по отдельным roll/pitch/yaw тестам и проверке знаков; camera frame зафиксирован как OpenCV (`+X` right, `+Y` down, `+Z` optical forward); результаты сохранены в `results/camera_imu_extrinsics.md`
-- [x] Определить Camera↔IMU rotation — калибровано по синхронизированным ChArUco + HIGHRES_IMU данным; две независимые 60 s оценки согласуются с относительным 3D rotation error 1.019 deg; принята матрица R_BC из `results/camera_imu_extrinsics.md`
-- [ ] Определить Camera↔IMU translation
-- [ ] Проверить направления и знаки всех осей
-- [ ] Проверить extrinsics экспериментально
-- [ ] Сохранить extrinsic calibration в репозитории
+- [x] Определить Camera↔IMU rotation — после перестройки стенда выполнены две независимые синхронизированные ChArUco + HIGHRES_IMU калибровки; geodesic disagreement `0.465 deg`; принята post-rebuild матрица `R_BC` из `results/camera_imu_extrinsics.md`
+- [x] Определить Camera↔IMU translation — для текущей жёсткой сборки прямым механическим измерением зафиксировано `t_BC=[0.000, 0.000, 0.055] m`, консервативная неопределённость `X ±5 mm, Y ±5 mm, Z ±3 mm`; ручной visual pivot-test не используется как оценка lever arm из-за сопоставимой ошибки repositioning
+- [x] Проверить направления и знаки всех осей — `tools/camera_imu_extrinsics_validator.cpp` подтвердил `R_BC*C_X≈-B_Y`, `R_BC*C_Y≈+B_X`, `R_BC*C_Z≈+B_Z`, `R_CB=R_BC^T`, `det(R)=+1`; `STATIC RESULT: PASS`; отчёт `results/camera_imu_extrinsics_static_validation.md`
+- [ ] Проверить extrinsics экспериментально — rotation подтверждён независимо; полный end-to-end тест `T_BS` в live Mono+IMU остаётся открытым и будет выполнен на этапе 12
+- [x] Сохранить extrinsic calibration в репозитории — финальный для текущей механической сборки файл `calibration/ov9281_extrinsics.yaml`; в нём явно зафиксировано, что translation получена механическим измерением, а не независимой visual/IMU оценкой
 - [ ] **Этап 11 завершён**
 
 ## Этап 12. Live Mono + IMU

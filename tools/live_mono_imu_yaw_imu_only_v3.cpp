@@ -1,4 +1,4 @@
-// JT-ZERO yaw IMU-only diagnostic v3 with full GUI telemetry.
+// JT-ZERO yaw IMU-only diagnostic v3 with Russian GUI telemetry.
 // Protocol: 10 s INIT -> yaw until accumulated FC yaw reaches 88 deg -> 10 s HOLD.
 // Run with JTZERO_DIAG_IMU_ONLY=1 and params/JTZeroMonoFLUZeroLever.
 
@@ -7,6 +7,7 @@
 #undef main
 
 #include <future>
+#include <opencv2/freetype.hpp>
 
 namespace {
 
@@ -17,7 +18,8 @@ constexpr double kV3YawTriggerDeg = 88.0;
 constexpr double kV3YawTimeoutSec = 35.0;
 constexpr double kV3RpLimitDeg = 2.0;
 constexpr const char* kV3Csv = "/home/vio/jtzero_live_yaw_imu_only_v3.csv";
-constexpr const char* kV3Window = "JT-ZERO YAW IMU-ONLY v3";
+constexpr const char* kV3Window = "JT-ZERO: диагностика YAW IMU-only v3";
+constexpr const char* kV3Font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
 
 struct V3Telemetry {
   mutable std::mutex mutex;
@@ -133,9 +135,26 @@ struct V3Refs {
   V3State vio;
 };
 
+cv::Ptr<cv::freetype::FreeType2> v3Font() {
+  static cv::Ptr<cv::freetype::FreeType2> ft = [] {
+    auto p = cv::freetype::createFreeType2();
+    p->loadFontData(kV3Font, 0);
+    return p;
+  }();
+  return ft;
+}
+
 void v3Text(cv::Mat& img, const std::string& s, int x, int y,
             double scale = 0.55, cv::Scalar color = {235,235,235}, int th = 1) {
-  txt(img, s, {x,y}, scale, color, th);
+  const int height = std::max(12, static_cast<int>(32.0 * scale));
+  v3Font()->putText(img, s, {x,y}, height, color, th, cv::LINE_AA, true);
+}
+
+std::string v3PhaseRu(const std::string& phase) {
+  if (phase == "INIT") return "ИНИЦИАЛИЗАЦИЯ";
+  if (phase == "YAW") return "ВРАЩЕНИЕ YAW";
+  if (phase == "HOLD") return "УДЕРЖАНИЕ";
+  return phase;
 }
 
 void renderV3Hud(const cv::Mat& gray,
@@ -156,7 +175,7 @@ void renderV3Hud(const cv::Mat& gray,
   cv::line(canvas,{355,380},{445,380},{0,255,255},2);
   cv::line(canvas,{400,335},{400,425},{0,255,255},2);
   cv::circle(canvas,{400,380},12,{0,255,255},2);
-  txt(canvas,"JT-ZERO YAW IMU-ONLY v3",{24,48},1.0,{245,245,245},3);
+  v3Text(canvas,"JT-ZERO — диагностика вращения IMU-only v3",24,48,.78,{245,245,245},2);
 
   cv::Mat panel = canvas(cv::Rect(800,0,480,760));
   const cv::Scalar white(240,240,240), green(80,220,80), yellow(0,220,255), red(40,40,245);
@@ -185,37 +204,37 @@ void renderV3Hud(const cv::Mat& gray,
     vio_dyaw=wrapDeg(s.yaw-ref.vio.yaw);
   }
 
-  txt(panel,"PHASE: "+phase,{18,38},.82,phase=="YAW"?yellow:green,2);
+  v3Text(panel,"ФАЗА: "+v3PhaseRu(phase),18,38,.68,phase=="YAW"?yellow:green,2);
   char b[192];
-  std::snprintf(b,sizeof(b),"%.1f s",std::max(0.0,seconds_left)); v3Text(panel,b,18,68,.58,white,1);
-  std::snprintf(b,sizeof(b),"FC ACC YAW  %+.1f deg",fdyaw); v3Text(panel,b,18,105,.67,white,2);
-  std::snprintf(b,sizeof(b),"VIO YAW     %+.1f deg",vio_dyaw); v3Text(panel,b,18,138,.62,white,2);
-  std::snprintf(b,sizeof(b),"dROLL %+.1f   dPITCH %+.1f",fdroll,fdpitch); v3Text(panel,b,18,171,.58,rp_bad?red:white,2);
-  std::snprintf(b,sizeof(b),"FALSE XY %.1f mm",false_xy*1000.0); v3Text(panel,b,18,210,.67,false_xy>0.06?red:white,2);
-  std::snprintf(b,sizeof(b),"Vxy %.1f mm/s",vxy*1000.0); v3Text(panel,b,18,242,.60,vxy>0.2?red:white,2);
-  std::snprintf(b,sizeof(b),"MAX XY %.1f  MAX Vxy %.1f",max_false_xy*1000.0,max_vxy*1000.0); v3Text(panel,b,18,272,.50,white,1);
+  std::snprintf(b,sizeof(b),"Осталось: %.1f с",std::max(0.0,seconds_left)); v3Text(panel,b,18,68,.55,white,1);
+  std::snprintf(b,sizeof(b),"Накопленный YAW FC: %+.1f°",fdyaw); v3Text(panel,b,18,105,.60,white,2);
+  std::snprintf(b,sizeof(b),"YAW VIO: %+.1f°",vio_dyaw); v3Text(panel,b,18,138,.58,white,2);
+  std::snprintf(b,sizeof(b),"Крен %+.1f°   Тангаж %+.1f°",fdroll,fdpitch); v3Text(panel,b,18,171,.54,rp_bad?red:white,2);
+  std::snprintf(b,sizeof(b),"Ложное XY: %.1f мм",false_xy*1000.0); v3Text(panel,b,18,210,.60,false_xy>0.06?red:white,2);
+  std::snprintf(b,sizeof(b),"Скорость XY: %.1f мм/с",vxy*1000.0); v3Text(panel,b,18,242,.55,vxy>0.2?red:white,2);
+  std::snprintf(b,sizeof(b),"Макс XY %.1f мм   Макс Vxy %.1f",max_false_xy*1000.0,max_vxy*1000.0); v3Text(panel,b,18,272,.46,white,1);
 
   if (have) {
-    v3Text(panel,"ACC BIAS [m/s2]",18,312,.58,yellow,2);
-    std::snprintf(b,sizeof(b),"X %+.5f  Y %+.5f  Z %+.5f",s.bax,s.bay,s.baz); v3Text(panel,b,18,342,.48,white,1);
-    v3Text(panel,"GYRO BIAS [rad/s]",18,382,.58,yellow,2);
-    std::snprintf(b,sizeof(b),"X %+.6f",s.bgx); v3Text(panel,b,18,410,.51,white,1);
-    std::snprintf(b,sizeof(b),"Y %+.6f",s.bgy); v3Text(panel,b,18,435,.51,white,1);
-    std::snprintf(b,sizeof(b),"Z %+.6f",s.bgz); v3Text(panel,b,18,460,.51,white,1);
+    v3Text(panel,"СМЕЩЕНИЕ АКСЕЛЕРОМЕТРА [м/с²]",18,312,.50,yellow,2);
+    std::snprintf(b,sizeof(b),"X %+.5f  Y %+.5f  Z %+.5f",s.bax,s.bay,s.baz); v3Text(panel,b,18,342,.45,white,1);
+    v3Text(panel,"СМЕЩЕНИЕ ГИРОСКОПА [рад/с]",18,382,.50,yellow,2);
+    std::snprintf(b,sizeof(b),"X %+.6f",s.bgx); v3Text(panel,b,18,410,.48,white,1);
+    std::snprintf(b,sizeof(b),"Y %+.6f",s.bgy); v3Text(panel,b,18,435,.48,white,1);
+    std::snprintf(b,sizeof(b),"Z %+.6f",s.bgz); v3Text(panel,b,18,460,.48,white,1);
   }
 
-  v3Text(panel,"RAW FLU ACC",18,500,.58,yellow,2);
-  std::snprintf(b,sizeof(b),"%+.3f  %+.3f  %+.3f",ax,ay,az); v3Text(panel,b,18,530,.50,white,1);
-  v3Text(panel,"RAW FLU GYRO",18,570,.58,yellow,2);
-  std::snprintf(b,sizeof(b),"%+.4f  %+.4f  %+.4f",gx,gy,gz); v3Text(panel,b,18,600,.50,white,1);
+  v3Text(panel,"СЫРОЙ FLU АКСЕЛЕРОМЕТР",18,500,.50,yellow,2);
+  std::snprintf(b,sizeof(b),"%+.3f  %+.3f  %+.3f",ax,ay,az); v3Text(panel,b,18,530,.48,white,1);
+  v3Text(panel,"СЫРОЙ FLU ГИРОСКОП",18,570,.50,yellow,2);
+  std::snprintf(b,sizeof(b),"%+.4f  %+.4f  %+.4f",gx,gy,gz); v3Text(panel,b,18,600,.48,white,1);
 
-  if (phase=="INIT") v3Text(panel,"HOLD STILL",18,655,.72,green,2);
+  if (phase=="INIT") v3Text(panel,"НЕ ДВИГАТЬ",18,655,.70,green,2);
   else if (phase=="YAW") {
-    std::snprintf(b,sizeof(b),"ROTATE YAW  %.1f deg left",std::max(0.0,kV3YawTriggerDeg-std::abs(fdyaw)));
-    v3Text(panel,b,18,655,.62,rp_bad?red:yellow,2);
-    v3Text(panel,"STOP IMMEDIATELY AT TARGET",18,690,.58,yellow,2);
-  } else v3Text(panel,"HOLD STILL - DO NOT MOVE",18,655,.62,green,2);
-  v3Text(panel,"ESC / Q = abort",18,730,.48,white,1);
+    std::snprintf(b,sizeof(b),"Вращать YAW — осталось %.1f°",std::max(0.0,kV3YawTriggerDeg-std::abs(fdyaw)));
+    v3Text(panel,b,18,655,.56,rp_bad?red:yellow,2);
+    v3Text(panel,"НА ЦЕЛИ СРАЗУ ОСТАНОВИТЬСЯ",18,690,.52,yellow,2);
+  } else v3Text(panel,"НЕ ДВИГАТЬ — УДЕРЖИВАТЬ",18,655,.56,green,2);
+  v3Text(panel,"ESC / Q — прервать тест",18,730,.46,white,1);
 
   cv::imshow(kV3Window,canvas);
 }

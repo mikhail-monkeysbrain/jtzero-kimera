@@ -143,10 +143,10 @@
 - [x] Подать live OV9281 grayscale в Kimera-VIO — первый native smoke run: 3618 raw frames, 847 выбранных/декодированных кадров, backend работал до kf=123; `results/live_mono_imu_smoke_20260901.md`
 - [x] Подать live RAW IMU в Kimera-VIO — 6231 `HIGHRES_IMU` получено, 5606 samples подано в Kimera после валидизации mapping; receive-time fallback не используется
 - [x] Использовать синхронизированные timestamps — camera corrected V4L2 timestamps + TIMESYNC affine-mapped `HIGHRES_IMU.time_usec`; 297 TIMESYNC samples, mapping valid, measured drift `2034.997 ppm`
-- [x] Получить устойчивый live pose — 124 последовательных backend outputs (`kf=0..123`) за ~30 s, pipeline завершился штатно с `RESULT: PASS`; отдельная длительная drift-квалификация ещё открыта
-- [x] Получить velocity — backend выдаёт live `V=[vx,vy,vz]`; на последнем состоянии smoke run `V=[-0.0003,-0.0008,-0.0005] m/s`
+- [x] Получить устойчивый live pose — 30 s smoke test PASS и отдельный ~118 s stand-still backend run PASS; в покое final |dP| `16.29 mm`, RMS `5.56 mm`, max `18.39 mm`
+- [x] Получить velocity — backend выдаёт live `V=[vx,vy,vz]`; stand-still RMS скорости `1.50 mm/s`, max `10.63 mm/s`
 - [ ] Реализовать логирование входных данных и результата
-- [ ] Провести тест в покое
+- [x] Провести тест в покое — 120 s requested / 117.90 s backend duration; final |dP| `16.29 mm`, position RMS `5.56 mm`, max `18.39 mm`, yaw drift `-1.043 deg`; `results/live_mono_imu_standstill_20260901.md`
 - [ ] Провести тест известного линейного перемещения
 - [ ] Провести тест возврата в исходную точку
 - [ ] Провести отдельный yaw-тест
@@ -173,5 +173,5 @@
 - [x] **CP1:** Kimera-VIO нативно собрана на текущем Raspberry Pi 5 — ARM64 build и запуск stereoVIOEuroc проверены, динамические зависимости разрешены
 - [x] **CP2:** EuRoC V1_01_easy успешно проходит в Mono+IMU — полный pipeline frames 0..2912 завершён с exit 0, неожиданных пропусков кадров не выявлено, throughput 72.7 input fps, выходная траектория и её ошибки относительно GT измерены и сохранены
 - [x] **CP3:** OV9281 + RAW IMU работают с общей временной шкалой — camera corrected V4L2 timestamps и affine-mapped `HIGHRES_IMU.time_usec` сведены в RPi `CLOCK_MONOTONIC`, offset/jitter/yaw validation и source continuity policy проверены; итоговый timestamp contract зафиксирован в `results/camera_imu_timestamp_scheme.md`
-- [ ] **CP4:** Получена стабильная live VIO-одометрия на стенде — первый 30 s live smoke test PASS и backend outputs получены; CP4 будет закрыта после отдельной длительной stand-still/known-motion квалификации
+- [ ] **CP4:** Получена стабильная live VIO-одометрия на стенде — 30 s live smoke PASS и 120 s stand-still PASS; CP4 будет закрыта после известного линейного перемещения и проверки масштаба
 - [ ] **CP5:** Kimera-VIO сравнена с `jtzero-optical-flow-mvp` на одинаковых тестах

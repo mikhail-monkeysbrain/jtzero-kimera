@@ -1,0 +1,43 @@
+%YAML:1.0
+# JT-Zero OV9281 <-> Matek H743 Camera/IMU extrinsics candidate.
+#
+# STATUS: CANDIDATE, NOT FINAL.
+# Rotation R_BC is independently validated after the mechanical stand rebuild.
+# Translation t_BC is based on the measured mechanical geometry and still needs
+# experimental validation together with the complete 6-DoF transform.
+#
+# Frame convention:
+#   B: body / HIGHRES_IMU frame, FRD (+X forward, +Y right, +Z down)
+#   C: OpenCV camera frame (+X image right, +Y image down, +Z optical forward)
+#
+# Kimera-VIO convention verified against commit
+# ce8c59b7b273ab5ac29db7e5572e1623760e19c7:
+#   T_BS is sensor pose wrt body.
+# For camera S=C:
+#   T_BS = T_BC
+#   p_B = R_BC * p_C + t_BC
+#
+# Accepted post-rebuild validation rotation:
+#   geodesic disagreement between independent runs ~= 0.465 deg.
+# Mechanical translation candidate:
+#   t_BC = [0.000, 0.000, 0.055] m
+#   planning uncertainty: X +/-5 mm, Y +/-5 mm, Z +/-3 mm.
+
+T_BS:
+  cols: 4
+  rows: 4
+  data: [ 0.009367371,  0.999954838, -0.001604448,  0.000,
+         -0.999326771,  0.009418381,  0.035458408,  0.000,
+          0.035471918,  0.001271215,  0.999369865,  0.055,
+          0.000000000,  0.000000000,  0.000000000,  1.000 ]
+
+# Rotation-only inverse for diagnostics:
+R_CB:
+  cols: 3
+  rows: 3
+  data: [ 0.009367371, -0.999326771,  0.035471918,
+          0.999954838,  0.009418381,  0.001271215,
+         -0.001604448,  0.035458408,  0.999369865 ]
+
+# Camera origin in body coordinates [m].
+t_BC: [0.000, 0.000, 0.055]

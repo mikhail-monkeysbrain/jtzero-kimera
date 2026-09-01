@@ -30,15 +30,7 @@ fi
 # First live integration uses the already validated 200 Hz stream and
 # pre-synchronized timestamps from the JT-Zero runtime. Kimera's own rate
 # alignment must therefore be disabled to avoid a second timing correction.
-python3 - "$DST/ImuParams.yaml" <<'PY'
-from pathlib import Path
-import sys
-p = Path(sys.argv[1])
-s = p.read_text()
-s = s.replace('do_imu_rate_time_alignment: 1', 'do_imu_rate_time_alignment: 0')
-s = s.replace('imu_time_shift: 0.0', 'imu_time_shift: 0.0')
-p.write_text(s)
-PY
+sed -i 's/^do_imu_rate_time_alignment:[[:space:]]*1$/do_imu_rate_time_alignment: 0/' "$DST/ImuParams.yaml"
 
 cat <<EOF
 Prepared JT-Zero live Kimera params:

@@ -3,9 +3,9 @@
 // Uses the v10 sample-aligned FC/GYRO integrations and measures mean world acceleration
 // only after each target has become stationary.
 
-#define main jtzero_v10_disabled_main
+#define JTZERO_V10_NO_MAIN
 #include "live_mono_imu_integrator_v10.cpp"
-#undef main
+#undef JTZERO_V10_NO_MAIN
 
 namespace jtzero_v11 {
 using namespace jtzero_v10;

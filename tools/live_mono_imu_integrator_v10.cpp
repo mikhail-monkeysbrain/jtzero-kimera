@@ -150,6 +150,7 @@ void drawHud(const cv::Mat& gray,const Telemetry& tel,bool ready,bool returning,
 
 } // namespace jtzero_v10
 
+#ifndef JTZERO_V10_NO_MAIN
 int main(int argc,char**argv){
   using namespace jtzero_v10;
   google::InitGoogleLogging(argv[0]);FLAGS_visualize=false;FLAGS_viz_type=2;FLAGS_use_lcd=false;FLAGS_log_output=false;FLAGS_extract_planes_from_the_scene=false;
@@ -184,3 +185,4 @@ int main(int argc,char**argv){
     std::cout<<"\n============================================================\nJT-ZERO IMU INTEGRATOR v10 RESULT\n============================================================\n"<<"aborted: "<<(aborted?"yes":"no")<<"\ncompleted: "<<(done?"yes":"no")<<"\nrows: "<<integ.rows.size()<<"\nmax FC-integrator Vxy: "<<integ.max_fc_vxy<<" m/s\nmax GYRO-integrator Vxy: "<<integ.max_gyro_vxy<<" m/s\nmax backend Vxy: "<<integ.max_backend_vxy<<" m/s\nmax PIM Vxy: "<<integ.max_pim_vxy<<" m/s\nCSV: "<<kCsv10<<"\nOpen CSV:\n  code "<<kCsv10<<"\n";return aborted?2:0;
   }catch(const std::exception&e){if(pipe)pipe->shutdown();if(pipeline_started&&pipe_thread.joinable())pipe_thread.join();if(streaming&&cfd>=0){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(cfd,VIDIOC_STREAMOFF,&t);}for(auto&b:bufs)if(b.start&&b.start!=MAP_FAILED)munmap(b.start,b.length);if(cfd>=0)close(cfd);if(sfd>=0)close(sfd);cv::destroyAllWindows();std::cerr<<"[FATAL] "<<e.what()<<"\n";return 1;}
 }
+#endif // JTZERO_V10_NO_MAIN

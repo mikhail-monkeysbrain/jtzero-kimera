@@ -98,7 +98,20 @@ void drawGauge(cv::Mat&c,int x,int y,int w,const std::string&name,double val,dou
 std::vector<std::string>wrapText(const std::string&s,size_t n){std::vector<std::string>o;for(size_t p=0;p<s.size();p+=n)o.push_back(s.substr(p,n));if(o.empty())o.push_back("");return o;}
 void drawSetup(cv::Mat&c,const std::string&p){c.setTo(cv::Scalar(20,20,20));cv::putText(c,"JT-ZERO STATE-DRIVEN CAMERA + IMU CALIBRATION",{50,70},cv::FONT_HERSHEY_SIMPLEX,.9,{255,255,255},2);cv::putText(c,"TEST PLAN INPUT",{60,130},cv::FONT_HERSHEY_SIMPLEX,.8,{0,220,255},2);cv::rectangle(c,{50,155,1180,250},{70,70,70},2);auto l=wrapText(p,100);int y=195;for(auto&s:l){cv::putText(c,s,{70,y},cv::FONT_HERSHEY_SIMPLEX,.56,{255,255,255},1);y+=32;if(y>380)break;}cv::putText(c,"ENTER=start  BACKSPACE=delete  F2=default  ESC=exit",{60,455},cv::FONT_HERSHEY_SIMPLEX,.65,{220,220,220},1);cv::putText(c,"Format: roll +/-30 hold 2; pitch +/-30 hold 2; yaw +/-60 hold 2; mixed 25 hold 2",{60,505},cv::FONT_HERSHEY_SIMPLEX,.58,{180,220,255},1);cv::putText(c,"Timer advances ONLY while attitude is green and board remains near captured center.",{60,560},cv::FONT_HERSHEY_SIMPLEX,.58,{180,255,180},1);}
 
-bool boardCenter(const cv::Mat&gray,cv::Point2f*out){static auto dict=cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50);std::vector<int>ids;std::vector<std::vector<cv::Point2f>>corners;cv::aruco::detectMarkers(gray,dict,corners,ids);if(ids.size()<2)return false;cv::Point2f sum(0,0);size_t n=0;for(auto&cs:corners)for(auto&p:cs){sum+=p;++n;}*out=sum*(1.0f/(float)n);return true;}
+bool boardCenter(const cv::Mat& gray, cv::Point2f* out){
+    static cv::Ptr<cv::aruco::Dictionary> dict =
+        cv::makePtr<cv::aruco::Dictionary>(
+            cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
+    std::vector<int> ids;
+    std::vector<std::vector<cv::Point2f>> corners;
+    cv::aruco::detectMarkers(gray,dict,corners,ids);
+    if(ids.size()<2)return false;
+    cv::Point2f sum(0,0);size_t n=0;
+    for(auto&cs:corners)for(auto&p:cs){sum+=p;++n;}
+    if(n==0)return false;
+    *out=sum*(1.0f/(float)n);
+    return true;
+}
 
 void previewThreadMain(PreviewState*st){
     try{
@@ -149,6 +162,8 @@ void sendMsg(int fd,const mavlink_message_t&m){uint8_t b[MAVLINK_MAX_PACKET_LEN]
 void requestRate(int fd,uint8_t sys,uint8_t comp,uint32_t msgid,int hz){mavlink_message_t m{};float us=hz>0?float(1000000.0/hz):0;mavlink_msg_command_long_pack(COMPANION_SYSID,COMPANION_COMPID,&m,sys,comp,MAV_CMD_SET_MESSAGE_INTERVAL,0,msgid,us,0,0,0,0,0);sendMsg(fd,m);}
 void sendTimesync(int fd,int64_t t0,uint8_t sys,uint8_t comp){mavlink_message_t m{};mavlink_msg_timesync_pack(COMPANION_SYSID,COMPANION_COMPID,&m,0,t0,sys,comp);sendMsg(fd,m);}
 ClockMapping estimateClockMapping(const std::vector<TimeSyncSample>&s){std::vector<const TimeSyncSample*>g;for(auto&x:s)if(x.good)g.push_back(&x);ClockMapping m;if(g.size()<10)return m;int64_t f0=g.front()->fc_ns,r0=g.front()->rpi_mid_ns;long double mx=0,my=0;for(auto*x:g){mx+=x->fc_ns-f0;my+=x->rpi_mid_ns-r0;}mx/=g.size();my/=g.size();long double sxx=0,sxy=0;for(auto*x:g){long double dx=(x->fc_ns-f0)-mx,dy=(x->rpi_mid_ns-r0)-my;sxx+=dx*dx;sxy+=dx*dy;}if(sxx<=0)return m;m.a=sxy/sxx;m.fc_ref_ns=f0;m.rpi_ref_ns=(long double)r0+(my-m.a*mx);m.drift_ppm=(double)((m.a-1)*1e6L);m.valid=true;return m;}
+
+} // namespace
 
 int main(){
     int serial_fd=-1,camera_fd=-1;bool streaming=false,rates=false,preview_started=false;std::vector<CameraBuffer>buffers;PreviewState ps;std::thread preview;uint8_t target_system=0,target_component=0;

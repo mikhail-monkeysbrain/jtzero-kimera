@@ -122,7 +122,7 @@ void hud18(const cv::Mat&gray,const Telemetry&tel,bool ready,bool returning,bool
 }
 }
 
-int main(int argc,char**argv){
+int runStateChainV18(int argc,char**argv){
   using namespace jtzero_v18;using namespace jtzero_v10;
   google::InitGoogleLogging(argv[0]);FLAGS_visualize=false;FLAGS_viz_type=2;FLAGS_use_lcd=false;FLAGS_log_output=false;FLAGS_extract_planes_from_the_scene=false;
   if(!std::getenv("JTZERO_DIAG_IMU_ONLY")){std::cerr<<"[FATAL] JTZERO_DIAG_IMU_ONLY is not set\n";return 1;}
@@ -152,3 +152,9 @@ int main(int argc,char**argv){
     std::cout<<"\n============================================================\nJT-ZERO STATE CHAIN v18 RESULT\n============================================================\n"<<"aborted: "<<(aborted?"yes":"no")<<"\ncompleted: "<<(done?"yes":"no")<<"\nrows: "<<log.rows.size()<<"\nmax OPT(k-1)->START rotation: "<<log.max_prev_start_rot<<" deg\nmax OPT(k-1)->START gravity: "<<log.max_prev_start_grav<<" deg\nmax START->PRED gravity: "<<log.max_start_pred_grav<<" deg\nmax PRED->OPT gravity: "<<log.max_pred_opt_grav<<" deg\nmax FC gravity error START: "<<log.max_fc_start<<" deg\nmax FC gravity error PRED: "<<log.max_fc_pred<<" deg\nmax FC gravity error OPT: "<<log.max_fc_opt<<" deg\nmax recompose error: "<<log.max_recompose<<" deg\nCSV: "<<kCsv18<<"\nOpen CSV:\n  code "<<kCsv18<<"\n";return aborted?2:0;
   }catch(const std::exception&e){if(pipe)pipe->shutdown();if(pipeline_started&&pipe_thread.joinable())pipe_thread.join();if(streaming&&cfd>=0){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(cfd,VIDIOC_STREAMOFF,&t);}for(auto&b:bufs)if(b.start&&b.start!=MAP_FAILED)munmap(b.start,b.length);if(cfd>=0)close(cfd);if(sfd>=0)close(sfd);cv::destroyAllWindows();std::cerr<<"[FATAL] "<<e.what()<<"\n";return 1;}
 }
+
+#ifndef JTZERO_V18_NO_MAIN
+int main(int argc,char**argv){
+  return runStateChainV18(argc,argv);
+}
+#endif

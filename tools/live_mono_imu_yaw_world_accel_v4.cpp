@@ -2,9 +2,11 @@
 // Russian GUI. Protocol: 10 s INIT -> lock yaw direction -> 80 deg -> 10 s HOLD.
 // Run with JTZERO_DIAG_IMU_ONLY=1 and params/JTZeroMonoFLUZeroLever.
 
-#define main jtzero_v3_unused_main
-#include "live_mono_imu_yaw_imu_only_v3.cpp"
+#define main jtzero_hud_base_unused_main
+#include "live_mono_imu_500mm_hud_v2.cpp"
 #undef main
+
+#include <opencv2/freetype.hpp>
 
 namespace {
 
@@ -17,6 +19,36 @@ constexpr double kV4RpLimitDeg = 3.0;
 constexpr int kV4AttitudeRateHz = 50;
 constexpr const char* kV4Csv = "/home/vio/jtzero_live_yaw_world_accel_v4.csv";
 constexpr const char* kV4Window = "JT-ZERO: диагностика ускорения WORLD v4";
+constexpr const char* kV4Font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+
+struct V3Telemetry {
+  mutable std::mutex mutex;
+  bool fc_valid = false;
+  bool raw_valid = false;
+  bool have_prev_yaw = false;
+  double fc_roll = 0.0;
+  double fc_pitch = 0.0;
+  double fc_yaw = 0.0;
+  double fc_accum_yaw = 0.0;
+  double prev_yaw = 0.0;
+  double ax = 0.0, ay = 0.0, az = 0.0;
+  double gx = 0.0, gy = 0.0, gz = 0.0;
+};
+
+cv::Ptr<cv::freetype::FreeType2> v4Font() {
+  static cv::Ptr<cv::freetype::FreeType2> ft = [] {
+    auto p = cv::freetype::createFreeType2();
+    p->loadFontData(kV4Font, 0);
+    return p;
+  }();
+  return ft;
+}
+
+void v3Text(cv::Mat& img, const std::string& s, int x, int y,
+            double scale = 0.55, cv::Scalar color = {235,235,235}, int th = 1) {
+  const int height = std::max(12, static_cast<int>(32.0 * scale));
+  v4Font()->putText(img, s, {x,y}, height, color, th, cv::LINE_AA, true);
+}
 
 struct V4State {
   int64_t wall_ns = 0;
@@ -195,7 +227,12 @@ void renderV4Hud(const cv::Mat& gray,
 
   V4State s; const bool have=pipe.latest(&s);
   double dpx=0,dpy=0,false_xy=0,vxy=0,vdyaw=0;
-  if(have&&ref.valid){dpx=s.px-ref.vio.px;dpy=s.py-ref.vio.py;false_xy=std::hypot(dpx,dpy);vxy=std::hypot(s.vx,s.vy);vd yaw=0;}
+  if(have&&ref.valid){
+    dpx=s.px-ref.vio.px;
+    dpy=s.py-ref.vio.py;
+    false_xy=std::hypot(dpx,dpy);
+    vxy=std::hypot(s.vx,s.vy);
+  }
   if(have&&ref.valid) vdyaw=wrapDeg(s.yaw-ref.vio.yaw);
 
   char b[256];

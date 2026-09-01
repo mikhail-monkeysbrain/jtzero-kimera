@@ -98,30 +98,31 @@
 - [x] Получить linear acceleration X/Y/Z — `xacc/yacc/zacc` в m/s²
 - [x] Получить timestamp для каждого IMU sample — `HIGHRES_IMU.time_usec`; контрольный лог не содержит non-positive timestamp deltas
 - [x] Добиться стабильной частоты не менее 200 Hz — UART3 460800 baud, запрос 200 Hz; 30 s validation: RX 199.591 Hz, IMU timestamp rate 200.001 Hz
-- [x] Проверить возможность работы в диапазоне 200–400 Hz — 200 Hz воспроизводится точно; запрос 300 Hz квантуется примерно в 333.4 Hz с большим jitter; 400 Hz отклоняется `MAV_RESULT_DENIED`; рабочая частота зафиксирована 200 Hz
-- [x] Проверить пропуски и jitter потока IMU — 5988 samples за 30.002 s; dt mean 5.000 ms, P95 5.275 ms, P99 5.374 ms, max 5.769 ms; absolute jitter P95 0.325 ms, P99 0.581 ms, max 0.769 ms; large_gaps=0, estimated_missing=0
-- [x] Сохранить сырой IMU-лог — `/home/vio/highres_imu_200hz_30s.csv`; результаты и рабочая конфигурация зафиксированы в `results/matek_h743_highres_imu_200hz.md`
+- [x] Проверить возможность работы в диапазоне 200–400 Hz — 200 Hz воспроизводится точно; запрос 300 Hz квантуется примерно в 333.4 Hz с большим jitter; 400 Hz отклоняется `MAV_RESULT_DENIED`; рабочая частота зафиксирована на 200 Hz
+- [x] Проверить jitter IMU timestamps — 30 s validation: timestamp dt median=5.000 ms, p95=5.003 ms, p99=5.013 ms, min=4.928 ms, max=5.079 ms; receive dt p99=8.692 ms относится к UART transport, а не к sensor timestamp jitter
+- [x] Проверить пропуски samples — 30 s validation: 5988 samples за 29.995 s, `timestamp gaps > 7.5 ms = 0`; пропусков sensor-timestamp samples не выявлено
+- [x] Сохранить RAW IMU log — `/home/vio/matek_highres_imu_200hz.csv`; результаты и команды зафиксированы в `results/matek_highres_imu.md`
 - [x] **Этап 8 завершён**
 
-## Этап 9. Временная синхронизация камеры и IMU
+## Этап 9. Синхронизация Camera + IMU
 
-- [x] Привести camera и IMU timestamps к общей временной шкале — единый native C++ logger использует RPi `CLOCK_MONOTONIC`; camera V4L2 timestamp уже monotonic/SOE, FC `HIGHRES_IMU.time_usec` переводится affine mapping `t_rpi = RPi_ref + A*(t_fc-FC_ref)` по MAVLink TIMESYNC; 30 s native validation: A=1.002061378243, drift=2061.378 ppm, TIMESYNC 300/300 good; 300 s independent validation: A=1.002066836, drift=2066.836 ppm; результаты в `results/camera_imu_common_clock.md`
-- [x] Измерить постоянный camera-to-IMU time offset — yaw correlation на общей временной шкале подтверждён; специальный start/stop yaw-тест дал global `-10.55 ms`, segment median `-10.15 ms`, MAD `0.80 ms`, P05..P95 `-13.19..-9.11 ms`, median |corr| `0.992`; рабочая оценка `≈ -10.5 ms`, результаты в `results/camera_imu_yaw_sync.md`
-- [x] Измерить jitter камеры — 120 s validation; при исключённом блокирующем disk I/O: 14475 frames, 4 source drops, delivery median `8.029 ms`, P95 `8.063 ms`, P99 `8.084 ms`, max `12.304 ms`; отдельный disk-backed прогон выявил диагностические stalls до `1.6 s`, устраняющиеся при записи MJPEG в `/dev/shm`; результаты в `results/camera_imu_jitter_120s.md`
-- [x] Измерить jitter IMU / MAVLink / serial — 120 s validation; 23951 samples, transport median `0.718 ms`, P95 `1.206 ms`, P99 `1.276 ms`, max `4.501 ms` при записи MJPEG в `/dev/shm`; mapped IMU dt median `5.011 ms`, absolute jitter P95 `0.328 ms`, P99 `0.593 ms`, max `0.821 ms`; disk-backed stalls диагностического logger не являются jitter FC/IMU; результаты в `results/camera_imu_jitter_120s.md`
-- [x] Реализовать компенсацию постоянного offset при необходимости — camera timestamp сдвигается вперёд на `+10.5 ms`; компенсированный start/stop yaw validation дал residual global offset `-0.150 ms`, global corr `-0.964`, segment median `-0.150 ms`; знак компенсации подтверждён отдельным verifier; значение относится к текущему OV9281 USB UVC 640x480 MJPEG @ 120 FPS и подлежит повторной калибровке при смене интерфейса/режима
-- [x] Проверить синхронизацию на yaw-движении — во всех независимых тестах лучшая ось `Z`, знак корреляции отрицательный; специальный start/stop тест: global corr `-0.996`, 15/15 segment accepted, median |corr| `0.992`
-- [x] Исключить крупные скачки межкадрового угла из-за timestamp mismatch — source runtime policy до temporal decimation проверяет непрерывность `V4L2 sequence`, положительный corrected timestamp delta и верхнюю границу `20 ms` только для исходного 120 FPS UVC-потока; этот порог не применяется к выбранному ~30 FPS потоку Kimera. Проверено `camera_timestamp_policy_check`: 3620 frames, 1 потерянный source frame обнаружен по sequence при `dt=7.998 ms`, rejected pairs=1, corrected timestamp mismatches=0, `RESULT: PASS`
-- [x] Зафиксировать итоговую схему timestamping — `results/camera_imu_timestamp_scheme.md`: единый `CLOCK_MONOTONIC`; camera=`V4L2 source timestamp + 10.5 ms` для текущей USB-конфигурации; selected ~30 FPS кадры сохраняют реальные corrected source timestamps без синтетического cadence; IMU=`HIGHRES_IMU.time_usec` через непрерывный affine TIMESYNC mapping; receive-time только diagnostic; при невалидном/stale TIMESYNC mapping синхронизированный IMU не подаётся и receive-time fallback запрещён
+- [x] Выбрать общую временную шкалу — Raspberry Pi `CLOCK_MONOTONIC`; camera V4L2 timestamp уже в monotonic domain, `HIGHRES_IMU.time_usec` переводится в него через MAVLink TIMESYNC affine mapping
+- [x] Определить источник timestamp камеры — native V4L2 `v4l2_buffer.timestamp`; flags `MONOTONIC + SOE`; raw timestamp сохраняется без перезаписи receive-time
+- [x] Определить источник timestamp IMU — `HIGHRES_IMU.time_usec`; UART receive timestamp используется только как диагностический transport timestamp и не подменяет sensor time
+- [x] Реализовать преобразование `HIGHRES_IMU.time_usec -> RPi CLOCK_MONOTONIC` — непрерывно оцениваемый affine mapping `t_rpi = rpi_ref + A*(t_fc-fc_ref)` по MAVLink TIMESYNC; measured clock mismatch ~2000 ppm, поэтому `A` не должен быть захардкожен; mapping имеет явное состояние valid/stale и при invalid/stale синхронизация считается недоступной без fallback на UART receive time
+- [x] Измерить camera↔IMU offset — sharp yaw, camera raw timestamp против mapped gyro: 15/15 независимых сегментов дали median lag `-10.15 ms`, MAD `0.8 ms`; global lag `-10.55 ms`, corr `-0.996`; sign-verifier подтвердил компенсацию сдвигом camera timestamp вперёд на `+10.5 ms` (residual `-0.05 ms`), противоположный знак дал `-21.05 ms`
+- [x] Измерить jitter — clean `/dev/shm` 120 s run: TIMESYNC RTT median `2.379 ms`, p95 `2.917 ms`; camera delivery median `8.029 ms`, p95 `8.063 ms`, p99 `8.084 ms`, max `12.304 ms`; IMU transport median `0.718 ms`, p95 `1.206 ms`, p99 `1.276 ms`, max `4.501 ms`; simultaneous ~1.6 s camera/UART stalls наблюдались только при синхронной записи большого лога на диск и исчезли при `/dev/shm`
+- [x] Проверить стабильность offset во времени — 5 min TIMESYNC drift `2066.836 ppm`; отдельные yaw-сегменты стабильны (15/15, MAD `0.8 ms`); compensated validation дала global residual `-0.150 ms`, corr `-0.964`
+- [x] Проверить поведение при пропуске кадров — continuity проверяется на каждом RAW 120 FPS V4L2 frame до temporal selection: `sequence == prev+1`, corrected timestamp строго возрастает, `dt <= 20 ms`; при нарушении pair отвергается / tracker должен reset; clean test: 3620 frames, 1 реальный source sequence gap, missing=1, rejected pair=1, при этом dt был всего `7.998 ms`, что подтверждает необходимость sequence-check; выбранный ~30 FPS поток сохраняет реальные source timestamps и намеренно имеет raw sequence gaps, поэтому raw seq+1 policy к нему не применяется
+- [x] Проверить yaw-движение и знак временной компенсации — camera `+10.5 ms` residual `-0.05 ms`; противоположный знак `-10.5 ms` residual `-21.05 ms`; global compensated validation residual `-0.150 ms`, corr `-0.964`
+- [x] Зафиксировать итоговую схему timestamps — `results/camera_imu_timestamp_scheme.md`; для текущей конфигурации OV9281 USB UVC 640x480 MJPEG @120 FPS применяется camera correction `+10.5 ms`; компенсация должна быть перекалибрована после смены interface/mode/USB bridge/driver/timestamp semantics, а для CSI — обязательно; IMU подаётся в Kimera только при valid/stale-safe TIMESYNC affine mapping
 - [x] **Этап 9 завершён**
 
 ## Этап 10. Калибровка камеры
 
-- [x] Зафиксировать финальную оптику OV9281 — текущая линза и фокус зафиксированы; после калибровки оптика больше не изменяется
-- [x] Зафиксировать рабочее разрешение — OV9281 USB UVC, 640x480; calibration и independent validation выполнены в этом разрешении
-- [x] Выполнить калибровку intrinsic parameters — ChArUco 7x5, DICT_4X4_50, squareLength=27.324 mm, markerLength=20.043 mm; 63 usable views
-- [x] Получить fx и fy — fx=568.53170752165227, fy=569.68005562865858
-- [x] Получить cx и cy — cx=315.98271077441063, cy=239.88148589100641
+- [x] Подготовить calibration target — ChArUco 7x5, `DICT_4X4_50`; фактически измеренный `squareLength=27.324 mm`, `markerLength≈20.043 mm`; использован финальный фокус/линза текущей камеры
+- [x] Собрать набор кадров с разными углами и положениями — финальный calibration set: 63 принятых кадра, покрытие поля и наклоны проверены
+- [x] Получить intrinsics — `fx=568.53170752165227`, `fy=569.68005562865858`, `cx=315.98271077441063`, `cy=239.88148589100641`
 - [x] Получить distortion coefficients — radtan_5: k1=0.073569192194028493, k2=-0.095253893789117, p1=-0.010810530757187299, p2=-0.0022843373576970235, k3=0.082177400802757483
 - [x] Проверить reprojection error — calibration RMS=0.3473217318 px; independent validation на 49 новых кадрах: aggregate view RMSE=0.407339 px, median=0.379265 px, max=0.686381 px, 0 views >0.75 px, RESULT=PASS; визуальный undistortion check также PASS
 - [x] Сохранить calibration-файл в репозитории — `calibration/ov9281_intrinsics.yaml`; итоговый отчёт `results/ov9281_intrinsics_validation.md`
@@ -133,17 +134,17 @@
 - [x] Определить Camera↔IMU rotation — после перестройки стенда выполнены две независимые синхронизированные ChArUco + HIGHRES_IMU калибровки; geodesic disagreement `0.465 deg`; принята post-rebuild матрица `R_BC` из `results/camera_imu_extrinsics.md`
 - [x] Определить Camera↔IMU translation — для текущей жёсткой сборки прямым механическим измерением зафиксировано `t_BC=[0.000, 0.000, 0.055] m`, консервативная неопределённость `X ±5 mm, Y ±5 mm, Z ±3 mm`; ручной visual pivot-test не используется как оценка lever arm из-за сопоставимой ошибки repositioning
 - [x] Проверить направления и знаки всех осей — `tools/camera_imu_extrinsics_validator.cpp` подтвердил `R_BC*C_X≈-B_Y`, `R_BC*C_Y≈+B_X`, `R_BC*C_Z≈+B_Z`, `R_CB=R_BC^T`, `det(R)=+1`; `STATIC RESULT: PASS`; отчёт `results/camera_imu_extrinsics_static_validation.md`
-- [ ] Проверить extrinsics экспериментально — rotation подтверждён независимо; полный end-to-end тест `T_BS` в live Mono+IMU остаётся открытым и будет выполнен на этапе 12
+- [ ] Проверить extrinsics экспериментально — rotation подтверждён независимо; первый live Mono+IMU smoke test с полным `T_BS` успешно прошёл без катастрофической ошибки, но количественный motion-test полного transform остаётся открытым
 - [x] Сохранить extrinsic calibration в репозитории — финальный для текущей механической сборки файл `calibration/ov9281_extrinsics.yaml`; в нём явно зафиксировано, что translation получена механическим измерением, а не независимой visual/IMU оценкой
 - [ ] **Этап 11 завершён**
 
 ## Этап 12. Live Mono + IMU
 
-- [ ] Подать live OV9281 grayscale в Kimera-VIO
-- [ ] Подать live RAW IMU в Kimera-VIO
-- [ ] Использовать синхронизированные timestamps
-- [ ] Получить устойчивый live pose
-- [ ] Получить velocity
+- [x] Подать live OV9281 grayscale в Kimera-VIO — первый native smoke run: 3618 raw frames, 847 выбранных/декодированных кадров, backend работал до kf=123; `results/live_mono_imu_smoke_20260901.md`
+- [x] Подать live RAW IMU в Kimera-VIO — 6231 `HIGHRES_IMU` получено, 5606 samples подано в Kimera после валидизации mapping; receive-time fallback не используется
+- [x] Использовать синхронизированные timestamps — camera corrected V4L2 timestamps + TIMESYNC affine-mapped `HIGHRES_IMU.time_usec`; 297 TIMESYNC samples, mapping valid, measured drift `2034.997 ppm`
+- [x] Получить устойчивый live pose — 124 последовательных backend outputs (`kf=0..123`) за ~30 s, pipeline завершился штатно с `RESULT: PASS`; отдельная длительная drift-квалификация ещё открыта
+- [x] Получить velocity — backend выдаёт live `V=[vx,vy,vz]`; на последнем состоянии smoke run `V=[-0.0003,-0.0008,-0.0005] m/s`
 - [ ] Реализовать логирование входных данных и результата
 - [ ] Провести тест в покое
 - [ ] Провести тест известного линейного перемещения
@@ -172,5 +173,5 @@
 - [x] **CP1:** Kimera-VIO нативно собрана на текущем Raspberry Pi 5 — ARM64 build и запуск stereoVIOEuroc проверены, динамические зависимости разрешены
 - [x] **CP2:** EuRoC V1_01_easy успешно проходит в Mono+IMU — полный pipeline frames 0..2912 завершён с exit 0, неожиданных пропусков кадров не выявлено, throughput 72.7 input fps, выходная траектория и её ошибки относительно GT измерены и сохранены
 - [x] **CP3:** OV9281 + RAW IMU работают с общей временной шкалой — camera corrected V4L2 timestamps и affine-mapped `HIGHRES_IMU.time_usec` сведены в RPi `CLOCK_MONOTONIC`, offset/jitter/yaw validation и source continuity policy проверены; итоговый timestamp contract зафиксирован в `results/camera_imu_timestamp_scheme.md`
-- [ ] **CP4:** Получена стабильная live VIO-одометрия на стенде
+- [ ] **CP4:** Получена стабильная live VIO-одометрия на стенде — первый 30 s live smoke test PASS и backend outputs получены; CP4 будет закрыта после отдельной длительной stand-still/known-motion квалификации
 - [ ] **CP5:** Kimera-VIO сравнена с `jtzero-optical-flow-mvp` на одинаковых тестах

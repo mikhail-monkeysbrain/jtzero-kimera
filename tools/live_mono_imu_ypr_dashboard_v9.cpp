@@ -2,9 +2,9 @@
 // Keeps the v8 camera/MAVLink/time-sync plumbing, but freezes accelerometer bias at ZERO.
 // A step is accepted only when Y/P/R are on target, gyro is quiet and |acc|-g is small.
 
-#define main jtzero_v8_unused_main
+#define JTZERO_V8_NO_MAIN
 #include "live_mono_imu_ypr_dashboard_v8.cpp"
-#undef main
+#undef JTZERO_V8_NO_MAIN
 
 namespace jtzero_v9 {
 

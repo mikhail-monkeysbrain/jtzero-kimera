@@ -27,9 +27,16 @@ if [[ ! -f "$DST/LeftCameraParams.yaml" ]]; then
   exit 2
 fi
 
-# First live integration uses the already validated 200 Hz stream and
-# pre-synchronized timestamps from the JT-Zero runtime. Kimera's own rate
-# alignment must therefore be disabled to avoid a second timing correction.
+# Live operation has no EuRoC ground-truth initial state. Kimera's EurocMono
+# template uses autoInitialize: 0, which explicitly requests GT initialization
+# and aborts when the initial GT state is identity. For live JT-Zero use IMU
+# initialization instead. Kimera assumes the platform is motionless during the
+# initialization window.
+sed -i 's/^autoInitialize:[[:space:]]*0$/autoInitialize: 1/' "$DST/BackendParams.yaml"
+
+# The JT-Zero runtime already supplies camera and IMU timestamps in one
+# CLOCK_MONOTONIC domain. Disable Kimera's additional IMU-rate alignment to
+# avoid applying a second timing correction.
 sed -i 's/^do_imu_rate_time_alignment:[[:space:]]*1$/do_imu_rate_time_alignment: 0/' "$DST/ImuParams.yaml"
 
 cat <<EOF
@@ -45,6 +52,10 @@ IMU:
   200 Hz
   T_BS identity because HIGHRES_IMU is already expressed in body FRD
   Kimera internal IMU-rate time alignment disabled
+
+Backend initialization:
+  autoInitialize: 1 (initialize from IMU, not EuRoC ground truth)
+  IMPORTANT: keep the stand motionless during startup/initialization
 
 NOTE:
   Noise-density/random-walk values are still inherited from EurocMono and are

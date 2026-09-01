@@ -13,6 +13,7 @@ import numpy as np
 RUNNER_DEFAULT = "/tmp/live_mono_imu_500mm"
 PARAMS_DEFAULT = "params/JTZeroMono"
 WINDOW = "JT-ZERO 500mm alignment HUD"
+CAMERA = "/dev/video0"
 
 vio_re = re.compile(
     r"\[VIO\]\s+kf=(\d+)\s+P=\[([^,]+),([^,]+),([^\]]+)\]"
@@ -67,27 +68,45 @@ def reader(proc):
     runner_done = True
 
 
-def put(img, text, x, y, scale=0.65, thick=1):
+def put(img, text, x, y, scale=0.55, thick=1, color=(235, 235, 235)):
     cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                (235, 235, 235), thick, cv2.LINE_AA)
+                color, thick, cv2.LINE_AA)
 
 
 def gauge(img, label, value, limit, y, unit):
-    x0, x1 = 245, 735
+    x0, x1 = 150, 625
     center = (x0 + x1) // 2
-    cv2.line(img, (x0, y), (x1, y), (130, 130, 130), 2)
-    cv2.line(img, (center, y - 12), (center, y + 12), (230, 230, 230), 2)
+    cv2.line(img, (x0, y), (x1, y), (110, 110, 110), 2)
+    cv2.line(img, (center, y - 8), (center, y + 8), (235, 235, 235), 2)
     q = max(-1.0, min(1.0, value / limit))
     xpos = int(center + q * (x1 - x0) * 0.5)
     absq = abs(q)
     color = (80, 210, 80) if absq < 0.35 else ((0, 210, 255) if absq < 0.7 else (60, 60, 240))
-    cv2.circle(img, (xpos, y), 8, color, -1, cv2.LINE_AA)
-    put(img, f"{label:<7} {value:+7.2f} {unit}", 20, y + 7, 0.62, 1)
+    cv2.circle(img, (xpos, y), 6, color, -1, cv2.LINE_AA)
+    put(img, f"{label:<6} {value:+6.2f} {unit}", 8, y + 5, 0.48, 1)
 
 
 def snapshot():
     with lock:
         return latest, list(history), phase
+
+
+def open_preview_camera():
+    # The C++ runner already owns the same UVC device. Some V4L2/UVC stacks
+    # allow a second read handle, others reject STREAMON with EBUSY. Try it
+    # explicitly and report the result; the HUD remains usable if unavailable.
+    cap = cv2.VideoCapture(CAMERA, cv2.CAP_V4L2)
+    if not cap.isOpened():
+        return None
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    ok, frame = cap.read()
+    if not ok or frame is None:
+        cap.release()
+        return None
+    return cap
 
 
 def main():
@@ -106,21 +125,47 @@ def main():
                             text=True, bufsize=1, env=env)
     threading.Thread(target=reader, args=(proc,), daemon=True).start()
 
+    # Give the runner time to configure/start its camera first, then try a
+    # secondary preview handle. This never replaces the runner's camera feed.
+    time.sleep(1.0)
+    preview = open_preview_camera()
+    if preview is None:
+        print("[HUD] WARNING: live camera preview could not open /dev/video0 while runner owns it.", flush=True)
+        print("[HUD] HUD will continue, but camera image is unavailable in this build.", flush=True)
+    else:
+        print("[HUD] live camera preview: OK", flush=True)
+
     baseline = None
     direction = None
     jump_until = 0.0
     prev = None
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WINDOW, 800, 620)
+    cv2.resizeWindow(WINDOW, 800, 760)
 
     while True:
         s, hist, ph = snapshot()
-        img = np.zeros((620, 800, 3), dtype=np.uint8)
-        put(img, "JT-ZERO 500 mm ALIGNMENT", 20, 35, 0.85, 2)
-        put(img, f"PHASE: {ph}", 610, 35, 0.62, 2)
+
+        camera_ok = False
+        camera_frame = None
+        if preview is not None:
+            ok, frame = preview.read()
+            if ok and frame is not None:
+                camera_ok = True
+                camera_frame = cv2.resize(frame, (640, 480))
+
+        img = np.zeros((760, 800, 3), dtype=np.uint8)
+        if camera_ok:
+            img[0:480, 80:720] = camera_frame
+            cv2.line(img, (400, 0), (400, 480), (0, 255, 255), 1)
+            cv2.line(img, (80, 240), (720, 240), (0, 255, 255), 1)
+            put(img, f"PHASE: {ph}", 90, 28, 0.62, 2, (0, 255, 255))
+        else:
+            put(img, "NO CAMERA PREVIEW", 255, 210, 0.9, 2, (60, 60, 240))
+            put(img, "V4L2 device is busy or preview read failed", 205, 250, 0.55, 1)
+            put(img, f"PHASE: {ph}", 330, 290, 0.62, 2)
 
         if s is None:
-            put(img, "Waiting for first Kimera backend state...", 20, 90, 0.7, 1)
+            put(img, "Waiting for first Kimera backend state...", 210, 440, 0.6, 1)
         else:
             if baseline is None:
                 baseline = {"p": s["p"].copy(), "rpy": s["rpy"].copy()}
@@ -137,7 +182,7 @@ def main():
                 travel = float(np.dot(horizontal, direction))
                 cross = float(direction[0] * horizontal[1] - direction[1] * horizontal[0])
 
-            if prev is not None:
+            if prev is not None and s["kf"] != prev["kf"]:
                 step_mm = float(np.linalg.norm(s["p"] - prev["p"])) * 1000.0
                 dkf = max(1, s["kf"] - prev["kf"])
                 if step_mm > 80.0 and dkf <= 20:
@@ -145,27 +190,27 @@ def main():
                     print(f"[VIO-JUMP] kf={s['kf']} dP={step_mm:.1f} mm dkf={dkf}", flush=True)
             prev = s
 
-            gauge(img, "ROLL", dr[0], 5.0, 100, "deg")
-            gauge(img, "PITCH", dr[1], 5.0, 155, "deg")
-            gauge(img, "YAW", dr[2], 8.0, 210, "deg")
-            gauge(img, "Z", dp[2] * 1000.0, 50.0, 285, "mm")
+            gauge(img, "ROLL", dr[0], 5.0, 505, "deg")
+            gauge(img, "PITCH", dr[1], 5.0, 535, "deg")
+            gauge(img, "YAW", dr[2], 8.0, 565, "deg")
+            gauge(img, "Z", dp[2] * 1000.0, 50.0, 595, "mm")
             if direction is not None:
-                gauge(img, "CROSS", cross * 1000.0, 50.0, 340, "mm")
+                gauge(img, "CROSS", cross * 1000.0, 50.0, 625, "mm")
             else:
-                put(img, "CROSS: waiting for >=50 mm movement to learn direction", 20, 347, 0.55, 1)
+                put(img, "CROSS: learn direction after 50 mm", 8, 630, 0.45, 1)
 
-            put(img, f"TRAVEL: {travel*1000.0:7.1f} / 500.0 mm", 20, 415, 0.78, 2)
-            put(img, f"dP XYZ: [{dp[0]*1000:+.1f}, {dp[1]*1000:+.1f}, {dp[2]*1000:+.1f}] mm", 20, 455, 0.62, 1)
-            put(img, f"|V|: {np.linalg.norm(s['v'])*1000.0:.1f} mm/s    KF: {s['kf']}", 20, 490, 0.62, 1)
-            put(img, "Keep ROLL/PITCH/YAW, Z and CROSS near zero.", 20, 535, 0.62, 1)
+            put(img, f"TRAVEL {travel*1000.0:6.1f}/500 mm", 8, 665, 0.58, 2)
+            put(img, f"XYZ [{dp[0]*1000:+.0f},{dp[1]*1000:+.0f},{dp[2]*1000:+.0f}] mm", 285, 665, 0.50, 1)
+            put(img, f"|V| {np.linalg.norm(s['v'])*1000.0:.1f} mm/s  KF {s['kf']}", 570, 665, 0.48, 1)
+            put(img, "Keep camera view centered; keep R/P/Y, Z and CROSS near zero.", 8, 705, 0.48, 1)
             if time.time() < jump_until:
-                cv2.rectangle(img, (8, 555), (792, 610), (50, 50, 230), -1)
-                put(img, "VIO JUMP DETECTED - measurement may be invalid", 25, 590, 0.68, 2)
+                cv2.rectangle(img, (8, 715), (792, 752), (50, 50, 230), -1)
+                put(img, "VIO JUMP DETECTED - measurement may be invalid", 110, 741, 0.62, 2)
             else:
-                put(img, "ESC/Q: abort test", 20, 590, 0.55, 1)
+                put(img, "ESC/Q: abort test", 8, 742, 0.45, 1)
 
         cv2.imshow(WINDOW, img)
-        key = cv2.waitKey(30) & 0xFF
+        key = cv2.waitKey(1) & 0xFF
         if key in (27, ord('q'), ord('Q')):
             proc.terminate()
             try:
@@ -177,6 +222,8 @@ def main():
             time.sleep(1.0)
             break
 
+    if preview is not None:
+        preview.release()
     cv2.destroyAllWindows()
     return runner_rc if runner_rc is not None else 1
 

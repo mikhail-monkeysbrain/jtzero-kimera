@@ -6,7 +6,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <opencv2/aruco.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -41,11 +40,10 @@ constexpr const char* OUTPUT_CAMERA_INDEX="/dev/shm/camera_imu_extrinsics_camera
 constexpr const char* PREVIEW_WINDOW="JT-Zero Guided Camera + IMU Calibration";
 constexpr int CAMERA_WIDTH=640,CAMERA_HEIGHT=480,CAMERA_FPS=120,CAMERA_BUFFER_COUNT=6,CAMERA_WARMUP_FRAMES=30,PREVIEW_DIVIDER=4;
 constexpr int IMU_RATE_HZ=200,ATTITUDE_RATE_HZ=50,EXPOSURE_ABSOLUTE=50,CAMERA_GAIN=0;
-constexpr double TIMESYNC_RATE_HZ=10.0,MAX_TIMESYNC_RTT_MS=10.0,PI=3.14159265358979323846;
+constexpr double MAX_TIMESYNC_RTT_MS=10.0,PI=3.14159265358979323846;
 constexpr int64_t TIMESYNC_PERIOD_NS=100000000LL;
 constexpr uint8_t COMPANION_SYSID=255,COMPANION_COMPID=190;
 constexpr double ROLL_PITCH_TOL_DEG=5.0,YAW_TOL_DEG=7.0;
-constexpr double CENTER_ACQUIRE_SEC=1.0,CENTER_WARN_PX=55.0;
 const std::string DEFAULT_PLAN="roll +/-30 hold 2; pitch +/-30 hold 2; yaw +/-60 hold 2; mixed 25 hold 2";
 
 struct CameraBuffer{void*start=nullptr;size_t length=0;};
@@ -58,7 +56,7 @@ struct Step{double roll=0,pitch=0,yaw=0,hold_sec=2;std::string instruction;};
 struct PreviewPacket{std::vector<unsigned char>jpeg;uint32_t sequence=0;};
 struct PreviewState{
     std::mutex mutex;std::condition_variable cv;PreviewPacket latest;uint64_t generation=0;bool stopping=false;
-    std::atomic<bool>stop_requested{false},plan_ready{false},attitude_valid{false},center_locked{false},test_complete{false};
+    std::atomic<bool>stop_requested{false},plan_ready{false},attitude_valid{false},test_complete{false};
     std::atomic<double>roll_deg{0},pitch_deg{0},yaw_deg{0},yaw_zero_deg{0};
     std::atomic<int>step_index{0};std::atomic<double>step_collected_sec{0};
     std::string plan_text=DEFAULT_PLAN;std::vector<Step>steps;
@@ -96,53 +94,29 @@ void putOutlined(cv::Mat&i,const std::string&s,cv::Point p,double sc,int th=1){c
 void drawReticle(cv::Mat&i,cv::Point c){for(int th:{6,2}){cv::Scalar col=th==6?cv::Scalar(0,0,0):cv::Scalar(255,255,255);cv::line(i,{c.x-65,c.y},{c.x-10,c.y},col,th,cv::LINE_AA);cv::line(i,{c.x+10,c.y},{c.x+65,c.y},col,th,cv::LINE_AA);cv::line(i,{c.x,c.y-65},{c.x,c.y-10},col,th,cv::LINE_AA);cv::line(i,{c.x,c.y+10},{c.x,c.y+65},col,th,cv::LINE_AA);cv::circle(i,c,24,col,th,cv::LINE_AA);}cv::circle(i,c,3,{0,0,0},8);cv::circle(i,c,3,{255,255,255},3);}
 void drawGauge(cv::Mat&c,int x,int y,int w,const std::string&name,double val,double target,double range,double tol){cv::rectangle(c,{x,y,w,28},{0,0,180},cv::FILLED);auto px=[&](double v){return x+(int)(std::clamp((v+range)/(2*range),0.0,1.0)*w);};int g0=px(target-tol),g1=px(target+tol);cv::rectangle(c,{g0,y,std::max(1,g1-g0),28},{0,150,0},cv::FILLED);int z=px(0),v=px(val);cv::line(c,{z,y-4},{z,y+32},{150,150,150},1);cv::line(c,{v,y-8},{v,y+36},{255,255,255},4,cv::LINE_AA);bool ok=std::abs(wrap180(val-target))<=tol;cv::Scalar col=ok?cv::Scalar(0,255,0):cv::Scalar(0,0,255);std::ostringstream q;q<<name<<" "<<std::fixed<<std::setprecision(1)<<val<<" deg  target "<<target<<" +/-"<<tol;cv::putText(c,q.str(),{x,y-12},cv::FONT_HERSHEY_SIMPLEX,.56,col,2,cv::LINE_AA);}
 std::vector<std::string>wrapText(const std::string&s,size_t n){std::vector<std::string>o;for(size_t p=0;p<s.size();p+=n)o.push_back(s.substr(p,n));if(o.empty())o.push_back("");return o;}
-void drawSetup(cv::Mat&c,const std::string&p){c.setTo(cv::Scalar(20,20,20));cv::putText(c,"JT-ZERO STATE-DRIVEN CAMERA + IMU CALIBRATION",{50,70},cv::FONT_HERSHEY_SIMPLEX,.9,{255,255,255},2);cv::putText(c,"TEST PLAN INPUT",{60,130},cv::FONT_HERSHEY_SIMPLEX,.8,{0,220,255},2);cv::rectangle(c,{50,155,1180,250},{70,70,70},2);auto l=wrapText(p,100);int y=195;for(auto&s:l){cv::putText(c,s,{70,y},cv::FONT_HERSHEY_SIMPLEX,.56,{255,255,255},1);y+=32;if(y>380)break;}cv::putText(c,"ENTER=start  BACKSPACE=delete  F2=default  ESC=exit",{60,455},cv::FONT_HERSHEY_SIMPLEX,.65,{220,220,220},1);cv::putText(c,"Format: roll +/-30 hold 2; pitch +/-30 hold 2; yaw +/-60 hold 2; mixed 25 hold 2",{60,505},cv::FONT_HERSHEY_SIMPLEX,.58,{180,220,255},1);cv::putText(c,"Timer advances ONLY while attitude is green and board remains near captured center.",{60,560},cv::FONT_HERSHEY_SIMPLEX,.58,{180,255,180},1);}
-
-bool boardCenter(const cv::Mat& gray, cv::Point2f* out){
-    static cv::Ptr<cv::aruco::Dictionary> dict =
-        cv::makePtr<cv::aruco::Dictionary>(
-            cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50));
-    std::vector<int> ids;
-    std::vector<std::vector<cv::Point2f>> corners;
-    cv::aruco::detectMarkers(gray,dict,corners,ids);
-    if(ids.size()<2)return false;
-    cv::Point2f sum(0,0);size_t n=0;
-    for(auto&cs:corners)for(auto&p:cs){sum+=p;++n;}
-    if(n==0)return false;
-    *out=sum*(1.0f/(float)n);
-    return true;
-}
+void drawSetup(cv::Mat&c,const std::string&p){c.setTo(cv::Scalar(20,20,20));cv::putText(c,"JT-ZERO STATE-DRIVEN CAMERA + IMU CALIBRATION",{50,70},cv::FONT_HERSHEY_SIMPLEX,.9,{255,255,255},2);cv::putText(c,"TEST PLAN INPUT",{60,130},cv::FONT_HERSHEY_SIMPLEX,.8,{0,220,255},2);cv::rectangle(c,{50,155,1180,250},{70,70,70},2);auto l=wrapText(p,100);int y=195;for(auto&s:l){cv::putText(c,s,{70,y},cv::FONT_HERSHEY_SIMPLEX,.56,{255,255,255},1);y+=32;if(y>380)break;}cv::putText(c,"ENTER=start  BACKSPACE=delete  F2=default  ESC=exit",{60,455},cv::FONT_HERSHEY_SIMPLEX,.65,{220,220,220},1);cv::putText(c,"Format: roll +/-30 hold 2; pitch +/-30 hold 2; yaw +/-60 hold 2; mixed 25 hold 2",{60,505},cv::FONT_HERSHEY_SIMPLEX,.58,{180,220,255},1);cv::putText(c,"Timer advances ONLY while attitude is inside the green target zones.",{60,560},cv::FONT_HERSHEY_SIMPLEX,.58,{180,255,180},1);}
 
 void previewThreadMain(PreviewState*st){
     try{
         cv::namedWindow(PREVIEW_WINDOW,cv::WINDOW_NORMAL);cv::setWindowProperty(PREVIEW_WINDOW,cv::WND_PROP_FULLSCREEN,cv::WINDOW_FULLSCREEN);
-        std::string edit=st->plan_text;uint64_t seen=0;cv::Point2f refCenter(320,240);bool haveRef=false;double acquire=0,lastWall=0;
+        std::string edit=st->plan_text;uint64_t seen=0;double lastWall=0;
         while(true){
             PreviewPacket p;{std::unique_lock<std::mutex>lk(st->mutex);st->cv.wait_for(lk,std::chrono::milliseconds(25),[&]{return st->stopping||st->generation!=seen;});if(st->stopping)break;if(st->generation!=seen){p=st->latest;seen=st->generation;}}
             cv::Mat c(720,1280,CV_8UC3,cv::Scalar(20,20,20));
             if(!st->plan_ready.load()){
-                drawSetup(c,edit);cv::imshow(PREVIEW_WINDOW,c);int k=cv::waitKeyEx(1);if(k==27){st->stop_requested.store(true);break;}if(k==13||k==10){{std::lock_guard<std::mutex>lk(st->mutex);st->plan_text=edit;st->steps=parsePlan(edit);}st->plan_ready.store(true);lastWall=monotonicNs()/1e9;}else if(k==65471||k==0x710000)edit=DEFAULT_PLAN;else if(k==8||k==127){if(!edit.empty())edit.pop_back();}else if(k>=32&&k<=126)edit.push_back((char)k);continue;
+                drawSetup(c,edit);cv::imshow(PREVIEW_WINDOW,c);int k=cv::waitKeyEx(1);if(k==27){st->stop_requested.store(true);break;}if(k==13||k==10){{std::lock_guard<std::mutex>lk(st->mutex);st->plan_text=edit;st->steps=parsePlan(edit);}st->yaw_zero_deg.store(st->yaw_deg.load());st->plan_ready.store(true);lastWall=monotonicNs()/1e9;}else if(k==65471||k==0x710000)edit=DEFAULT_PLAN;else if(k==8||k==127){if(!edit.empty())edit.pop_back();}else if(k>=32&&k<=126)edit.push_back((char)k);continue;
             }
-            cv::Mat gray;if(!p.jpeg.empty())gray=cv::imdecode(p.jpeg,cv::IMREAD_GRAYSCALE);cv::Point2f bc;bool boardOk=!gray.empty()&&boardCenter(gray,&bc);
-            if(!gray.empty()){cv::Mat b;cv::cvtColor(gray,b,cv::COLOR_GRAY2BGR);cv::resize(b,b,{760,570});b.copyTo(c(cv::Rect(20,110,760,570)));drawReticle(c,{400,395});if(boardOk){cv::Point q(20+(int)std::lround(bc.x*760.0/640.0),110+(int)std::lround(bc.y*570.0/480.0));cv::circle(c,q,10,{0,255,255},2,cv::LINE_AA);}}
+            cv::Mat gray;if(!p.jpeg.empty())gray=cv::imdecode(p.jpeg,cv::IMREAD_GRAYSCALE);
+            if(!gray.empty()){cv::Mat b;cv::cvtColor(gray,b,cv::COLOR_GRAY2BGR);cv::resize(b,b,{760,570});b.copyTo(c(cv::Rect(20,110,760,570)));drawReticle(c,{400,395});}
             double now=monotonicNs()/1e9,dt=lastWall>0?std::min(.1,now-lastWall):0;lastWall=now;
-            if(!haveRef){
-                bool near=boardOk&&cv::norm(bc-cv::Point2f(320,240))<=35.0;
-                if(near)acquire+=dt;else acquire=0;
-                std::ostringstream q;q<<"CENTER BOARD ON RETICLE  "<<std::fixed<<std::setprecision(1)<<acquire<<" / "<<CENTER_ACQUIRE_SEC<<" s";putOutlined(c,q.str(),{25,52},.8,2);
-                cv::putText(c,boardOk?"Yellow dot = detected board center":"BOARD NOT DETECTED",{820,180},cv::FONT_HERSHEY_SIMPLEX,.55,boardOk?cv::Scalar(0,255,255):cv::Scalar(0,0,255),2);
-                if(acquire>=CENTER_ACQUIRE_SEC){refCenter=bc;haveRef=true;st->center_locked.store(true);st->yaw_zero_deg.store(st->yaw_deg.load());}
-            }else{
-                int idx=st->step_index.load();std::vector<Step>steps;{std::lock_guard<std::mutex>lk(st->mutex);steps=st->steps;}
-                if(idx>=(int)steps.size()){st->test_complete.store(true);putOutlined(c,"CALIBRATION SEQUENCE COMPLETE",{25,52},.9,2);}
-                else{
-                    Step s=steps[idx];double r=st->roll_deg.load(),pi=st->pitch_deg.load(),y=wrap180(st->yaw_deg.load()-st->yaw_zero_deg.load());double drift=boardOk?cv::norm(bc-refCenter):9999;bool centerGood=boardOk&&drift<=CENTER_WARN_PX;bool anglesGood=st->attitude_valid.load()&&attitudeInZone(r,pi,y,s);double collected=st->step_collected_sec.load();if(anglesGood&&centerGood)collected+=dt;st->step_collected_sec.store(collected);
-                    if(collected>=s.hold_sec){st->step_index.store(idx+1);st->step_collected_sec.store(0);}
-                    std::ostringstream top;top<<"STEP "<<(idx+1)<<" / "<<steps.size()<<"   DATA "<<std::fixed<<std::setprecision(1)<<std::min(collected,s.hold_sec)<<" / "<<s.hold_sec<<" s";putOutlined(c,top.str(),{25,52},.8,2);putOutlined(c,s.instruction,{25,92},.72,2);
-                    cv::putText(c,"ATTITUDE / TARGET",{820,130},cv::FONT_HERSHEY_SIMPLEX,.72,{255,255,255},2);drawGauge(c,820,220,410,"ROLL",r,s.roll,60,ROLL_PITCH_TOL_DEG);drawGauge(c,820,320,410,"PITCH",pi,s.pitch,60,ROLL_PITCH_TOL_DEG);drawGauge(c,820,420,410,"YAW d",y,s.yaw,90,YAW_TOL_DEG);
-                    if(!centerGood){std::ostringstream w;w<<"WARNING: BOARD CENTER LOST / DRIFT "<<std::fixed<<std::setprecision(0)<<drift<<" px";cv::putText(c,w.str(),{820,500},cv::FONT_HERSHEY_SIMPLEX,.55,{0,0,255},2,cv::LINE_AA);}else cv::putText(c,"BOARD CENTER OK",{820,500},cv::FONT_HERSHEY_SIMPLEX,.55,{0,255,0},2,cv::LINE_AA);
-                    cv::putText(c,(anglesGood&&centerGood)?"COLLECTING DATA":"MOVE INTO GREEN ZONES - TIMER PAUSED",{820,545},cv::FONT_HERSHEY_SIMPLEX,.5,(anglesGood&&centerGood)?cv::Scalar(0,255,0):cv::Scalar(0,180,255),2,cv::LINE_AA);
-                }
+            int idx=st->step_index.load();std::vector<Step>steps;{std::lock_guard<std::mutex>lk(st->mutex);steps=st->steps;}
+            if(idx>=(int)steps.size()){st->test_complete.store(true);putOutlined(c,"CALIBRATION SEQUENCE COMPLETE",{25,52},.9,2);}
+            else{
+                Step s=steps[idx];double r=st->roll_deg.load(),pi=st->pitch_deg.load(),y=wrap180(st->yaw_deg.load()-st->yaw_zero_deg.load());bool anglesGood=st->attitude_valid.load()&&attitudeInZone(r,pi,y,s);double collected=st->step_collected_sec.load();if(anglesGood)collected+=dt;st->step_collected_sec.store(collected);
+                if(collected>=s.hold_sec){st->step_index.store(idx+1);st->step_collected_sec.store(0);}
+                std::ostringstream top;top<<"STEP "<<(idx+1)<<" / "<<steps.size()<<"   DATA "<<std::fixed<<std::setprecision(1)<<std::min(collected,s.hold_sec)<<" / "<<s.hold_sec<<" s";putOutlined(c,top.str(),{25,52},.8,2);putOutlined(c,s.instruction,{25,92},.72,2);
+                cv::putText(c,"ATTITUDE / TARGET",{820,130},cv::FONT_HERSHEY_SIMPLEX,.72,{255,255,255},2);drawGauge(c,820,220,410,"ROLL",r,s.roll,60,ROLL_PITCH_TOL_DEG);drawGauge(c,820,320,410,"PITCH",pi,s.pitch,60,ROLL_PITCH_TOL_DEG);drawGauge(c,820,420,410,"YAW d",y,s.yaw,90,YAW_TOL_DEG);
+                cv::putText(c,anglesGood?"COLLECTING DATA":"MOVE INTO GREEN ZONES - TIMER PAUSED",{820,545},cv::FONT_HERSHEY_SIMPLEX,.5,anglesGood?cv::Scalar(0,255,0):cv::Scalar(0,180,255),2,cv::LINE_AA);
             }
             cv::putText(c,"Q / ESC = stop",{820,620},cv::FONT_HERSHEY_SIMPLEX,.6,{255,255,255},1);cv::imshow(PREVIEW_WINDOW,c);int k=cv::waitKeyEx(1);if(k==27||k=='q'||k=='Q')st->stop_requested.store(true);
         }
@@ -175,7 +149,7 @@ int main(){
         while(!ps.plan_ready.load()&&!ps.stop_requested.load()){pollfd pf[2]={{camera_fd,POLLIN,0},{serial_fd,POLLIN,0}};poll(pf,2,5);if(pf[0].revents&POLLIN){for(;;){v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(camera_fd,VIDIOC_DQBUF,&b)==-1){if(errno==EAGAIN)break;fail("DQBUF setup");}if((pc++%PREVIEW_DIVIDER)==0)submitPreview(&ps,buffers[b.index].start,b.bytesused,b.sequence);if(xioctl(camera_fd,VIDIOC_QBUF,&b)==-1)fail("QBUF setup");}}if(pf[1].revents&POLLIN){uint8_t by[4096];ssize_t n=read(serial_fd,by,sizeof(by));for(ssize_t i=0;i<n;++i)if(mavlink_parse_char(MAVLINK_COMM_0,by[i],&mm,&ms)&&mm.msgid==MAVLINK_MSG_ID_ATTITUDE){mavlink_attitude_t a{};mavlink_msg_attitude_decode(&mm,&a);latest={rad2deg(a.roll),rad2deg(a.pitch),rad2deg(a.yaw),true};ps.roll_deg.store(latest.roll_deg);ps.pitch_deg.store(latest.pitch_deg);ps.yaw_deg.store(latest.yaw_deg);ps.attitude_valid.store(true);}}}
         if(ps.stop_requested.load())throw std::runtime_error("Cancelled in setup");tcflush(serial_fd,TCIFLUSH);std::memset(&ms,0,sizeof(ms));std::memset(&mm,0,sizeof(mm));
         std::vector<CameraSample>camera;std::vector<ImuSample>imu;std::vector<TimeSyncSample>ts;camera.reserve(20000);imu.reserve(30000);ts.reserve(1500);std::ofstream mjpeg(OUTPUT_MJPEG,std::ios::binary|std::ios::trunc);if(!mjpeg)throw std::runtime_error("Cannot create MJPEG output");uint64_t drops=0;bool have_seq=false;uint32_t prev_seq=0;int64_t pending=0,next_ts=monotonicNs();pc=0;
-        std::cout<<"\n=== STATE-DRIVEN CAMERA + IMU + TIMESYNC LOGGER ===\n"<<"camera:         640x480 MJPEG @ 120 FPS\npreview:        fullscreen, board-center lock, state-driven hold timer\nIMU:            HIGHRES_IMU @ 200 Hz\nATTITUDE:       @ 50 Hz for UI\nTIMESYNC:       10 Hz\ncamera offset:  +"<<jtzero::timesync::cameraToImuCorrectionMs()<<" ms\n\n";
+        std::cout<<"\n=== STATE-DRIVEN CAMERA + IMU + TIMESYNC LOGGER ===\n"<<"camera:         640x480 MJPEG @ 120 FPS\npreview:        fullscreen, attitude-driven hold timer\nIMU:            HIGHRES_IMU @ 200 Hz\nATTITUDE:       @ 50 Hz for UI\nTIMESYNC:       10 Hz\ncamera offset:  +"<<jtzero::timesync::cameraToImuCorrectionMs()<<" ms\n\n";
         while(!ps.stop_requested.load()&&!ps.test_complete.load()){
             int64_t now=monotonicNs();if(now>=next_ts&&pending==0){pending=now;sendTimesync(serial_fd,pending,target_system,target_component);next_ts=now+TIMESYNC_PERIOD_NS;}
             pollfd pf[2]={{camera_fd,POLLIN,0},{serial_fd,POLLIN,0}};int rc=poll(pf,2,2);if(rc<0){if(errno==EINTR)continue;fail("poll");}

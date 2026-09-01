@@ -1,0 +1,27 @@
+%YAML:1.0
+# JT-Zero FLU diagnostic camera parameters.
+#
+# Body frame for this diagnostic:
+#   B_FLU: +X forward, +Y left, +Z up
+# Camera frame:
+#   C: OpenCV +X right, +Y down, +Z optical forward
+#
+# Original accepted camera->body transform was calibrated in FRD.
+# This file applies R_FLU_FRD = diag(+1,-1,-1) to both rotation and translation.
+
+camera_id: left_cam
+
+T_BS:
+  cols: 4
+  rows: 4
+  data: [ 0.009367371,  0.999954838, -0.001604448,  0.000,
+          0.999326771, -0.009418381, -0.035458408,  0.000,
+         -0.035471918, -0.001271215, -0.999369865, -0.055,
+          0.000000000,  0.000000000,  0.000000000,  1.000 ]
+
+rate_hz: 30
+resolution: [640, 480]
+camera_model: pinhole
+intrinsics: [568.53170752165227, 569.68005562865858, 315.98271077441063, 239.88148589100641]
+distortion_model: radial-tangential
+distortion_coefficients: [0.073569192194028493, -0.095253893789117, -0.010810530757187299, -0.0022843373576970235, 0.082177400802757483]

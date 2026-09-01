@@ -1,11 +1,12 @@
 // JT-ZERO live Mono+IMU yaw-only HUD diagnostic.
 // Protocol: 10 s STILL -> 15 s YAW (~90 deg in place) -> 10 s SETTLE.
-#define main jtzero_fc_hud_v3_unused_main
-#include "live_mono_imu_300mm_fc_hud_v3.cpp"
+#define main jtzero_hud_v2_unused_main
+#include "live_mono_imu_500mm_hud_v2.cpp"
 #undef main
 
 namespace {
 
+constexpr int kFcAttitudeRateHz = 50;
 constexpr const char* kYawHudCsv = "/home/vio/jtzero_live_yaw_only_hud.csv";
 constexpr const char* kYawHudWindow = "JT-ZERO YAW-ONLY HUD";
 constexpr double kYawInitSec = 10.0;
@@ -14,6 +15,14 @@ constexpr double kYawSettleSec = 10.0;
 constexpr double kYawTargetDeg = 90.0;
 constexpr double kYawToleranceDeg = 5.0;
 constexpr double kRollPitchLimitDeg = 2.0;
+
+struct FcAttitude {
+  bool valid = false;
+  int64_t wall_ns = 0;
+  double roll_deg = 0.0;
+  double pitch_deg = 0.0;
+  double yaw_deg = 0.0;
+};
 
 struct YawHudRef {
   bool fc_ref_valid = false;
@@ -43,7 +52,7 @@ static void drawBar(cv::Mat& img, const std::string& label, double value, double
   char b[96];
   std::snprintf(b,sizeof(b),"%+.1f %s",value,unit.c_str());
   txt(img,b,{260,y},.70,{245,245,245},2);
-  const int x0=28,w=520,h=26, yy=y+18;
+  const int x0=28,w=420,h=26, yy=y+18;
   cv::rectangle(img,{x0,yy,w,h},{110,110,110},2);
   cv::line(img,{x0+w/2,yy},{x0+w/2,yy+h},{150,150,150},1);
   const double cl=std::max(-full,std::min(full,value));
@@ -65,8 +74,8 @@ static void renderYawHud(const cv::Mat& gray,
 
   cv::Mat canvas(760,1280,CV_8UC3,cv::Scalar(15,15,15));
   bgr.copyTo(canvas(cv::Rect(0,80,800,600)));
-  cv::line(canvas,{400-55,380},{400+55,380},{0,255,255},3);
-  cv::line(canvas,{400,380-55},{400,380+55},{0,255,255},3);
+  cv::line(canvas,{345,380},{455,380},{0,255,255},3);
+  cv::line(canvas,{400,325},{400,435},{0,255,255},3);
   cv::circle(canvas,{400,380},14,{0,255,255},2);
 
   txt(canvas,"JT-ZERO YAW-ONLY TEST",{24,48},1.05,{245,245,245},3);
@@ -76,10 +85,10 @@ static void renderYawHud(const cv::Mat& gray,
 
   std::string instruction;
   cv::Scalar phaseColor=ok;
-  if(ph=="INIT") instruction="НЕ ДВИГАТЬ";
-  else if(ph=="YAW") { instruction="ПОВОРАЧИВАТЬ ПО YAW"; phaseColor=warn; }
-  else if(ph=="SETTLE") instruction="СТОП. НЕ ДВИГАТЬ";
-  else instruction="ГОТОВО";
+  if(ph=="INIT") instruction="HOLD STILL";
+  else if(ph=="YAW") { instruction="ROTATE YAW ONLY"; phaseColor=warn; }
+  else if(ph=="SETTLE") instruction="STOP - HOLD STILL";
+  else instruction="DONE";
 
   txt(panel,"PHASE: "+ph,{20,48},.92,phaseColor,3);
   txt(panel,instruction,{20,92},.78,phaseColor,3);
@@ -125,12 +134,12 @@ static void renderYawHud(const cv::Mat& gray,
   if(ph=="YAW"){
     const double rem=kYawTargetDeg-std::abs(fcdy);
     if(std::abs(fcdy)<kYawTargetDeg-kYawToleranceDeg)
-      txt(panel,"КРУТИ ЕЩЁ",{20,660},.86,warn,3);
+      txt(panel,"ROTATE MORE",{20,660},.86,warn,3);
     else if(std::abs(fcdy)<=kYawTargetDeg+kYawToleranceDeg)
-      txt(panel,"90° ДОСТИГНУТО",{20,660},.86,ok,3);
+      txt(panel,"90 DEG REACHED",{20,660},.86,ok,3);
     else
-      txt(panel,"ПЕРЕКРУТ",{20,660},.86,bad,3);
-    std::snprintf(buf,sizeof(buf),"до цели: %.1f deg",rem);
+      txt(panel,"TOO FAR",{20,660},.86,bad,3);
+    std::snprintf(buf,sizeof(buf),"remaining: %.1f deg",rem);
     txt(panel,buf,{20,700},.62,white,2);
   }
 

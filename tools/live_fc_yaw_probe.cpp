@@ -19,7 +19,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include <mavlink/common/mavlink.h>
+#include "common/mavlink.h"
 
 namespace {
 

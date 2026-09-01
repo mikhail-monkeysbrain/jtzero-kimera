@@ -92,10 +92,12 @@ void printResidualStats(const std::vector<Sample>& s,int p,const char* name) {
     Eigen::Vector3d e=q.wfc-q.wimu; sum+=e; ss+=e.cwiseProduct(e); ++n;
     if(std::abs(q.wimu.z())>0.03){sumd+=e;ssd+=e.cwiseProduct(e);++nd;}
   }
-  Eigen::Vector3d mean=n?sum/double(n):Eigen::Vector3d::Zero();
-  Eigen::Vector3d rms=n?(ss/double(n)).cwiseSqrt():Eigen::Vector3d::Zero();
-  Eigen::Vector3d meand=nd?sumd/double(nd):Eigen::Vector3d::Zero();
-  Eigen::Vector3d rmsd=nd?(ssd/double(nd)).cwiseSqrt():Eigen::Vector3d::Zero();
+  Eigen::Vector3d mean=Eigen::Vector3d::Zero();
+  Eigen::Vector3d rms=Eigen::Vector3d::Zero();
+  Eigen::Vector3d meand=Eigen::Vector3d::Zero();
+  Eigen::Vector3d rmsd=Eigen::Vector3d::Zero();
+  if(n){mean=sum/double(n);rms=(ss/double(n)).cwiseSqrt();}
+  if(nd){meand=sumd/double(nd);rmsd=(ssd/double(nd)).cwiseSqrt();}
   std::cout<<"\n"<<name<<" residual FC-IMU all n="<<n<<"\n"
            <<"  mean=["<<mean.transpose()<<"] rad/s\n"
            <<"  rms =["<<rms.transpose()<<"] rad/s\n"
@@ -114,7 +116,6 @@ LagResult lagRms(const std::vector<Sample>& s,int shift,int phase_filter) {
   for(int i=0;i<N;++i){
     int j=i+shift; if(j<0||j>=N) continue;
     if(phase_filter>=0 && (s[i].phase!=phase_filter || s[j].phase!=phase_filter)) continue;
-    // FC interval-rate at i is compared with IMU sample j.
     Eigen::Vector3d e=s[i].wfc-s[j].wimu; ss+=e.squaredNorm(); ++n;
   }
   LagResult r; r.shift=shift;r.n=n;if(n)r.rms=std::sqrt(ss/n);return r;

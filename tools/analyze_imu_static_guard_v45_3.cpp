@@ -1,0 +1,32 @@
+// JT-ZERO v45.3: validate adaptive gyro-X bias with an independent static detector.
+// Key point: static selection must NOT depend on the gyro mean being estimated.
+// Uses FC ATTITUDE body rates + accel variance/stability, and compares several guards.
+
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace {
+constexpr double G=9.81,CX=.014570,CY=.082383,PI=3.14159265358979323846;
+struct R{std::string st;double dt=0;Eigen::Vector3d a=Eigen::Vector3d::Zero(),w=Eigen::Vector3d::Zero(),fcw=Eigen::Vector3d::Zero(),af=Eigen::Vector3d::Zero();Eigen::Matrix3d Rf=Eigen::Matrix3d::Identity();};
+std::vector<std::string>S(const std::string&s){std::vector<std::string>v;std::stringstream q(s);std::string x;while(std::getline(q,x,','))v.push_back(x);return v;}double D(const std::string&s){return s.empty()?0:std::stod(s);}
+Eigen::Matrix3d rpy(double r,double p,double y){r*=PI/180;p*=PI/180;y*=PI/180;return Eigen::AngleAxisd(r,Eigen::Vector3d::UnitX()).toRotationMatrix()*Eigen::AngleAxisd(p,Eigen::Vector3d::UnitY()).toRotationMatrix()*Eigen::AngleAxisd(y,Eigen::Vector3d::UnitZ()).toRotationMatrix();}
+Eigen::Matrix3d ex(const Eigen::Vector3d&q){double a=q.norm();return a<1e-12?Eigen::Matrix3d::Identity():Eigen::AngleAxisd(a,q/a).toRotationMatrix();}
+double ang(const Eigen::Vector3d&a,const Eigen::Vector3d&b){return std::acos(std::clamp(a.normalized().dot(b.normalized()),-1.0,1.0))*180/PI;}
+std::vector<R>load(const std::string&p){std::ifstream f(p);if(!f)throw std::runtime_error("cannot open "+p);std::string l;std::getline(f,l);auto h=S(l);std::map<std::string,int>c;for(int i=0;i<(int)h.size();++i)c[h[i]]=i;const char*n[]={"stage","dt","flu_ax","flu_ay","flu_az","raw_gx","raw_gy","raw_gz","fc_rollspeed","fc_pitchspeed","fc_yawspeed","fixed_R_roll","fixed_R_pitch","fixed_R_yaw","fixed_aw_x","fixed_aw_y","fixed_aw_z"};for(auto x:n)if(!c.count(x))throw std::runtime_error(std::string("missing ")+x);std::vector<R>v;while(std::getline(f,l)){auto x=S(l);if(x.size()<h.size())continue;R z;z.st=x[c["stage"]];z.dt=D(x[c["dt"]]);z.a={D(x[c["flu_ax"]]),D(x[c["flu_ay"]]),D(x[c["flu_az"]])};z.w={D(x[c["raw_gx"]]),D(x[c["raw_gy"]]),D(x[c["raw_gz"]])};z.fcw={D(x[c["fc_rollspeed"]]),D(x[c["fc_pitchspeed"]]),D(x[c["fc_yawspeed"]])};z.Rf=rpy(D(x[c["fixed_R_roll"]]),D(x[c["fixed_R_pitch"]]),D(x[c["fixed_R_yaw"]]));z.af={D(x[c["fixed_aw_x"]]),D(x[c["fixed_aw_y"]]),D(x[c["fixed_aw_z"]])};v.push_back(z);}return v;}
+std::vector<bool>guard(const std::vector<R>&v,size_t s,double fcThr,double accStdThr){const int H=100;std::vector<bool>m(v.size());std::vector<Eigen::Vector3d>pa(v.size()+1),pa2(v.size()+1);for(size_t i=s;i<v.size();++i){pa[i+1]=pa[i]+v[i].a;pa2[i+1]=pa2[i]+v[i].a.cwiseProduct(v[i].a);}for(size_t i=s+H;i+H<v.size();++i){size_t b=i-H,e=i+H;double n=e-b;Eigen::Vector3d ma=((pa[e]-pa[b])/n).eval();Eigen::Vector3d va=((pa2[e]-pa2[b])/n-ma.cwiseProduct(ma)).eval();double as=std::sqrt(std::max(0.0,va.sum()));if(v[i].fcw.norm()<fcThr&&as<accStdThr&&std::abs(ma.norm()-G)<.30)m[i]=true;}return m;}
+struct O{std::string name;double fg=0,fa=0,er=0,em=0;size_t ns=0;Eigen::Vector3d meanW=Eigen::Vector3d::Zero();};
+O run(const std::vector<R>&v,size_t s,const std::vector<bool>&m,const Eigen::Vector3d&ba,double tau){O o;Eigen::Matrix3d Rm=v[s].Rf;double bx=0;std::vector<double>ep;std::string pst=v[s].st;for(size_t i=s+1;i<v.size();++i){double dt=(v[i].dt>0&&v[i].dt<.03)?v[i].dt:0;Eigen::Vector3d w=v[i].w;w.x()-=bx;w.x()+=CX*w.z();w.y()+=CY*w.z();if(dt)Rm=Rm*ex(w*dt);if(m[i]&&dt){double al=1-std::exp(-dt/tau);bx+=al*(v[i].w.x()-bx);o.meanW+=v[i].w;++o.ns;}if(v[i].st!=pst){size_t k=i-1,b=k,n=0;Eigen::Vector3d ma=Eigen::Vector3d::Zero();while(b>s&&v[b-1].st==pst&&m[b-1])--b;for(size_t q=b;q<=k;++q)if(m[q]){ma+=v[q].a-ba;++n;}if(n>100){ma/=double(n);ep.push_back(ang(Rm.transpose()*Eigen::Vector3d(0,0,-1),ma));}pst=v[i].st;}}
+ if(o.ns)o.meanW/=double(o.ns);Eigen::Vector3d ma=Eigen::Vector3d::Zero();size_t n=0;for(size_t i=s;i<v.size();++i)if(m[i]&&v[i].st=="FINAL_STATIC"){ma+=v[i].a-ba;++n;}if(n){ma/=double(n);o.fg=ang(Rm.transpose()*Eigen::Vector3d(0,0,-1),ma);o.fa=(Rm*ma+Eigen::Vector3d(0,0,G)).head<2>().norm();}double ss=0;for(double x:ep){ss+=x*x;o.em=std::max(o.em,x);}if(!ep.empty())o.er=std::sqrt(ss/ep.size());return o;}
+}
+int main(int ac,char**av){std::string p=ac>1?av[1]:"/home/vio/jtzero_imu_master_v44.csv",op=ac>2?av[2]:"/home/vio/jtzero_imu_static_guard_v45_3.txt";try{auto v=load(p);size_t s=0;while(s<v.size()&&v[s].st=="CALIB_STATIC")++s;if(s>=v.size())throw std::runtime_error("no boundary");Eigen::Vector3d ba=Eigen::Vector3d::Zero();size_t bn=0;for(size_t i=s;i<v.size()&&bn<2000;++i){ba+=v[i].a-v[i].Rf.transpose()*(v[i].af-Eigen::Vector3d(0,0,G));++bn;}ba/=double(bn);struct Gd{const char*n;double f,a;};std::vector<Gd>gg={{"STRICT",.006,.12},{"NORMAL",.010,.16},{"LOOSE",.020,.18}};std::ostringstream o;o<<std::fixed<<std::setprecision(6);o<<"============================================================\nJT-ZERO v45.3 INDEPENDENT STATIC-GUARD VALIDATION\n============================================================\n";o<<"post-cal boundary: "<<s<<"\ninferred BA: ["<<ba.transpose()<<"]\n\nIMPORTANT\nStatic selection uses FC body-rate magnitude and accel variance.\nIt does NOT threshold the HIGHRES_IMU gyro mean being estimated.\nThis prevents a constant-rate rotation from being learned as gyro bias.\n\n";for(auto&g:gg){auto m=guard(v,s,g.f,g.a);o<<"GUARD "<<g.n<<" fc_rate<"<<g.f<<" acc_std<"<<g.a<<" static_samples="<<std::count(m.begin()+s,m.end(),true)<<"\n";for(double t:{.5,1.0,2.0,5.0,10.0}){auto z=run(v,s,m,ba,t);o<<"  BG_X tau="<<t<<" final_gravity="<<z.fg<<" deg final_axy="<<z.fa<<" endpoint_rms="<<z.er<<" endpoint_max="<<z.em<<" mean_selected_raw_gx="<<z.meanW.x()<<"\n";}o<<"\n";}o<<"DECISION\nIf X-only adaptation remains strong across STRICT/NORMAL/LOOSE guards, the v45.2 result is not an artifact of gyro-based static selection.\nIf it collapses or is highly threshold-sensitive, do not productionize adaptive BG; prioritize rate/history/cross-axis modeling.\n";std::ofstream f(op);f<<o.str();std::cout<<o.str()<<"\nResult TXT: "<<op<<"\n";}catch(const std::exception&e){std::cerr<<"[FATAL] "<<e.what()<<"\n";return 1;}}

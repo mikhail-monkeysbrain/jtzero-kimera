@@ -9,6 +9,10 @@
 #include "live_mono_imu_300mm_fc_hud_v3.cpp"
 #undef main
 
+// v3 owns a complete main() and currently has no NO_MAIN guard.  The macro
+// above renames it, so this translation unit can provide the corrected v4
+// entry point below without a duplicate-main definition.
+
 namespace {
 constexpr double kV4GyroCx = 0.014570;
 constexpr double kV4GyroCy = 0.082383;

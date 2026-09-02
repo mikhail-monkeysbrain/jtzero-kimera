@@ -21,21 +21,22 @@ OFF_CSV=/home/vio/jtzero_gravity_v15_6_NO_GRAVITY.csv
 cp "$SRC" "$CUR_SRC"
 cp "$SRC" "$OFF_SRC"
 
-# In v11 the replay correction method has a default argument
-#   bool allow_gravity_feedback=true
-# and the replay call relies on that default.  For B we change ONLY that
-# default to false. ZXY remains enabled because both runs execute mode CURRENT.
-MATCHES="$(grep -c 'bool allow_gravity_feedback=true' "$OFF_SRC" || true)"
+# IMPORTANT: replay v11 explicitly calls:
+#   corr.correctGyro(us,acc,g,true)
+# Therefore changing only the function's default argument has no effect.
+# For B we change ONLY the explicit call-site argument true -> false.
+# ZXY remains enabled because both runs execute mode CURRENT.
+MATCHES="$(grep -c 'corr\.correctGyro(us,acc,g,true)' "$OFF_SRC" || true)"
 if [[ "$MATCHES" != "1" ]]; then
-  echo "[FATAL] expected exactly one gravity-feedback default in v11, found $MATCHES" >&2
+  echo "[FATAL] expected exactly one explicit gravity-feedback call in v11, found $MATCHES" >&2
   exit 2
 fi
-sed -i 's/bool allow_gravity_feedback=true/bool allow_gravity_feedback=false/' "$OFF_SRC"
+sed -i 's/corr\.correctGyro(us,acc,g,true)/corr.correctGyro(us,acc,g,false)/' "$OFF_SRC"
 
-# Sanity check: source copies must differ only in that one token.
+# Sanity checks: B must differ only at the explicit call site.
 DIFF_LINES="$(diff -u "$CUR_SRC" "$OFF_SRC" || true)"
 echo "============================================================"
-echo "JT-ZERO GRAVITY FEEDBACK A/B YAW REPLAY v15.6"
+echo "JT-ZERO GRAVITY FEEDBACK A/B YAW REPLAY v15.6 FIXED"
 echo "============================================================"
 echo "Dataset:"
 echo "  combined: $COMBINED"
@@ -45,12 +46,24 @@ echo "  params:   $PARAMS"
 echo
 echo "Source A/B diff:"
 echo "$DIFF_LINES"
-if ! echo "$DIFF_LINES" | grep -q 'allow_gravity_feedback=false'; then
-  echo "[FATAL] gravity OFF patch not present" >&2
+
+if ! echo "$DIFF_LINES" | grep -q 'corr.correctGyro(us,acc,g,false)'; then
+  echo "[FATAL] explicit gravity OFF call-site patch not present" >&2
+  exit 2
+fi
+if echo "$DIFF_LINES" | grep -q 'allow_gravity_feedback=false'; then
+  echo "[FATAL] default argument was modified; refusing invalid A/B" >&2
   exit 2
 fi
 
-echo "[CHECK] PASS: B differs only by gravity feedback default true -> false"
+REMOVED="$(echo "$DIFF_LINES" | grep -c '^-.*corr.correctGyro(us,acc,g,true)' || true)"
+ADDED="$(echo "$DIFF_LINES" | grep -c '^+.*corr.correctGyro(us,acc,g,false)' || true)"
+if [[ "$REMOVED" != "1" || "$ADDED" != "1" ]]; then
+  echo "[FATAL] A/B diff is not the expected single call-site true -> false change" >&2
+  exit 2
+fi
+
+echo "[CHECK] PASS: B differs only by explicit correctGyro(..., true) -> false"
 
 COMMON=(
   -std=c++17 -O2
@@ -85,7 +98,7 @@ cp /home/vio/jtzero_zxy_replay_v11_CURRENT.csv "$OFF_CSV"
 
 echo
 echo "============================================================"
-echo "GRAVITY FEEDBACK A/B v15.6 COMPLETE"
+echo "GRAVITY FEEDBACK A/B v15.6 FIXED COMPLETE"
 echo "============================================================"
 echo "A log: $CUR_LOG"
 echo "B log: $OFF_LOG"

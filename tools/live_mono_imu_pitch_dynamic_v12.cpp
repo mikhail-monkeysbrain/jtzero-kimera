@@ -111,6 +111,7 @@ void drawHud12(const cv::Mat& gray,const Telemetry& tel,bool ready,bool done,int
 
 } // namespace jtzero_v12
 
+#ifndef JTZERO_V12_NO_MAIN
 int main(int argc,char**argv){
   using namespace jtzero_v12;using namespace jtzero_v10;
   google::InitGoogleLogging(argv[0]);FLAGS_visualize=false;FLAGS_viz_type=2;FLAGS_use_lcd=false;FLAGS_log_output=false;FLAGS_extract_planes_from_the_scene=false;
@@ -132,3 +133,4 @@ int main(int argc,char**argv){
     std::cout<<"\n============================================================\nJT-ZERO DYNAMIC PITCH v12 RESULT\n============================================================\n"<<"aborted: "<<(aborted?"yes":"no")<<"\ncompleted: "<<(done?"yes":"no")<<"\nrows: "<<integ.rows.size()<<"\n";for(const auto&s:segs)std::cout<<(s.slow?"SLOW":"FAST")<<" "<<s.from_pitch<<"->"<<s.to_pitch<<" deg: duration="<<s.duration<<" s, rate="<<s.avg_pitch_rate<<" deg/s, dV_FC="<<s.dv_fc_xy<<" m/s, dV_GYRO="<<s.dv_gyro_xy<<" m/s, maxA_FC="<<s.max_fc_axy<<" m/s2, maxA_GYRO="<<s.max_gyro_axy<<" m/s2, maxPIM="<<s.max_pim_vxy<<" m/s\n";std::cout<<"CSV: "<<kCsv12<<"\nOpen CSV:\n  code "<<kCsv12<<"\n";return aborted?2:0;
   }catch(const std::exception&e){if(pipe)pipe->shutdown();if(pipeline_started&&pipe_thread.joinable())pipe_thread.join();if(streaming&&cfd>=0){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(cfd,VIDIOC_STREAMOFF,&t);}for(auto&b:bufs)if(b.start&&b.start!=MAP_FAILED)munmap(b.start,b.length);if(cfd>=0)close(cfd);if(sfd>=0)close(sfd);cv::destroyAllWindows();std::cerr<<"[FATAL] "<<e.what()<<"\n";return 1;}
 }
+#endif // JTZERO_V12_NO_MAIN

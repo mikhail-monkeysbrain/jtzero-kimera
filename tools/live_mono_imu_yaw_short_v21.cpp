@@ -2,9 +2,9 @@
 // Работает поверх v20 и предназначен для TRUE IMU-only режима.
 // GUI русский, переходы между этапами автоматические после устойчивой фиксации.
 
-#define main jtzero_v20_embedded_main
+#define JTZERO_V20_NO_MAIN
 #include "live_mono_imu_optimizer_update_v20.cpp"
-#undef main
+#undef JTZERO_V20_NO_MAIN
 
 namespace jtzero_v21 {
 using namespace jtzero_v20;

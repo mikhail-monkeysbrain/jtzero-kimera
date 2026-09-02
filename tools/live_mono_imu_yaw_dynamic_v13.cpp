@@ -2,9 +2,9 @@
 // Sequence after SPACE: slow 0->+80->0, then fast 0->+80->0.
 // Reuses v12/v10 sample-aligned ATTITUDE interpolation and HIGHRES_IMU integration.
 
-#define main jtzero_v12_disabled_main
+#define JTZERO_V12_NO_MAIN
 #include "live_mono_imu_pitch_dynamic_v12.cpp"
-#undef main
+#undef JTZERO_V12_NO_MAIN
 
 namespace jtzero_v13 {
 using namespace jtzero_v10;

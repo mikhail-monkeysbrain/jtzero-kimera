@@ -34,8 +34,17 @@ struct SourceStats32 {
   Eigen::Vector3d sum=Eigen::Vector3d::Zero();
   double max_norm=0;
   void add(const Eigen::Vector3d& e){++count;sum+=e;ss+=e.cwiseProduct(e);max_norm=std::max(max_norm,e.norm());}
-  Eigen::Vector3d mean() const {return count?sum/double(count):Eigen::Vector3d::Zero();}
-  Eigen::Vector3d rms() const {return count?(ss/double(count)).cwiseSqrt():Eigen::Vector3d::Zero();}
+  Eigen::Vector3d mean() const {
+    Eigen::Vector3d out = Eigen::Vector3d::Zero();
+    if (count) out = sum / double(count);
+    return out;
+  }
+
+  Eigen::Vector3d rms() const {
+    Eigen::Vector3d out = Eigen::Vector3d::Zero();
+    if (count) out = (ss / double(count)).cwiseSqrt();
+    return out;
+  }
 };
 
 struct Row32 {

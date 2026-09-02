@@ -102,8 +102,12 @@ static void process26(State26&s,const ImuSample10&im,const Eigen::Matrix3d&RfcN,
   if(dt>0){s.vfc+=afc*dt;s.vbg+=abg*dt;s.vst+=ast*dt;}
   const Eigen::Vector3d fexp=Rfc.transpose()*Eigen::Vector3d(0,0,-9.81);
   const Eigen::Vector3d gres=ac-fexp;
-  const Eigen::Vector3d pim=bv?(b.Vpred-s.pim_v0):Eigen::Vector3d::Zero();
-  const Eigen::Vector3d opt=bv?(b.Vopt-s.opt_v0):Eigen::Vector3d::Zero();
+  Eigen::Vector3d pim = Eigen::Vector3d::Zero();
+  Eigen::Vector3d opt = Eigen::Vector3d::Zero();
+  if (bv) {
+    pim = b.Vpred - s.pim_v0;
+    opt = b.Vopt - s.opt_v0;
+  }
   Row26 r;r.phase=s.phase;r.imu_us=im.us;r.dt=dt;r.kf=bv?b.kf:0;
   r.ax=im.ax;r.ay=im.ay;r.az=im.az;r.gx=im.gx;r.gy=im.gy;r.gz=im.gz;
   Eigen::Vector3d rr=RfcN.eulerAngles(0,1,2)*180.0/kPi;r.fc_roll=rr.x();r.fc_pitch=rr.y();r.fc_yaw=rr.z();

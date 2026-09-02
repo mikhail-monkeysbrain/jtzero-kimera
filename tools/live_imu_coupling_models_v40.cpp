@@ -194,7 +194,7 @@ static Eigen::Matrix3d expR40(const Eigen::Vector3d& th) {
 static double gravityErr40(const Eigen::Matrix3d& R, const Eigen::Vector3d& acc) {
   if (acc.norm() <= 1e-9) return 0.0;
   const Eigen::Vector3d measured = acc.normalized();
-  const Eigen::Vector3d predicted = R.transpose() * Eigen::Vector3d(0, 0, 1);
+  const Eigen::Vector3d predicted = R.transpose() * Eigen::Vector3d(0, 0, -1);
   return std::acos(clamp40(measured.dot(predicted))) * 180.0 / kPi;
 }
 
@@ -359,7 +359,7 @@ static void initialize40(State40& s, const Att40& att) {
   const Eigen::Vector3d mean_acc = s.cal_acc_sum / double(s.cal_n);
   s.BG = s.cal_gyro_sum / double(s.cal_n);
   const Eigen::Matrix3d R0 = fcRnedFlu(att.roll, att.pitch, att.yaw);
-  const Eigen::Vector3d expected_acc = R0.transpose() * Eigen::Vector3d(0, 0, kG40);
+  const Eigen::Vector3d expected_acc = R0.transpose() * Eigen::Vector3d(0, 0, -kG40);
   s.BA = mean_acc - expected_acc;
   s.u0 = mean_acc.normalized();
   if (std::abs(s.u0.z()) > 1e-6) {
@@ -428,7 +428,7 @@ static void process40(State40& s,
     ModelState40& m = s.model[i];
     const Eigen::Matrix3d Rhalf = m.R * expR40(wm * (0.5 * dt));
     m.R = m.R * expR40(wm * dt);
-    m.A = Rhalf * ac + Eigen::Vector3d(0, 0, -kG40);
+    m.A = Rhalf * ac + Eigen::Vector3d(0, 0, kG40);
     m.V += m.A * dt;
 
     row.w_model[i] = wm;
@@ -687,10 +687,10 @@ int main(int argc, char** argv) {
   uint64_t last_imu_us = 0;
 
   try {
-    fd = jtzero_v10::openSerial();
+    fd = openSerial();
     std::cout << "[MAV] waiting for HEARTBEAT...\n";
-    const int64_t deadline = jtzero_v10::monotonicNs() + 10000000000LL;
-    while (jtzero_v10::monotonicNs() < deadline && !sys) {
+    const int64_t deadline = monotonicNs() + 10000000000LL;
+    while (monotonicNs() < deadline && !sys) {
       pollfd p{fd, POLLIN, 0};
       if (poll(&p, 1, 100) <= 0) continue;
       uint8_t buf[2048];
@@ -707,8 +707,8 @@ int main(int argc, char** argv) {
     }
     if (!sys) throw std::runtime_error("HEARTBEAT timeout");
 
-    jtzero_v10::requestRate(fd, sys, comp, MAVLINK_MSG_ID_ATTITUDE, 100);
-    jtzero_v10::requestRate(fd, sys, comp, MAVLINK_MSG_ID_HIGHRES_IMU, 200);
+    requestRate(fd, sys, comp, MAVLINK_MSG_ID_ATTITUDE, 100);
+    requestRate(fd, sys, comp, MAVLINK_MSG_ID_HIGHRES_IMU, 200);
     cv::namedWindow(jtzero_v40::kWindow40);
     std::cout << "\nJT-ZERO IMU COUPLING MODELS v40\nFollow Russian GUI.\n";
 
@@ -726,9 +726,9 @@ int main(int argc, char** argv) {
               mavlink_attitude_t a{};
               mavlink_msg_attitude_decode(&msg, &a);
               att.valid = true;
-              att.roll = a.roll * 180.0 / jtzero_v10::kPi;
-              att.pitch = a.pitch * 180.0 / jtzero_v10::kPi;
-              att.yaw = a.yaw * 180.0 / jtzero_v10::kPi;
+              att.roll = a.roll * 180.0 / kPi;
+              att.pitch = a.pitch * 180.0 / kPi;
+              att.yaw = a.yaw * 180.0 / kPi;
               att.rs = a.rollspeed;
               att.ps = a.pitchspeed;
               att.ys = a.yawspeed;
@@ -745,9 +745,9 @@ int main(int argc, char** argv) {
         }
       }
 
-      if (jtzero_v10::monotonicNs() >= next_hud) {
+      if (monotonicNs() >= next_hud) {
         jtzero_v40::hud40(state, att, acc, gyro);
-        next_hud = jtzero_v10::monotonicNs() + 33333333LL;
+        next_hud = monotonicNs() + 33333333LL;
       }
 
       const int key = cv::waitKey(1) & 255;
@@ -780,8 +780,8 @@ int main(int argc, char** argv) {
     jtzero_v40::summary40(state);
     std::cout << "aborted: " << (aborted ? "yes" : "no") << "\n";
 
-    jtzero_v10::requestRate(fd, sys, comp, MAVLINK_MSG_ID_ATTITUDE, 0);
-    jtzero_v10::requestRate(fd, sys, comp, MAVLINK_MSG_ID_HIGHRES_IMU, 0);
+    requestRate(fd, sys, comp, MAVLINK_MSG_ID_ATTITUDE, 0);
+    requestRate(fd, sys, comp, MAVLINK_MSG_ID_HIGHRES_IMU, 0);
     close(fd);
     cv::destroyAllWindows();
     return aborted ? 2 : 0;

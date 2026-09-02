@@ -1,16 +1,13 @@
 %YAML:1.0
-# JT-Zero FLU zero-lever diagnostic camera parameters.
+# JT-Zero FLU diagnostic camera parameters.
 #
-# This A/B diagnostic keeps the accepted FLU camera rotation exactly unchanged
-# and sets only camera translation to zero.
-#
-# Body frame:
+# Body frame for this diagnostic:
 #   B_FLU: +X forward, +Y left, +Z up
 # Camera frame:
 #   C: OpenCV +X right, +Y down, +Z optical forward
 #
-# DO NOT use this file as final calibration. It exists only to isolate whether
-# the translation part of T_BS is responsible for rotation->translation coupling.
+# Original accepted camera->body transform was calibrated in FRD.
+# This file applies R_FLU_FRD = diag(+1,-1,-1) to both rotation and translation.
 
 camera_id: left_cam
 

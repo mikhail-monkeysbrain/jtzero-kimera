@@ -20,6 +20,9 @@
 #undef kCsvPath
 #undef kExpectedDistanceM
 #undef main
+#ifdef JTZERO_V7_EMBEDDED
+#define main jtzero_v7_unused_main
+#endif
 
 #include "jtzero_imu_correction.h"
 

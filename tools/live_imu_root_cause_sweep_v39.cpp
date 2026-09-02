@@ -39,7 +39,7 @@ constexpr const char* kNames[kM] = {
   "ROT_L","STATIC_L","RET_0_B","STATIC_0_C"
 };
 
-struct Att {
+struct Att39 {
   bool valid=false;
   double roll=0,pitch=0,yaw=0;
   double rs=0,ps=0,ys=0;
@@ -82,7 +82,7 @@ struct Row {
   double grav_err_euler=0,grav_err_mid=0,fc_acc_tilt_err=0;
 };
 
-struct State {
+struct State39 {
   Phase phase=Phase::WAIT_ZERO;
   uint64_t last_us=0;
   int cal_n=0,stable_n=0,static_n=0;
@@ -106,7 +106,7 @@ static double gravityErr(const Eigen::Matrix3d&R,const Eigen::Vector3d&a){Eigen:
 static int idx(Phase p){switch(p){case Phase::STATIC_0_A:return 0;case Phase::ROT_R:return 1;case Phase::STATIC_R:return 2;case Phase::RET_0_A:return 3;case Phase::STATIC_0_B:return 4;case Phase::ROT_L:return 5;case Phase::STATIC_L:return 6;case Phase::RET_0_B:return 7;case Phase::STATIC_0_C:return 8;default:return -1;}}
 static const char* label(Phase p){switch(p){case Phase::WAIT_ZERO:return "ПОСТАВЬТЕ СТЕНД В ФИЗИЧЕСКИЙ НОЛЬ";case Phase::CALIBRATE:return "КАЛИБРОВКА — НЕ ДВИГАТЬ";case Phase::STATIC_0_A:return "ИСХОДНАЯ СТАТИКА — НЕ ДВИГАТЬ";case Phase::ROT_R:return "ПОВЕРНИТЕ ВПРАВО НА 60–100°, ОСТАНОВИТЕСЬ";case Phase::STATIC_R:return "СТАТИКА СПРАВА — НЕ ДВИГАТЬ";case Phase::RET_0_A:return "ВЕРНИТЕ ТОЧНО В ФИЗИЧЕСКИЙ НОЛЬ";case Phase::STATIC_0_B:return "СТАТИКА В НУЛЕ — НЕ ДВИГАТЬ";case Phase::ROT_L:return "ПОВЕРНИТЕ ВЛЕВО НА 60–100°, ОСТАНОВИТЕСЬ";case Phase::STATIC_L:return "СТАТИКА СЛЕВА — НЕ ДВИГАТЬ";case Phase::RET_0_B:return "ВЕРНИТЕ ТОЧНО В ФИЗИЧЕСКИЙ НОЛЬ";case Phase::STATIC_0_C:return "ФИНАЛЬНАЯ СТАТИКА — НЕ ДВИГАТЬ";case Phase::DONE:return "ТЕСТ ЗАВЕРШЁН";}return "";}
 
-static void beginAfterCal(State&s,const Att&a){
+static void beginAfterCal(State39&s,const Att39&a){
   Eigen::Vector3d ma=s.cal_as/double(s.cal_n);s.BG=s.cal_gs/double(s.cal_n);
   Eigen::Matrix3d R0=Rfc(a.roll,a.pitch,a.yaw);
   s.BA=ma-R0.transpose()*Eigen::Vector3d(0,0,-kG);
@@ -121,7 +121,7 @@ static void addStats(Stats&z,double dt,const Eigen::Vector3d&a,const Eigen::Vect
   z.gx_ax.add(a.x(),w.x());z.gx_ay.add(a.y(),w.x());z.gy_ax.add(a.x(),w.y());z.gy_ay.add(a.y(),w.y());
 }
 
-static void process(State&s,const Att&att,uint64_t us,const Eigen::Vector3d&rawa,const Eigen::Vector3d&raww){
+static void process(State39&s,const Att39&att,uint64_t us,const Eigen::Vector3d&rawa,const Eigen::Vector3d&raww){
   bool isstill=still(rawa,raww);
   if(s.phase==Phase::CALIBRATE){if(isstill&&att.valid){s.cal_as+=rawa;s.cal_gs+=raww;if(++s.cal_n>=kCalN)beginAfterCal(s,att);}else{s.cal_n=0;s.cal_as.setZero();s.cal_gs.setZero();}return;}
   if(s.phase==Phase::WAIT_ZERO||s.phase==Phase::DONE||!att.valid)return;
@@ -149,12 +149,12 @@ static void process(State&s,const Att&att,uint64_t us,const Eigen::Vector3d&rawa
     if(s.static_n>=kStaticN){s.static_n=0;s.stable_n=0;if(s.phase==Phase::STATIC_0_A){s.phase=Phase::ROT_R;std::cout<<"[STEP] baseline done. Rotate right, stop, SPACE.\n";}else if(s.phase==Phase::STATIC_R){s.phase=Phase::RET_0_A;std::cout<<"[STEP] right static done. Return to zero, stop, SPACE.\n";}else if(s.phase==Phase::STATIC_0_B){s.phase=Phase::ROT_L;std::cout<<"[STEP] zero static done. Rotate left, stop, SPACE.\n";}else if(s.phase==Phase::STATIC_L){s.phase=Phase::RET_0_B;std::cout<<"[STEP] left static done. Return to zero, stop, SPACE.\n";}else{s.phase=Phase::DONE;std::cout<<"[TEST] final static done.\n";}}}
 }
 
-static void save(const State&s){std::ofstream f(kCsv39);f<<std::fixed<<std::setprecision(9)<<"imu_us,phase,phase_name,dt,ax,ay,az,gx_corr,gy_corr,gz_corr,fc_rollspeed_flu,fc_pitchspeed_flu,fc_yawspeed_flu,fc_roll,fc_pitch,fc_yaw,acc_roll,acc_pitch,a_euler_x,a_euler_y,a_euler_z,a_mid_x,a_mid_y,a_mid_z,v_euler_x,v_euler_y,v_euler_z,v_mid_x,v_mid_y,v_mid_z,gravity_err_euler_deg,gravity_err_mid_deg,fc_acc_tilt_err_deg\n";for(const auto&r:s.rows){const char*n=r.phase>=0&&r.phase<kM?kNames[r.phase]:"OTHER";f<<r.us<<','<<r.phase<<','<<n<<','<<r.dt<<','<<r.acc.x()<<','<<r.acc.y()<<','<<r.acc.z()<<','<<r.gyr.x()<<','<<r.gyr.y()<<','<<r.gyr.z()<<','<<r.fc_rates.x()<<','<<r.fc_rates.y()<<','<<r.fc_rates.z()<<','<<r.fc_roll<<','<<r.fc_pitch<<','<<r.fc_yaw<<','<<r.acc_roll<<','<<r.acc_pitch<<','<<r.a_euler.x()<<','<<r.a_euler.y()<<','<<r.a_euler.z()<<','<<r.a_mid.x()<<','<<r.a_mid.y()<<','<<r.a_mid.z()<<','<<r.v_euler.x()<<','<<r.v_euler.y()<<','<<r.v_euler.z()<<','<<r.v_mid.x()<<','<<r.v_mid.y()<<','<<r.v_mid.z()<<','<<r.grav_err_euler<<','<<r.grav_err_mid<<','<<r.fc_acc_tilt_err<<'\n';}}
+static void save(const State39&s){std::ofstream f(kCsv39);f<<std::fixed<<std::setprecision(9)<<"imu_us,phase,phase_name,dt,ax,ay,az,gx_corr,gy_corr,gz_corr,fc_rollspeed_flu,fc_pitchspeed_flu,fc_yawspeed_flu,fc_roll,fc_pitch,fc_yaw,acc_roll,acc_pitch,a_euler_x,a_euler_y,a_euler_z,a_mid_x,a_mid_y,a_mid_z,v_euler_x,v_euler_y,v_euler_z,v_mid_x,v_mid_y,v_mid_z,gravity_err_euler_deg,gravity_err_mid_deg,fc_acc_tilt_err_deg\n";for(const auto&r:s.rows){const char*n=r.phase>=0&&r.phase<kM?kNames[r.phase]:"OTHER";f<<r.us<<','<<r.phase<<','<<n<<','<<r.dt<<','<<r.acc.x()<<','<<r.acc.y()<<','<<r.acc.z()<<','<<r.gyr.x()<<','<<r.gyr.y()<<','<<r.gyr.z()<<','<<r.fc_rates.x()<<','<<r.fc_rates.y()<<','<<r.fc_rates.z()<<','<<r.fc_roll<<','<<r.fc_pitch<<','<<r.fc_yaw<<','<<r.acc_roll<<','<<r.acc_pitch<<','<<r.a_euler.x()<<','<<r.a_euler.y()<<','<<r.a_euler.z()<<','<<r.a_mid.x()<<','<<r.a_mid.y()<<','<<r.a_mid.z()<<','<<r.v_euler.x()<<','<<r.v_euler.y()<<','<<r.v_euler.z()<<','<<r.v_mid.x()<<','<<r.v_mid.y()<<','<<r.v_mid.z()<<','<<r.grav_err_euler<<','<<r.grav_err_mid<<','<<r.fc_acc_tilt_err<<'\n';}}
 
-static Eigen::Vector3d mean(const Eigen::Vector3d&s,int n){return n?s/double(n):Eigen::Vector3d::Zero();}
+static Eigen::Vector3d mean(const Eigen::Vector3d&s,int n){if(n<=0)return Eigen::Vector3d::Zero();return s/double(n);}
 static double tiltDelta(const Eigen::Vector3d&a,const Eigen::Vector3d&b){Eigen::Vector3d ua=a.normalized(),ub=b.normalized();return std::acos(clamp1(ua.dot(ub)))*180.0/kPi;}
 
-static void summary(const State&s){
+static void summary(const State39&s){
   std::cout<<std::fixed<<std::setprecision(6)<<"\n============================================================\nJT-ZERO IMU ROOT-CAUSE SWEEP v39 RESULT\n============================================================\nBA=["<<s.BA.transpose()<<"] m/s^2\nBG=["<<s.BG.transpose()<<"] rad/s\n";
   for(int i=0;i<kM;i++){const Stats&z=s.st[i];Eigen::Vector3d ma=mean(z.sum_acc,z.n),mw=mean(z.sum_gyr,z.n);std::cout<<"\n"<<kNames[i]<<" n="<<z.n<<" dt="<<z.dt<<" s max_dt="<<z.max_dt<<" bad_dt="<<z.bad_dt<<"\n mean acc=["<<ma.transpose()<<"] mean gyro_corr=["<<mw.transpose()<<"]\n Euler mean/max axy="<<(z.n?z.sum_axy_euler/z.n:0)<<"/"<<z.max_axy_euler<<" dVxy="<<std::hypot(z.dv_euler.x(),z.dv_euler.y())<<"\n Midpt mean/max axy="<<(z.n?z.sum_axy_mid/z.n:0)<<"/"<<z.max_axy_mid<<" dVxy="<<std::hypot(z.dv_mid.x(),z.dv_mid.y())<<"\n gx~gz K="<<z.gx_gz.slope()<<" corr="<<z.gx_gz.corr()<<"  gy~gz K="<<z.gy_gz.slope()<<" corr="<<z.gy_gz.corr()<<"\n gx~gz|gz| K="<<z.gx_gz2.slope()<<" corr="<<z.gx_gz2.corr()<<"  gy~gz|gz| K="<<z.gy_gz2.slope()<<" corr="<<z.gy_gz2.corr()<<"\n gz vs FC yawspeed: scale="<<z.gz_fcys.slope()<<" corr="<<z.gz_fcys.corr()<<"\n";}
   Eigen::Vector3d a0=mean(s.st[0].sum_acc,s.st[0].n),ar=mean(s.st[2].sum_acc,s.st[2].n),a0b=mean(s.st[4].sum_acc,s.st[4].n),al=mean(s.st[6].sum_acc,s.st[6].n),a0c=mean(s.st[8].sum_acc,s.st[8].n);
@@ -177,12 +177,12 @@ static void summary(const State&s){
   std::cout<<"CSV: "<<kCsv39<<"\nOpen CSV:\n  code "<<kCsv39<<"\n";
 }
 
-static void hud(const State&s,const Att&a,const Eigen::Vector3d&acc,const Eigen::Vector3d&gyr){cv::Mat c(860,1320,CV_8UC3,cv::Scalar(15,15,15));cv::Scalar w(235,235,235),gr(80,220,80),ye(0,220,255),rd(80,80,255);uiText(c,"JT-ZERO: КОМПЛЕКСНЫЙ ПОИСК ПРИЧИНЫ v39",35,52,.68,w,2);uiText(c,label(s.phase),45,125,.60,(s.phase==Phase::DONE?gr:ye),2);if(s.phase==Phase::WAIT_ZERO)uiText(c,"SPACE — ПОДТВЕРДИТЬ ФИЗИЧЕСКИЙ НОЛЬ",45,180,.52,w,2);else if(s.phase==Phase::ROT_R||s.phase==Phase::RET_0_A||s.phase==Phase::ROT_L||s.phase==Phase::RET_0_B)uiText(c,"После остановки и стабильности нажмите SPACE",45,180,.50,w,2);char b[256];snprintf(b,sizeof(b),"Стабильность %d/%d   |gyro| %.4f   |acc| %.4f",s.stable_n,kStableN,gyr.norm(),acc.norm());uiText(c,b,45,245,.46,w,1);snprintf(b,sizeof(b),"FC R/P/Y: %+.2f  %+.2f  %+.2f",a.roll,a.pitch,a.yaw);uiText(c,b,45,300,.46,w,1);snprintf(b,sizeof(b),"Vxy Euler %.3f м/с   Midpoint %.3f м/с",std::hypot(s.V_euler.x(),s.V_euler.y()),std::hypot(s.V_mid.x(),s.V_mid.y()));uiText(c,b,45,360,.52,rd,2);uiText(c,"Проверяется за один прогон:",45,445,.50,gr,2);uiText(c,"cross-axis gyro, bias drift, dt/gaps, gyro scale proxy,",65,500,.43,w,1);uiText(c,"accel orientation, FC-vs-ACC tilt, coning/midpoint, dynamic signature",65,545,.43,w,1);uiText(c,"Маршрут: 0 → вправо → 0 → влево → 0",45,655,.48,ye,2);uiText(c,"ESC/Q — прервать",45,805,.40,w,1);cv::imshow(kWindow39,c);}
+static void hud(const State39&s,const Att39&a,const Eigen::Vector3d&acc,const Eigen::Vector3d&gyr){cv::Mat c(860,1320,CV_8UC3,cv::Scalar(15,15,15));cv::Scalar w(235,235,235),gr(80,220,80),ye(0,220,255),rd(80,80,255);uiText(c,"JT-ZERO: КОМПЛЕКСНЫЙ ПОИСК ПРИЧИНЫ v39",35,52,.68,w,2);uiText(c,label(s.phase),45,125,.60,(s.phase==Phase::DONE?gr:ye),2);if(s.phase==Phase::WAIT_ZERO)uiText(c,"SPACE — ПОДТВЕРДИТЬ ФИЗИЧЕСКИЙ НОЛЬ",45,180,.52,w,2);else if(s.phase==Phase::ROT_R||s.phase==Phase::RET_0_A||s.phase==Phase::ROT_L||s.phase==Phase::RET_0_B)uiText(c,"После остановки и стабильности нажмите SPACE",45,180,.50,w,2);char b[256];snprintf(b,sizeof(b),"Стабильность %d/%d   |gyro| %.4f   |acc| %.4f",s.stable_n,kStableN,gyr.norm(),acc.norm());uiText(c,b,45,245,.46,w,1);snprintf(b,sizeof(b),"FC R/P/Y: %+.2f  %+.2f  %+.2f",a.roll,a.pitch,a.yaw);uiText(c,b,45,300,.46,w,1);snprintf(b,sizeof(b),"Vxy Euler %.3f м/с   Midpoint %.3f м/с",std::hypot(s.V_euler.x(),s.V_euler.y()),std::hypot(s.V_mid.x(),s.V_mid.y()));uiText(c,b,45,360,.52,rd,2);uiText(c,"Проверяется за один прогон:",45,445,.50,gr,2);uiText(c,"cross-axis gyro, bias drift, dt/gaps, gyro scale proxy,",65,500,.43,w,1);uiText(c,"accel orientation, FC-vs-ACC tilt, coning/midpoint, dynamic signature",65,545,.43,w,1);uiText(c,"Маршрут: 0 → вправо → 0 → влево → 0",45,655,.48,ye,2);uiText(c,"ESC/Q — прервать",45,805,.40,w,1);cv::imshow(kWindow39,c);}
 
 } // namespace jtzero_v39
 
 int main(int argc,char**argv){
-  google::InitGoogleLogging(argv[0]);using namespace jtzero_v39;int fd=-1;uint8_t sys=0,comp=0;mavlink_status_t mst{};mavlink_message_t msg{};Att att;State s;Eigen::Vector3d acc=Eigen::Vector3d::Zero(),gyr=Eigen::Vector3d::Zero();bool aborted=false;uint64_t last=0;
+  google::InitGoogleLogging(argv[0]);using namespace jtzero_v39;int fd=-1;uint8_t sys=0,comp=0;mavlink_status_t mst{};mavlink_message_t msg{};Att39 att;State39 s;Eigen::Vector3d acc=Eigen::Vector3d::Zero(),gyr=Eigen::Vector3d::Zero();bool aborted=false;uint64_t last=0;
   try{fd=openSerial();std::cout<<"[MAV] waiting for HEARTBEAT...\n";int64_t dl=monotonicNs()+10000000000LL;while(monotonicNs()<dl&&!sys){pollfd p{fd,POLLIN,0};if(poll(&p,1,100)<=0)continue;uint8_t b[2048];ssize_t n=read(fd,b,sizeof(b));if(n<=0)continue;for(ssize_t i=0;i<n;i++)if(mavlink_parse_char(MAVLINK_COMM_0,b[i],&msg,&mst)&&msg.msgid==MAVLINK_MSG_ID_HEARTBEAT){sys=msg.sysid;comp=msg.compid;break;}}if(!sys)throw std::runtime_error("HEARTBEAT timeout");requestRate(fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,100);requestRate(fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,200);cv::namedWindow(kWindow39);std::cout<<"\nJT-ZERO IMU ROOT-CAUSE SWEEP v39\nFollow Russian GUI. Mechanical positions, no exact yaw angle required.\n";int64_t nh=0;
     while(true){pollfd p{fd,POLLIN,0};poll(&p,1,5);if(p.revents&POLLIN){uint8_t b[8192];ssize_t n=read(fd,b,sizeof(b));if(n>0)for(ssize_t i=0;i<n;i++)if(mavlink_parse_char(MAVLINK_COMM_0,b[i],&msg,&mst)){if(msg.msgid==MAVLINK_MSG_ID_ATTITUDE){mavlink_attitude_t a{};mavlink_msg_attitude_decode(&msg,&a);att.valid=true;att.roll=a.roll*180.0/kPi;att.pitch=a.pitch*180.0/kPi;att.yaw=a.yaw*180.0/kPi;att.rs=a.rollspeed;att.ps=a.pitchspeed;att.ys=a.yawspeed;}else if(msg.msgid==MAVLINK_MSG_ID_HIGHRES_IMU){mavlink_highres_imu_t h{};mavlink_msg_highres_imu_decode(&msg,&h);if(h.time_usec==last)continue;last=h.time_usec;acc={h.xacc,-h.yacc,-h.zacc};gyr={h.xgyro,-h.ygyro,-h.zgyro};process(s,att,h.time_usec,acc,gyr);}}}
       if(monotonicNs()>=nh){hud(s,att,acc,gyr);nh=monotonicNs()+33333333LL;}int k=cv::waitKey(1)&255;if(k==27||k=='q'||k=='Q'){aborted=true;break;}if(k==' '&&s.phase==Phase::WAIT_ZERO&&att.valid){s.phase=Phase::CALIBRATE;s.cal_n=0;s.cal_as.setZero();s.cal_gs.setZero();std::cout<<"[ZERO] physical zero confirmed. Calibrating.\n";}else if(k==' '&&s.stable_n>=kStableN){if(s.phase==Phase::ROT_R){s.phase=Phase::STATIC_R;s.static_n=0;s.stable_n=0;std::cout<<"[CONFIRM] right position. Static collection.\n";}else if(s.phase==Phase::RET_0_A){s.phase=Phase::STATIC_0_B;s.static_n=0;s.stable_n=0;std::cout<<"[CONFIRM] first zero return. Static collection.\n";}else if(s.phase==Phase::ROT_L){s.phase=Phase::STATIC_L;s.static_n=0;s.stable_n=0;std::cout<<"[CONFIRM] left position. Static collection.\n";}else if(s.phase==Phase::RET_0_B){s.phase=Phase::STATIC_0_C;s.static_n=0;s.stable_n=0;std::cout<<"[CONFIRM] final zero return. Static collection.\n";}}else if(k==' '&&s.phase==Phase::DONE)break;

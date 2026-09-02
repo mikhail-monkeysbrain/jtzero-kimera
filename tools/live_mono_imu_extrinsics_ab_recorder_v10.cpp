@@ -15,9 +15,8 @@
 //   /dev/shm/camera_imu_extrinsics_camera.csv
 //   /dev/shm/camera_imu_extrinsics.mjpg
 //
-// NOTE: This wrapper exists as a stable Stage-11.5 entry point. Acquisition semantics must not
-// diverge from camera_imu_extrinsics_logger.cpp until the replay comparison is validated.
+// NOTE: camera_imu_extrinsics_logger.cpp defines int main() with no argc/argv.
 
-int main(int argc, char** argv) {
-  return jtzero_camera_imu_logger_unused_main(argc, argv);
+int main() {
+  return jtzero_camera_imu_logger_unused_main();
 }

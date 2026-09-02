@@ -1,6 +1,6 @@
 // JT-ZERO repeated 300 mm scale validation v5.
 // Six operator-confirmed legs: A->B, B->A repeated three times.
-// Russian event-driven HUD. Capture works by SPACE, ENTER or mouse button.
+// Russian event-driven HUD. Capture works by SPACE or ENTER.
 
 #define main jtzero_v2_unused_main
 #include "live_mono_imu_500mm_hud_v2.cpp"
@@ -15,7 +15,6 @@ constexpr const char* kRepeatCsv = "/home/vio/jtzero_live_300mm_repeat_v5.csv";
 constexpr const char* kRepeatWindow = "JT-ZERO 300 мм x6 v5";
 constexpr int64_t kPreviewPeriodNs = 33333333LL;
 constexpr int64_t kStateStaleNs = 1000000000LL;
-const cv::Rect kCaptureButton(925, 500, 330, 86);
 
 struct Mark { VioState s{}; bool valid = false; };
 struct Leg {
@@ -24,14 +23,6 @@ struct Leg {
   Mark a, b;
   double horizontal = 0, d3 = 0, error = 0, scale = 0;
 };
-
-bool gMouseCapture = false;
-
-void onMouse(int event, int x, int y, int, void*) {
-  if (event == cv::EVENT_LBUTTONDOWN && kCaptureButton.contains(cv::Point(x, y))) {
-    gMouseCapture = true;
-  }
-}
 
 void ru(cv::Mat& img, const std::string& s, cv::Point p, int size,
         cv::Scalar color, int weight = cv::QT_FONT_NORMAL) {
@@ -84,20 +75,18 @@ void drawRepeatHud(const cv::Mat& gray, const HudPipeline& pipeline,
     ru(panel, "Остановитесь на механической метке", {18,368}, 15, {220,220,220});
   }
 
-  const cv::Scalar buttonColor = fresh ? cv::Scalar(55,145,55) : cv::Scalar(70,70,70);
-  cv::rectangle(canvas, kCaptureButton, buttonColor, -1, cv::LINE_AA);
-  cv::rectangle(canvas, kCaptureButton, cv::Scalar(220,220,220), 2, cv::LINE_AA);
-  ru(canvas, have_start ? "ЗАФИКСИРОВАТЬ КОНЕЦ" : "ЗАФИКСИРОВАТЬ СТАРТ",
-     {944,553}, 18, {255,255,255}, cv::QT_FONT_BOLD);
+  const cv::Scalar actionColor = fresh ? cv::Scalar(55,145,55) : cv::Scalar(70,70,70);
+  cv::rectangle(panel, {18,470,344,100}, actionColor, -1, cv::LINE_AA);
+  cv::rectangle(panel, {18,470,344,100}, cv::Scalar(220,220,220), 2, cv::LINE_AA);
+  ru(panel, have_start ? "ПРОБЕЛ / ENTER: КОНЕЦ" : "ПРОБЕЛ / ENTER: СТАРТ",
+     {36,532}, 18, {255,255,255}, cv::QT_FONT_BOLD);
 
-  ru(panel, "ПРОБЕЛ / ENTER — зафиксировать", {18,625}, 16, {190,230,190});
-  ru(panel, "или нажмите зелёную кнопку", {18,658}, 16, {190,230,190});
-  ru(panel, "Физические метки = эталон", {18,735}, 15, {185,185,185});
-  ru(panel, "Q / ESC — выход", {18,770}, 15, {215,215,215});
+  ru(panel, "Физические метки = эталон", {18,690}, 15, {185,185,185});
+  ru(panel, "Q / ESC — выход", {18,730}, 15, {215,215,215});
 
   if (!notice.empty()) {
-    cv::rectangle(panel, {10,805,360,65}, cv::Scalar(35,35,125), -1, cv::LINE_AA);
-    ru(panel, notice, {20,846}, 15, {255,255,255}, cv::QT_FONT_BOLD);
+    cv::rectangle(panel, {10,790,360,70}, cv::Scalar(35,35,125), -1, cv::LINE_AA);
+    ru(panel, notice, {20,835}, 15, {255,255,255}, cv::QT_FONT_BOLD);
   }
 
   panel.copyTo(canvas(cv::Rect(900,0,380,900)));
@@ -198,14 +187,6 @@ int main(int argc,char**argv) {
 
     cv::namedWindow(kRepeatWindow,cv::WINDOW_NORMAL);
     cv::resizeWindow(kRepeatWindow,1280,900);
-    // Qt creates the native window handler lazily. Force one actual imshow/event
-    // cycle before installing the mouse callback; otherwise setMouseCallback()
-    // fails with "NULL window handler" on this workstation.
-    cv::Mat bootstrap(900,1280,CV_8UC3,cv::Scalar(8,8,8));
-    ru(bootstrap,"Запуск интерфейса…",{40,80},24,{245,245,245},cv::QT_FONT_BOLD);
-    cv::imshow(kRepeatWindow,bootstrap);
-    cv::waitKey(20);
-    cv::setMouseCallback(kRepeatWindow,onMouse,nullptr);
 
     std::vector<TimeSyncSample> sync; sync.reserve(500);
     ClockMapping mapping;
@@ -282,10 +263,9 @@ int main(int argc,char**argv) {
       if(monotonicNs()>notice_until) notice.clear();
       drawRepeatHud(gray,*pipeline,leg,have_start,notice);
 
-      const int key=cv::waitKeyEx(1);
+      const int key=cv::waitKeyEx(5);
       if(key==27||key=='q'||key=='Q'){aborted=true;break;}
-      const bool capture=(key==32||key==13||key==10||gMouseCapture);
-      gMouseCapture=false;
+      const bool capture=(key==32||key==13||key==10||key==16777220||key==16777221);
 
       if(capture) {
         VioState s;

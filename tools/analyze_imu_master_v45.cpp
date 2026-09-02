@@ -33,10 +33,9 @@ struct Model { std::string name; int mode=0; double tau=0; };
 struct Result { std::string name; double final_gravity_deg=0, final_axy=0, static_dv=0, endpoint_rms=0, endpoint_max=0; size_t static_samples=0; };
 
 std::vector<std::string> split(const std::string& s){std::vector<std::string> v;std::stringstream ss(s);std::string x;while(std::getline(ss,x,','))v.push_back(x);return v;}
-double d(const std::string&s){return s.empty()?0.0:std::stod(s);} 
+double d(const std::string&s){return s.empty()?0.0:std::stod(s);}
 Eigen::Matrix3d expSO3(const Eigen::Vector3d& q){double a=q.norm();if(a<1e-12)return Eigen::Matrix3d::Identity();return Eigen::AngleAxisd(a,q/a).toRotationMatrix();}
 double angleDeg(const Eigen::Vector3d&a,const Eigen::Vector3d&b){double c=a.normalized().dot(b.normalized());c=std::max(-1.0,std::min(1.0,c));return std::acos(c)*180.0/PI;}
-Eigen::Matrix3d fcR(double r,double p,double y){return Eigen::AngleAxisd(y,Eigen::Vector3d::UnitZ()).toRotationMatrix()*Eigen::AngleAxisd(p,Eigen::Vector3d::UnitY()).toRotationMatrix()*Eigen::AngleAxisd(r,Eigen::Vector3d::UnitX()).toRotationMatrix();}
 
 std::vector<Row> load(const std::string& path){
  std::ifstream f(path); if(!f)throw std::runtime_error("cannot open "+path); std::string line; std::getline(f,line); auto h=split(line); std::map<std::string,int> c;for(int i=0;i<(int)h.size();++i)c[h[i]]=i;
@@ -45,7 +44,6 @@ std::vector<Row> load(const std::string& path){
 }
 
 std::vector<bool> staticMask(const std::vector<Row>&v){
- // 1.0 s centered windows at ~200 Hz. Selection uses variance, NOT mean gyro.
  const int H=100; std::vector<bool> m(v.size(),false); if(v.size()<201)return m;
  std::vector<Eigen::Vector3d> pa(v.size()+1,Eigen::Vector3d::Zero()),pw=pa,pa2=pa,pw2=pa;
  for(size_t i=0;i<v.size();++i){pa[i+1]=pa[i]+v[i].a;pw[i+1]=pw[i]+v[i].w;pa2[i+1]=pa2[i]+v[i].a.cwiseProduct(v[i].a);pw2[i+1]=pw2[i]+v[i].w.cwiseProduct(v[i].w);}
@@ -59,29 +57,26 @@ std::vector<Win> windows(const std::vector<Row>&v,const std::vector<bool>&m){
 
 Result runModel(const std::vector<Row>&v,const std::vector<bool>&sm,const std::vector<Win>&wins,const Model&M){
  Result z;z.name=M.name;if(v.empty())return z;
- // v44 raw_g is already corrected by initial BG. Adaptive terms below estimate residual BG only.
  Eigen::Vector3d b=Eigen::Vector3d::Zero();
  Eigen::Vector3d a0=Eigen::Vector3d::Zero();size_t n0=0;for(size_t i=0;i<v.size()&&i<4000;++i)if(sm[i]){a0+=v[i].a;++n0;}if(!n0){a0=v.front().a;n0=1;}a0/=double(n0);
- // Initial orientation from gravity direction only; yaw is irrelevant to gravity-error metric.
  Eigen::Quaterniond q0=Eigen::Quaterniond::FromTwoVectors(a0.normalized(),Eigen::Vector3d(0,0,-1));
  Eigen::Matrix3d R=q0.toRotationMatrix(); Eigen::Vector3d vel=Eigen::Vector3d::Zero(); double sdv=0;
- std::vector<double> ep;
- size_t nextWin=0; bool prevStatic=false;
+ std::vector<double> ep; bool prevStatic=false;
  for(size_t i=0;i<v.size();++i){
    const Row&r=v[i];double dt=(r.dt>0&&r.dt<0.03)?r.dt:0;
    Eigen::Vector3d w=r.w-b; w.x()+=CX*w.z();w.y()+=CY*w.z();
    if(dt>0)R=R*expSO3(w*dt);
    Eigen::Vector3d aw=R*r.a+Eigen::Vector3d(0,0,G);if(dt>0){vel+=aw*dt;if(sm[i])sdv+=aw.head<2>().norm()*dt;}
-   // Bias update only from variance-confirmed static samples. Mean magnitude is not used for selection.
    if(sm[i]&&dt>0&&M.mode){double alpha=1.0-std::exp(-dt/M.tau);Eigen::Vector3d target=r.w;if(M.mode==1)b.x()+=alpha*(target.x()-b.x());else if(M.mode==2){b.x()+=alpha*(target.x()-b.x());b.y()+=alpha*(target.y()-b.y());}else b+=alpha*(target-b);}
-   bool now=sm[i]; if(prevStatic&&!now){ // endpoint at end of static island
+   bool now=sm[i]; if(prevStatic&&!now){
      size_t q=i-1;size_t bb=q;while(bb>0&&sm[bb-1]&&v[bb-1].stage==v[q].stage)--bb;Eigen::Vector3d ma=Eigen::Vector3d::Zero();size_t nn=0;for(size_t k=bb;k<=q;++k){ma+=v[k].a;++nn;}if(nn>20){ma/=double(nn);Eigen::Vector3d pred=R.transpose()*Eigen::Vector3d(0,0,-1);ep.push_back(angleDeg(pred,ma));}
    }prevStatic=now;
  }
- // final static mean accel and world horizontal acceleration
  Eigen::Vector3d ma=Eigen::Vector3d::Zero();size_t nn=0;for(size_t i=0;i<v.size();++i)if(sm[i]&&v[i].stage=="FINAL_STATIC"){ma+=v[i].a;++nn;}if(nn){ma/=double(nn);Eigen::Vector3d pred=R.transpose()*Eigen::Vector3d(0,0,-1);z.final_gravity_deg=angleDeg(pred,ma);z.final_axy=(R*ma+Eigen::Vector3d(0,0,G)).head<2>().norm();}
  z.static_dv=sdv;z.static_samples=std::count(sm.begin(),sm.end(),true);if(!ep.empty()){double s=0;for(double x:ep){s+=x*x;z.endpoint_max=std::max(z.endpoint_max,x);}z.endpoint_rms=std::sqrt(s/ep.size());}return z;
 }
+
+} // namespace
 
 int main(int argc,char**argv){
  const std::string path=argc>1?argv[1]:"/home/vio/jtzero_imu_master_v44.csv";const std::string outp=argc>2?argv[2]:"/home/vio/jtzero_imu_master_v45_result.txt";

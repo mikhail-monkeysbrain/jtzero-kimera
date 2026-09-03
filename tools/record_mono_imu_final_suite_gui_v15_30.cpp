@@ -14,9 +14,15 @@
 #include <iostream>
 #include <iomanip>
 
+// v15.29 itself renames camera_imu_extrinsics_logger.cpp::main and then
+// #undefs main. Therefore an outer #define main cannot rename v15.29::main.
+// Rename the token only while preprocessing the included source, and restore
+// our wrapper main afterwards.
+#define jtzero_camera_imu_logger_unused_main_v1529 jtzero_camera_imu_logger_unused_main_v1530
 #define main jtzero_final_suite_v1529_main
 #include "record_mono_imu_final_suite_gui_v15_29.cpp"
 #undef main
+#undef jtzero_camera_imu_logger_unused_main_v1529
 
 namespace {
 constexpr unsigned long long MIN_FREE_BYTES_1530 = 1024ULL * 1024ULL * 1024ULL;
@@ -66,8 +72,6 @@ bool quality1530(){
     double sy=s.front()->ry, ey=s.back()->ry, dy=wrap1530(ey-sy);
     std::string verdict="PASS";
     if(isPureYaw1530(p.name)){
-      // Clean yaw phases are deliberately strict: >2 deg Euler R/P contamination
-      // invalidates the phase. 1..2 deg is retained as WARN for later review.
       if(mr>2.0||mp>2.0) verdict="INVALID_RP";
       else if(mr>1.0||mp>1.0) verdict="WARN_RP";
       if(std::abs(dy)<60.0) verdict="INVALID_YAW_SPAN";
@@ -94,8 +98,6 @@ int main(){
   const int rc=jtzero_final_suite_v1529_main();
   if(rc!=0){ std::cerr<<"[V15.30] underlying recorder rc="<<rc<<"\n"; return rc; }
 
-  // At this point v15.29 main has returned, so all of its local ofstreams have
-  // been destructed/closed. Validate the files on disk, not in-memory counters.
   const struct {const char* p; unsigned long long min;} req[]={{RAW_1530,1024},{CAM_1530,1024},{MJPG_1530,1024*1024},{ATT_1530,1024},{PHASES_1530,128}};
   bool files_ok=true;
   std::cout<<"\n================ PERSISTENCE CHECK V15.30 ================\n";

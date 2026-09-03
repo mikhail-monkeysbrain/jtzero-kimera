@@ -1,14 +1,15 @@
 diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
 --- a/src/backend/VioBackend.cpp
 +++ b/src/backend/VioBackend.cpp
-@@ -35,6 +35,7 @@
+@@ -35,6 +35,8 @@
  #include <limits>  // for numeric_limits<>
  #include <map>
++#include <iostream>
 +#include <sstream>
  #include <string>
  #include <utility>  // for make_pair
  #include <vector>
-@@ -1385,6 +1386,24 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+@@ -1385,6 +1387,24 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
                                  const std::map<Key, double>& timestamps,
                                  const gtsam::FactorIndices& delete_slots) {
    CHECK_NOTNULL(result);
@@ -23,11 +24,11 @@ diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
 +    const gtsam::Symbol s(kv.first);
 +    jt1522b_ts << s.chr() << s.index() << '@' << kv.second;
 +  }
-+  LOG(INFO) << "[JT15.22B] call=" << jt1522b_call
++  std::cerr << "[JT15.22B] call=" << jt1522b_call
 +            << " curr_kf_id=" << curr_kf_id_
 +            << " new_factors=" << new_factors.size()
 +            << " new_values=" << new_values.size()
 +            << " delete_slots=" << delete_slots.size()
-+            << " timestamps={" << jt1522b_ts.str() << "}";
++            << " timestamps={" << jt1522b_ts.str() << "}" << std::endl;
 +
    // Store smoother as backup.

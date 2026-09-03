@@ -61,7 +61,6 @@ $0==anchor && !done {
 {print}
 END{if(!done)exit 7}' "$SRC" > "$TMP"
 mv "$TMP" "$SRC"
-# Added code needs sstream/iostream; inject only if absent.
 grep -q '^#include <sstream>' "$SRC" || sed -i '/#include <string>/i #include <sstream>\n#include <iostream>' "$SRC"
 
 echo '[2/6] Build instrumented Kimera'
@@ -77,7 +76,10 @@ sed -i -E 's/^[[:space:]]*nr_states:[[:space:]]*.*/nr_states: 28/' "$P/BackendPa
 SUMMARY="$OUT/summary.tsv"
 echo -e 'variant\trc\tstates\tfinal_dp_mm\tpath_mm\tmax_exc_mm\ttrace_count' > "$SUMMARY"
 run(){
- local name="$1" mode="$2" idx="$3" log="$OUT/$name.txt"
+ local name="$1"
+ local mode="$2"
+ local idx="$3"
+ local log="$OUT/$name.txt"
  echo -n "[RUN] $name ... "
  rm -f /home/vio/jtzero_zxy_replay_v11_CURRENT.csv
  set +e

@@ -1,0 +1,82 @@
+diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
+--- a/src/backend/VioBackend.cpp
++++ b/src/backend/VioBackend.cpp
+@@ -35,6 +35,9 @@
+ #include <limits>  // for numeric_limits<>
+ #include <map>
++#include <iostream>
++#include <set>
++#include <sstream>
+ #include <string>
+ #include <utility>  // for make_pair
+ #include <vector>
+@@ -1385,6 +1388,32 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+                                 const std::map<Key, double>& timestamps,
+                                 const gtsam::FactorIndices& delete_slots) {
+   CHECK_NOTNULL(result);
++
++  const bool jt1522c_trace = curr_kf_id_ >= 86 && curr_kf_id_ <= 90;
++  std::set<gtsam::Key> jt1522c_pre_keys;
++
++  auto jt1522c_key_string = [](gtsam::Key key) {
++    const gtsam::Symbol s(key);
++    std::ostringstream os;
++    os << s.chr() << s.index();
++    return os.str();
++  };
++
++  auto jt1522c_state_keys = [&](const gtsam::Values& values) {
++    std::ostringstream os;
++    bool first = true;
++    for (const auto key : values.keys()) {
++      const gtsam::Symbol s(key);
++      if (s.chr() != 'x' && s.chr() != 'v' && s.chr() != 'b') continue;
++      jt1522c_pre_keys.insert(key);
++      if (!first) os << ',';
++      first = false;
++      os << s.chr() << s.index();
++    }
++    return os.str();
++  };
++
++  if (jt1522c_trace) {
++    const auto& pre = smoother_->getLinearizationPoint();
++    const std::string keys = jt1522c_state_keys(pre);
++    std::cerr << "[JT15.22C PRE] kf=" << curr_kf_id_
++              << " state_keys={" << keys << "}" << std::endl;
++  }
++
+   // Store smoother as backup.
+@@ -1399,6 +1428,34 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+     VLOG(10) << "Starting update of smoother_...";
+     *result =
+         smoother_->update(new_factors, new_values, timestamps, delete_slots);
++    if (jt1522c_trace) {
++      const auto& post = smoother_->getLinearizationPoint();
++      std::set<gtsam::Key> post_keys;
++      std::ostringstream post_os;
++      bool first = true;
++      for (const auto key : post.keys()) {
++        const gtsam::Symbol s(key);
++        if (s.chr() != 'x' && s.chr() != 'v' && s.chr() != 'b') continue;
++        post_keys.insert(key);
++        if (!first) post_os << ',';
++        first = false;
++        post_os << s.chr() << s.index();
++      }
++
++      std::ostringstream drop_os;
++      first = true;
++      for (const auto key : jt1522c_pre_keys) {
++        if (post_keys.count(key) != 0) continue;
++        if (!first) drop_os << ',';
++        first = false;
++        drop_os << jt1522c_key_string(key);
++      }
++
++      std::cerr << "[JT15.22C POST] kf=" << curr_kf_id_
++                << " state_keys={" << post_os.str() << "}" << std::endl;
++      std::cerr << "[JT15.22C DROP] kf=" << curr_kf_id_
++                << " removed={" << drop_os.str() << "}" << std::endl;
++    }
+     VLOG(10) << "Finished update of smoother_.";

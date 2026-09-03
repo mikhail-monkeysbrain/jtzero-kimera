@@ -2,7 +2,6 @@
 import argparse
 import csv
 import math
-import os
 import queue
 import statistics
 import struct
@@ -19,9 +18,6 @@ from tkinter import messagebox
 MSP_API_VERSION = 1
 MSP_RAW_IMU = 102
 
-GYRO_DEG_PER_LSB = 0.1
-GYRO_RAD_PER_LSB = math.radians(GYRO_DEG_PER_LSB)
-
 BASELINE_DXY_RAD_S = 0.00202
 BASELINE_DX_RAD_S = 0.00192
 
@@ -29,7 +25,27 @@ PRE_S = 15.0
 YAW_S = 10.0
 POST_S = 15.0
 TOTAL_S = PRE_S + YAW_S + POST_S
-REQUEST_PERIOD_S = 0.02  # ~50 Hz host polling; enough for stationary bias comparison
+REQUEST_PERIOD_S = 0.02  # ~50 Hz host polling
+
+# MSP_RAW_IMU in Betaflight 4.4/4.5 serializes gyroRateDps(), which returns
+# gyro.gyroADCf / rawSensorDev->scale, i.e. sensor-count-equivalent values.
+# Therefore conversion back to deg/s must use the actual driver scale.
+PROFILES = {
+    "karma-lsm6dsv16x": {
+        "fc": "KARMAF435V1G / AT32F435G / Betaflight 4.5.4",
+        "imu": "LSM6DSV16X",
+        "alignment": "CW0FLIP",
+        "gyro_deg_per_count": 0.0700000000,
+        "slug": "karma_lsm6dsv16x",
+    },
+    "hk4530-icm42688p": {
+        "fc": "HK4530V2.1 / HAKRCF405V2 / STM32F405 / Betaflight 4.4.3",
+        "imu": "ICM42688P",
+        "alignment": "CW90",
+        "gyro_deg_per_count": 2000.0 / 32768.0,
+        "slug": "hk4530_icm42688p",
+    },
+}
 
 
 @dataclass
@@ -79,6 +95,8 @@ def read_msp_v1(ser: serial.Serial, expected_cmd: int, timeout_s: float = 0.25) 
         if len(sync) > 3:
             sync = sync[-3:]
         if bytes(sync) in (b"$M>", b"$M!"):
+            if bytes(sync) == b"$M!":
+                raise RuntimeError(f"MSP command {expected_cmd} rejected by FC")
             break
     else:
         raise TimeoutError("MSP header timeout")
@@ -157,22 +175,22 @@ def analyze(samples):
     dx, dy, dz = result["delta_x"], result["delta_y"], result["delta_z"]
     result["delta_xy"] = math.hypot(dx, dy)
     result["delta_xyz"] = math.sqrt(dx * dx + dy * dy + dz * dz)
-    result["ratio_to_baseline_xy"] = result["delta_xy"] / BASELINE_DXY_RAD_S if BASELINE_DXY_RAD_S else float("nan")
+    result["ratio_to_baseline_xy"] = result["delta_xy"] / BASELINE_DXY_RAD_S
     return result
 
 
-def save_results(samples, result, out_dir: Path):
+def save_results(samples, result, out_dir: Path, profile, msp_api: str):
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = out_dir / f"karma_lsm6dsv16x_yaw_bias_{stamp}.csv"
-    txt_path = out_dir / f"karma_lsm6dsv16x_yaw_bias_{stamp}.txt"
+    csv_path = out_dir / f"{profile['slug']}_yaw_bias_{stamp}.csv"
+    txt_path = out_dir / f"{profile['slug']}_yaw_bias_{stamp}.txt"
 
     with csv_path.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
             "t_monotonic_s", "t_rel_s", "phase",
             "acc_raw_x", "acc_raw_y", "acc_raw_z",
-            "gyro_msp_raw_x", "gyro_msp_raw_y", "gyro_msp_raw_z",
+            "gyro_msp_count_x", "gyro_msp_count_y", "gyro_msp_count_z",
             "gyro_dps_x", "gyro_dps_y", "gyro_dps_z",
             "gyro_rad_s_x", "gyro_rad_s_y", "gyro_rad_s_z",
         ])
@@ -187,11 +205,14 @@ def save_results(samples, result, out_dir: Path):
 
     with txt_path.open("w") as f:
         f.write("JT-Zero P11/B11 FC IMU A/B test\n")
-        f.write("FC: KARMAF435V1G / AT32F435G / Betaflight / LSM6DSV16X\n")
+        f.write(f"FC: {profile['fc']}\n")
+        f.write(f"IMU: {profile['imu']}\n")
+        f.write(f"Sensor alignment: {profile['alignment']}\n")
+        f.write(f"MSP API: {msp_api}\n")
         f.write("Protocol: MSP_RAW_IMU over USB ACM\n")
         f.write("Sequence: 15 s STILL -> ~90 deg YAW -> 15 s STILL\n")
         f.write("Coordinate handling: native Betaflight MSP values; no FRD->FLU, no ZXY correction\n")
-        f.write(f"Gyro MSP conversion used: 0.1 deg/s per MSP unit = {GYRO_RAD_PER_LSB:.12f} rad/s per unit\n")
+        f.write(f"Gyro sensor scale used: {profile['gyro_deg_per_count']:.12f} deg/s per count\n")
         f.write(f"Samples: PRE={result['n_pre']} POST={result['n_post']} TOTAL={len(samples)}\n\n")
 
         for axis in "xyz":
@@ -216,9 +237,12 @@ def save_results(samples, result, out_dir: Path):
 
 
 class App:
-    def __init__(self, root, port):
+    def __init__(self, root, port, profile):
         self.root = root
         self.port = port
+        self.profile = profile
+        self.gyro_deg_per_count = profile["gyro_deg_per_count"]
+        self.gyro_rad_per_count = math.radians(self.gyro_deg_per_count)
         self.ser = None
         self.samples = []
         self.events = queue.Queue()
@@ -226,26 +250,23 @@ class App:
         self.start_time = None
         self.last_sample = None
         self.worker = None
+        self.msp_api = "unknown"
 
         root.title("JT-Zero — тест смещения IMU после YAW")
-        root.geometry("900x620")
-        root.minsize(820, 560)
+        root.geometry("940x650")
+        root.minsize(840, 580)
 
-        self.title = tk.Label(root, text="KARMAF435V1G / LSM6DSV16X — B11 A/B", font=("DejaVu Sans", 20, "bold"))
+        self.title = tk.Label(root, text=f"{profile['fc']} / {profile['imu']} — B11 A/B", font=("DejaVu Sans", 18, "bold"), wraplength=900)
         self.title.pack(pady=(18, 8))
 
         self.status = tk.Label(root, text="Готово к запуску", font=("DejaVu Sans", 24, "bold"))
         self.status.pack(pady=8)
-
         self.instruction = tk.Label(root, text="Положите полётник неподвижно на стол", font=("DejaVu Sans", 16))
         self.instruction.pack(pady=4)
-
         self.timer = tk.Label(root, text="00.0 с", font=("DejaVu Sans Mono", 42, "bold"))
         self.timer.pack(pady=12)
-
         self.gyro = tk.Label(root, text="GYRO rad/s: X ---   Y ---   Z ---", font=("DejaVu Sans Mono", 16))
         self.gyro.pack(pady=8)
-
         self.samples_label = tk.Label(root, text="Сэмплы: 0   Частота: --- Hz", font=("DejaVu Sans", 13))
         self.samples_label.pack(pady=4)
 
@@ -261,7 +282,6 @@ class App:
 
         self.start_btn = tk.Button(root, text="НАЧАТЬ ТЕСТ", font=("DejaVu Sans", 16, "bold"), width=22, command=self.start)
         self.start_btn.pack(pady=12)
-
         self.result = tk.Label(root, text="", justify="left", anchor="w", font=("DejaVu Sans Mono", 13))
         self.result.pack(fill="x", padx=55, pady=8)
 
@@ -281,7 +301,7 @@ class App:
         if self.running:
             return
         try:
-            api = self.connect()
+            self.msp_api = self.connect()
         except Exception as e:
             messagebox.showerror("Ошибка подключения", f"Не удалось открыть {self.port}:\n{e}")
             return
@@ -290,7 +310,7 @@ class App:
         self.start_time = time.monotonic()
         self.running = True
         self.start_btn.config(state="disabled")
-        self.result.config(text=f"MSP API {api}. Сбор данных запущен.")
+        self.result.config(text=f"MSP API {self.msp_api}. Сбор данных запущен.")
         self.worker = threading.Thread(target=self.collect, daemon=True)
         self.worker.start()
 
@@ -303,22 +323,19 @@ class App:
                 if t_rel >= TOTAL_S:
                     break
 
-                payload = request(self.ser, MSP_RAW_IMU)
-                values = parse_raw_imu(payload)
+                values = parse_raw_imu(request(self.ser, MSP_RAW_IMU))
                 ax, ay, az, gx, gy, gz, _mx, _my, _mz = values
                 phase = phase_for(t_rel)
                 s = Sample(
-                    t_monotonic=now,
-                    t_rel=t_rel,
-                    phase=phase,
+                    t_monotonic=now, t_rel=t_rel, phase=phase,
                     acc_x=ax, acc_y=ay, acc_z=az,
                     gyro_raw_x=gx, gyro_raw_y=gy, gyro_raw_z=gz,
-                    gyro_dps_x=gx * GYRO_DEG_PER_LSB,
-                    gyro_dps_y=gy * GYRO_DEG_PER_LSB,
-                    gyro_dps_z=gz * GYRO_DEG_PER_LSB,
-                    gyro_rad_x=gx * GYRO_RAD_PER_LSB,
-                    gyro_rad_y=gy * GYRO_RAD_PER_LSB,
-                    gyro_rad_z=gz * GYRO_RAD_PER_LSB,
+                    gyro_dps_x=gx * self.gyro_deg_per_count,
+                    gyro_dps_y=gy * self.gyro_deg_per_count,
+                    gyro_dps_z=gz * self.gyro_deg_per_count,
+                    gyro_rad_x=gx * self.gyro_rad_per_count,
+                    gyro_rad_y=gy * self.gyro_rad_per_count,
+                    gyro_rad_z=gz * self.gyro_rad_per_count,
                 )
                 self.samples.append(s)
                 self.last_sample = s
@@ -354,7 +371,7 @@ class App:
         if self.running and self.start_time is not None:
             t = min(time.monotonic() - self.start_time, TOTAL_S)
             p = phase_for(min(t, TOTAL_S - 1e-6))
-            remain = (PRE_S - t) if p == "PRE" else ((PRE_S + YAW_S - t) if p == "YAW" else (TOTAL_S - t))
+            remain = PRE_S - t if p == "PRE" else (PRE_S + YAW_S - t if p == "YAW" else TOTAL_S - t)
 
             if p == "PRE":
                 self.status.config(text="ПОКОЙ")
@@ -384,7 +401,7 @@ class App:
             return
         result = analyze(self.samples)
         out_dir = Path(__file__).resolve().parent / "results"
-        csv_path, txt_path = save_results(self.samples, result, out_dir)
+        csv_path, txt_path = save_results(self.samples, result, out_dir, self.profile, self.msp_api)
 
         text = (
             f"Δgyro X  = {result['delta_x']:+.7f} rad/s\n"
@@ -415,10 +432,18 @@ class App:
 def main():
     ap = argparse.ArgumentParser(description="JT-Zero Betaflight IMU stationary/yaw/stationary bias test")
     ap.add_argument("--port", default="/dev/ttyACM0")
+    ap.add_argument("--profile", choices=sorted(PROFILES), default="hk4530-icm42688p")
     args = ap.parse_args()
 
+    profile = PROFILES[args.profile]
+    print(f"Profile: {args.profile}")
+    print(f"FC: {profile['fc']}")
+    print(f"IMU: {profile['imu']}")
+    print(f"Gyro scale: {profile['gyro_deg_per_count']:.12f} deg/s/count")
+    print(f"Port: {args.port}")
+
     root = tk.Tk()
-    App(root, args.port)
+    App(root, args.port, profile)
     root.mainloop()
 
 

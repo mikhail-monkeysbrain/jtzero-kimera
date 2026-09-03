@@ -1,8 +1,7 @@
 diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
-index 09c19be..jt1522 100644
 --- a/src/backend/VioBackend.cpp
 +++ b/src/backend/VioBackend.cpp
-@@ -35,8 +35,11 @@
+@@ -35,5 +35,8 @@
  #include <limits>  // for numeric_limits<>
  #include <map>
 +#include <set>
@@ -11,10 +10,9 @@ index 09c19be..jt1522 100644
 +#include <typeinfo>
  #include <utility>  // for make_pair
  #include <vector>
-@@ -1385,6 +1388,52 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+@@ -1385,2 +1388,37 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
                                  const gtsam::FactorIndices& delete_slots) {
    CHECK_NOTNULL(result);
-+
 +  const bool jt1522_trace = curr_kf_id_ >= 84 && curr_kf_id_ <= 102;
 +  gtsam::Values jt1522_pre_values;
 +  gtsam::NonlinearFactorGraph jt1522_pre_graph;
@@ -50,14 +48,10 @@ index 09c19be..jt1522 100644
 +              << " delete_slots=" << delete_slots.size()
 +              << " timestamps={" << ts.str() << "}";
 +  }
-+
-   // Store smoother as backup.
-   CHECK(smoother_);
-@@ -1399,8 +1448,62 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+@@ -1399,4 +1437,55 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
      VLOG(10) << "Starting update of smoother_...";
      *result =
          smoother_->update(new_factors, new_values, timestamps, delete_slots);
-+
 +    if (jt1522_trace) {
 +      const gtsam::Values jt1522_post_values = smoother_->calculateEstimate();
 +      const gtsam::NonlinearFactorGraph jt1522_post_graph = smoother_->getFactors();
@@ -97,7 +91,8 @@ index 09c19be..jt1522 100644
 +          }
 +          if (!hit) continue;
 +          ++touching;
-+          factors_os << " slot=" << slot << " type=" << typeid(*factor).name() << " keys=";
++          factors_os << " slot=" << slot << " type=" << typeid(*factor).name()
++                     << " keys=";
 +          for (const auto key : factor->keys()) {
 +            factors_os << jt1522_key_string(key) << ',';
 +          }
@@ -108,5 +103,4 @@ index 09c19be..jt1522 100644
 +                  << factors_os.str();
 +      }
 +    }
-+
      VLOG(10) << "Finished update of smoother_.";

@@ -1,0 +1,48 @@
+diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
+--- a/src/backend/VioBackend.cpp
++++ b/src/backend/VioBackend.cpp
+@@ -35,6 +35,8 @@
+ #include <limits>  // for numeric_limits<>
+ #include <map>
++#include <cstdlib>
++#include <iostream>
+ #include <string>
+ #include <utility>  // for make_pair
+ #include <vector>
+@@ -1398,8 +1400,36 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+   // Store smoother as backup.
+   CHECK(smoother_);
+ 
++  // JT-ZERO v15.26 causal test:
++  // With nr_states=28, postpone the marginalization boundary by exactly one
++  // state starting at x58.  Each update refreshes only the pose/vel/bias triplet
++  // that H28 would otherwise marginalize now, so the suffix behaves like an
++  // H29 boundary while all history before x58 is pure H28.
++  std::map<Key, double> jt1526_timestamps = timestamps;
++  bool jt1526_active = false;
++  const char* jt1526_env = std::getenv("JT15_26_DELAY_FROM_X58");
++  if (jt1526_env && std::string(jt1526_env) == "1" &&
++      static_cast<size_t>(backend_params_.nr_states_) == 28 &&
++      curr_kf_id_ >= 87) {
++    const size_t boundary_idx = static_cast<size_t>(curr_kf_id_) - 29;
++    if (boundary_idx >= 58) {
++      const double refreshed_ts = static_cast<double>(boundary_idx + 1);
++      jt1526_timestamps[gtsam::Symbol('x', boundary_idx)] = refreshed_ts;
++      jt1526_timestamps[gtsam::Symbol('v', boundary_idx)] = refreshed_ts;
++      jt1526_timestamps[gtsam::Symbol('b', boundary_idx)] = refreshed_ts;
++      jt1526_active = true;
++      std::cerr << "[JT15.26] kf=" << curr_kf_id_
++                << " refresh={b" << boundary_idx
++                << ",v" << boundary_idx
++                << ",x" << boundary_idx
++                << "}@" << refreshed_ts << std::endl;
++    }
++  }
++
+   // Update smoother.
+   *result =
+-      smoother_->update(new_factors, new_values, timestamps, delete_slots);
++      smoother_->update(new_factors,
++                        new_values,
++                        jt1526_active ? jt1526_timestamps : timestamps,
++                        delete_slots);

@@ -1,0 +1,60 @@
+diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
+--- a/src/backend/VioBackend.cpp
++++ b/src/backend/VioBackend.cpp
+@@ -35,6 +35,8 @@
+ #include <limits>  // for numeric_limits<>
+ #include <map>
++#include <iostream>
++#include <sstream>
+ #include <string>
+ #include <utility>  // for make_pair
+ #include <vector>
+@@ -1385,6 +1387,53 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+                                 const std::map<Key, double>& timestamps,
+                                 const gtsam::FactorIndices& delete_slots) {
+   CHECK_NOTNULL(result);
++
++  // JT-ZERO v15.25: inspect only SmartStereo factors touching x58 exactly
++  // when x58 is at the fixed-lag boundary.  No graph copies/estimates.
++  const size_t lag = static_cast<size_t>(backend_params_.nr_states_);
++  if (smoother_ && curr_kf_id_ > lag &&
++      static_cast<size_t>(curr_kf_id_) - lag - 1 == 58) {
++    const gtsam::Key target = gtsam::Symbol('x', 58);
++    const gtsam::NonlinearFactorGraph& graph = smoother_->getFactors();
++    size_t smart_count = 0;
++    for (size_t slot = 0; slot < graph.size(); ++slot) {
++      const auto& factor = graph[slot];
++      if (!factor) continue;
++      bool touches = false;
++      for (const gtsam::Key key : factor->keys()) {
++        if (key == target) { touches = true; break; }
++      }
++      if (!touches) continue;
++      const std::string type_name = typeid(*factor).name();
++      if (type_name.find("SmartStereoProjectionPoseFactor") == std::string::npos) continue;
++      ++smart_count;
++      std::ostringstream poses;
++      size_t pose_count = 0;
++      bool first = true;
++      for (const gtsam::Key key : factor->keys()) {
++        const gtsam::Symbol s(key);
++        if (s.chr() != 'x') continue;
++        if (!first) poses << ',';
++        first = false;
++        poses << 'x' << s.index();
++        ++pose_count;
++      }
++      std::cerr << "[JT15.25 SMART] H=" << lag
++                << " kf=" << curr_kf_id_
++                << " slot=" << slot
++                << " pose_count=" << pose_count
++                << " keys={" << poses.str() << "}"
++                << std::endl;
++    }
++    std::cerr << "[JT15.25 SUMMARY] H=" << lag
++              << " kf=" << curr_kf_id_
++              << " target=x58 smart=" << smart_count
++              << std::endl;
++  }
++
+   // Store smoother as backup.

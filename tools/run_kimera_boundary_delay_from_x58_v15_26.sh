@@ -59,14 +59,43 @@ echo '[2/6] Clean H28 control'
 run_case H28_CONTROL 28
 
 echo '[3/6] Inject context-independent one-state boundary delay'
-python_anchor='smoother_->update(new_factors, new_values, timestamps, delete_slots);'
-count=$(grep -Foc "$python_anchor" "$SRC" || true)
+anchor='        smoother_->update(new_factors, new_values, timestamps, delete_slots);'
+count=$(grep -Foc "$anchor" "$SRC" || true)
 if [[ "$count" != 1 ]]; then
   echo "ERROR: expected exactly one update anchor, found $count" >&2
-  grep -nF "$python_anchor" "$SRC" || true
+  grep -nF "$anchor" "$SRC" || true
   exit 2
 fi
-perl -0pi -e 's@\Q        smoother_->update(new_factors, new_values, timestamps, delete_slots);\E@        ([&]() {\n          std::map<Key, double> jt1526_timestamps = timestamps;\n          if (static_cast<size_t>(backend_params_.nr_states_) == 28 && curr_kf_id_ >= 87) {\n            const size_t boundary_idx = static_cast<size_t>(curr_kf_id_) - 29;\n            if (boundary_idx >= 58) {\n              const double refreshed_ts = static_cast<double>(boundary_idx + 1);\n              jt1526_timestamps[gtsam::Symbol('\''x'\'', boundary_idx)] = refreshed_ts;\n              jt1526_timestamps[gtsam::Symbol('\''v'\'', boundary_idx)] = refreshed_ts;\n              jt1526_timestamps[gtsam::Symbol('\''b'\'', boundary_idx)] = refreshed_ts;\n              LOG(WARNING) << "[JT15.26] kf=" << curr_kf_id_\n                           << " refresh={b" << boundary_idx\n                           << ",v" << boundary_idx\n                           << ",x" << boundary_idx\n                           << "}@" << refreshed_ts;\n            }\n          }\n          return smoother_->update(new_factors, new_values, jt1526_timestamps, delete_slots);\n        })();@' "$SRC"
+
+TMP=/tmp/VioBackend.cpp.v15_26.instrumented
+awk -v anchor="$anchor" '
+BEGIN { replaced=0 }
+$0 == anchor && replaced == 0 {
+  print "        ([&]() {"
+  print "          std::map<Key, double> jt1526_timestamps = timestamps;"
+  print "          if (static_cast<size_t>(backend_params_.nr_states_) == 28 && curr_kf_id_ >= 87) {"
+  print "            const size_t boundary_idx = static_cast<size_t>(curr_kf_id_) - 29;"
+  print "            if (boundary_idx >= 58) {"
+  print "              const double refreshed_ts = static_cast<double>(boundary_idx + 1);"
+  print "              jt1526_timestamps[gtsam::Symbol(\"x\"[0], boundary_idx)] = refreshed_ts;"
+  print "              jt1526_timestamps[gtsam::Symbol(\"v\"[0], boundary_idx)] = refreshed_ts;"
+  print "              jt1526_timestamps[gtsam::Symbol(\"b\"[0], boundary_idx)] = refreshed_ts;"
+  print "              LOG(WARNING) << \"[JT15.26] kf=\" << curr_kf_id_"
+  print "                           << \" refresh={b\" << boundary_idx"
+  print "                           << \",v\" << boundary_idx"
+  print "                           << \",x\" << boundary_idx"
+  print "                           << \"}@\" << refreshed_ts;"
+  print "            }"
+  print "          }"
+  print "          return smoother_->update(new_factors, new_values, jt1526_timestamps, delete_slots);"
+  print "        })();"
+  replaced=1
+  next
+}
+{ print }
+END { if (replaced != 1) exit 7 }
+' "$SRC" > "$TMP"
+mv "$TMP" "$SRC"
 
 if ! grep -q '\[JT15.26\]' "$SRC"; then
   echo 'ERROR: instrumentation insertion failed' >&2

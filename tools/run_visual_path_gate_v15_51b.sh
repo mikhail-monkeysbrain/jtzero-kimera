@@ -29,7 +29,24 @@ echo '============================================================'; echo 'JT-ZE
 echo '[BUILD] diagnostic Kimera'; cmake --build "$KIMERA/build" -j"$(nproc)"
 echo '[BUILD] replay'; g++ -std=c++17 -O2 -I"$ROOT/tools" -I"$KIMERA/include" -I"$KIMERA/build" -I"$KIMERA/third_party/mavlink" -I/usr/include/eigen3 $(pkg-config --cflags opencv4) "$ROOT/tools/replay_mono_imu_zxy_ab_v11.cpp" -o "$BIN" -L"$KIMERA/build" -L/usr/local/lib -lkimera_vio -lgtsam -lgflags -lglog -lpthread $(pkg-config --libs opencv4)
 printf 'MODE\tTHR\tRC\tSTATES\tDP_MM\tMAXEXC_MM\tGUARD_LINES\n' > "$OUT/report.tsv"
-run(){ local mode=$1 thr=$2 tag=$3 log="$OUT/$tag.log"; echo "[RUN] $mode thr=$thr"; set +e; JTZERO_V1551B_MODE="$mode" JTZERO_V1551B_THR="$thr" LD_LIBRARY_PATH="$KIMERA/build:/usr/local/lib:${LD_LIBRARY_PATH:-}" "$BIN" "$PARAMS" CURRENT "$IMU" "$CAM" "$MJPG" >"$log" 2>&1; rc=$?; set -e; st=$(awk '/backend states:/ {v=$3} END{print v+0}' "$log"); dp=$(awk '/final \|dP\| mm:/ {v=$4} END{print v}' "$log"); mx=$(awk '/max excursion mm:/ {v=$4} END{print v}' "$log"); gl=$(grep -c JTZERO_V15_51B "$log" || true); printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mode" "$thr" "$rc" "$st" "${dp:-NA}" "${mx:-NA}" "$gl" >> "$OUT/report.tsv"; echo " rc=$rc states=$st dP=${dp:-NA} guard_lines=$gl"; }
+run(){
+  local mode="$1"
+  local thr="$2"
+  local tag="$3"
+  local log="$OUT/$tag.log"
+  local rc st dp mx gl
+  echo "[RUN] $mode thr=$thr"
+  set +e
+  JTZERO_V1551B_MODE="$mode" JTZERO_V1551B_THR="$thr" LD_LIBRARY_PATH="$KIMERA/build:/usr/local/lib:${LD_LIBRARY_PATH:-}" "$BIN" "$PARAMS" CURRENT "$IMU" "$CAM" "$MJPG" >"$log" 2>&1
+  rc=$?
+  set -e
+  st=$(awk '/backend states:/ {v=$3} END{print v+0}' "$log")
+  dp=$(awk '/final \|dP\| mm:/ {v=$4} END{print v}' "$log")
+  mx=$(awk '/max excursion mm:/ {v=$4} END{print v}' "$log")
+  gl=$(grep -c JTZERO_V15_51B "$log" || true)
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mode" "$thr" "$rc" "$st" "${dp:-NA}" "${mx:-NA}" "$gl" >> "$OUT/report.tsv"
+  echo " rc=$rc states=$st dP=${dp:-NA} guard_lines=$gl"
+}
 run CONTROL 0.25 control
 for t in 0.10 0.25 0.50 1.00 2.00; do run NO_VIS_DURING_ROT "$t" "during_${t/./p}"; done
 for t in 0.10 0.25 0.50 1.00; do run NO_VIS_AFTER_TRIGGER "$t" "after_${t/./p}"; done

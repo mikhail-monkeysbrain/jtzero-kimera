@@ -1,0 +1,112 @@
+diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
+--- a/src/backend/VioBackend.cpp
++++ b/src/backend/VioBackend.cpp
+@@ -35,6 +35,10 @@
+ #include <limits>  // for numeric_limits<>
+ #include <map>
++#include <iostream>
++#include <set>
++#include <sstream>
+ #include <string>
++#include <typeinfo>
+ #include <utility>  // for make_pair
+ #include <vector>
+@@ -1385,6 +1389,59 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+                                 const std::map<Key, double>& timestamps,
+                                 const gtsam::FactorIndices& delete_slots) {
+   CHECK_NOTNULL(result);
++
++  const bool jt1523_trace = curr_kf_id_ >= 86 && curr_kf_id_ <= 90;
++  struct Jt1523FactorInfo {
++    size_t slot;
++    std::string type;
++    gtsam::KeyVector keys;
++  };
++  std::set<Key> jt1523_pre_keys;
++  std::vector<Jt1523FactorInfo> jt1523_pre_factors;
++  if (jt1523_trace) {
++    const gtsam::Values jt1523_pre_values = smoother_->calculateEstimate();
++    for (const Key key : jt1523_pre_values.keys()) {
++      const gtsam::Symbol s(key);
++      if (s.chr() == 'x' || s.chr() == 'v' || s.chr() == 'b') {
++        jt1523_pre_keys.insert(key);
++      }
++    }
++    const auto& jt1523_graph = smoother_->getFactors();
++    for (size_t slot = 0; slot < jt1523_graph.size(); ++slot) {
++      const auto& factor = jt1523_graph[slot];
++      if (!factor) continue;
++      jt1523_pre_factors.push_back(
++          Jt1523FactorInfo{slot, typeid(*factor).name(), factor->keys()});
++    }
++  }
++
++  auto jt1523_key_string = [](const Key key) {
++    const gtsam::Symbol s(key);
++    std::ostringstream os;
++    os << s.chr() << s.index();
++    return os.str();
++  };
++
++  auto jt1523_keys_string = [&](const gtsam::KeyVector& keys) {
++    std::ostringstream os;
++    bool first = true;
++    for (const Key key : keys) {
++      if (!first) os << ',';
++      first = false;
++      os << jt1523_key_string(key);
++    }
++    return os.str();
++  };
++
+   // Store smoother as backup.
+   CHECK(smoother_);
+@@ -1399,6 +1456,48 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+     VLOG(10) << "Starting update of smoother_...";
+     *result =
+         smoother_->update(new_factors, new_values, timestamps, delete_slots);
++
++    if (jt1523_trace) {
++      const gtsam::Values jt1523_post_values = smoother_->calculateEstimate();
++      std::set<Key> jt1523_post_keys;
++      for (const Key key : jt1523_post_values.keys()) {
++        const gtsam::Symbol s(key);
++        if (s.chr() == 'x' || s.chr() == 'v' || s.chr() == 'b') {
++          jt1523_post_keys.insert(key);
++        }
++      }
++      for (const Key removed : jt1523_pre_keys) {
++        if (jt1523_post_keys.count(removed)) continue;
++        const gtsam::Symbol rs(removed);
++        if (rs.chr() != 'x') continue;
++        size_t touching = 0;
++        size_t crossing = 0;
++        for (const auto& fi : jt1523_pre_factors) {
++          if (std::find(fi.keys.begin(), fi.keys.end(), removed) == fi.keys.end()) {
++            continue;
++          }
++          ++touching;
++          bool has_survivor_pose = false;
++          for (const Key fk : fi.keys) {
++            const gtsam::Symbol fs(fk);
++            if (fs.chr() == 'x' && fk != removed && jt1523_post_keys.count(fk)) {
++              has_survivor_pose = true;
++              break;
++            }
++          }
++          if (has_survivor_pose) ++crossing;
++          std::cerr << "[JT15.23 FACTOR] kf=" << curr_kf_id_
++                    << " removed=" << jt1523_key_string(removed)
++                    << " slot=" << fi.slot
++                    << " crossing=" << (has_survivor_pose ? 1 : 0)
++                    << " type=" << fi.type
++                    << " keys={" << jt1523_keys_string(fi.keys) << "}"
++                    << std::endl;
++        }
++        std::cerr << "[JT15.23 SUMMARY] kf=" << curr_kf_id_
++                  << " removed=" << jt1523_key_string(removed)
++                  << " touching_factors=" << touching
++                  << " crossing_pose_factors=" << crossing << std::endl;
++      }
++    }
+     VLOG(10) << "Finished update of smoother_.";

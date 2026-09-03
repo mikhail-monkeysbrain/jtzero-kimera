@@ -35,8 +35,11 @@ void add(Err&z,const E&e,Quat q){double r,p,y;euler(q,r,p,y);double a=std::abs(w
 void print(const Err&z){std::cout<<std::left<<std::setw(18)<<z.name<<std::right<<std::fixed<<std::setprecision(3)<<std::setw(10)<<pct(z.er,.5)<<std::setw(10)<<pct(z.ep,.5)<<std::setw(10)<<pct(z.ey,.5)<<std::setw(10)<<pct(z.e3,.5)<<std::setw(10)<<pct(z.e3,.95)<<std::setw(10)<<mx(z.e3)<<"\n";}
 }
 int main(int argc,char**argv){try{
- std::string ef=argc>1?argv[1]:"/home/vio/jtzero_attitude_v15_32.csv",qf=argc>2?argv[2]:"/home/vio/jtzero_quaternion_v15_32.csv";
- auto ev=loadE(ef),qv=loadQ(qf);if(ev.empty()||qv.empty())throw std::runtime_error("empty input");
+ std::string ef=argc>1?argv[1]:"/home/vio/jtzero_attitude_v15_32.csv";
+ std::string qf=argc>2?argv[2]:"/home/vio/jtzero_quaternion_v15_32.csv";
+ std::vector<E> ev=loadE(ef);
+ std::vector<Q> qv=loadQ(qf);
+ if(ev.empty()||qv.empty())throw std::runtime_error("empty input");
  Err raw{"RAW q"},inv{"CONJ(q)"},swapxy{"SWAP_XY"},flipxy{"FLIP_XY"};size_t j=0,n=0;double maxdt=0;
  for(const auto&q:qv){while(j+1<ev.size()&&std::llabs(ev[j+1].t-q.t)<std::llabs(ev[j].t-q.t))++j;if(j>=ev.size())break;double dt=std::abs(ev[j].t-q.t)*1e-6;if(dt>30)continue;maxdt=std::max(maxdt,dt);Quat a=norm({q.w,q.x,q.y,q.z});add(raw,ev[j],a);add(inv,ev[j],conj(a));add(swapxy,ev[j],norm({q.w,q.y,q.x,q.z}));add(flipxy,ev[j],norm({q.w,-q.x,-q.y,q.z}));++n;}
  std::cout<<"================ V15.34 ABSOLUTE QUATERNION CHECK ================\n";
@@ -44,7 +47,6 @@ int main(int argc,char**argv){try{
  std::cout<<std::left<<std::setw(18)<<"INTERPRETATION"<<std::right<<std::setw(10)<<"Rmed"<<std::setw(10)<<"Pmed"<<std::setw(10)<<"Ymed"<<std::setw(10)<<"E3med"<<std::setw(10)<<"E3p95"<<std::setw(10)<<"E3max"<<"\n";print(raw);print(inv);print(swapxy);print(flipxy);
  const Err*best=&raw;for(const Err*z:{&inv,&swapxy,&flipxy})if(pct(z->e3,.5)<pct(best->e3,.5))best=z;
  std::cout<<"\nBEST_ABSOLUTE_INTERPRETATION: "<<best->name<<"  median_combined_error="<<pct(best->e3,.5)<<" deg\n";
- // Relative composition-order check. This is diagnostic only; body-Z should not be inferred from relative Euler alone.
  size_t k0=0;while(k0<qv.size()&&qv[k0].t<ev.front().t)++k0;if(k0>=qv.size())k0=0;Quat q0=norm({qv[k0].w,qv[k0].x,qv[k0].y,qv[k0].z});
  std::vector<double>a1,a2,a3,a4;for(const auto&q:qv){Quat x=norm({q.w,q.x,q.y,q.z});Quat z[4]={mul(conj(q0),x),mul(x,conj(q0)),mul(conj(x),q0),mul(q0,conj(x))};for(int m=0;m<4;++m){double r,p,y;euler(z[m],r,p,y);double v=std::sqrt(r*r+p*p);(m==0?a1:m==1?a2:m==2?a3:a4).push_back(v);}}
  std::cout<<"\nRELATIVE RP magnitude (diagnostic, full-record median/p95):\n";

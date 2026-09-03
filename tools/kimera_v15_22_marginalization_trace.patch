@@ -110,4 +110,3 @@ index 09c19be..jt1522 100644
 +    }
 +
      VLOG(10) << "Finished update of smoother_.";
-*** End Patch

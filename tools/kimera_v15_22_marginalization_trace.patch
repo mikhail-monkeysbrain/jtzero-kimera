@@ -1,0 +1,113 @@
+diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
+index 09c19be..jt1522 100644
+--- a/src/backend/VioBackend.cpp
++++ b/src/backend/VioBackend.cpp
+@@ -35,8 +35,11 @@
+ #include <limits>  // for numeric_limits<>
+ #include <map>
++#include <set>
++#include <sstream>
+ #include <string>
++#include <typeinfo>
+ #include <utility>  // for make_pair
+ #include <vector>
+@@ -1385,6 +1388,52 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+                                 const gtsam::FactorIndices& delete_slots) {
+   CHECK_NOTNULL(result);
++
++  const bool jt1522_trace = curr_kf_id_ >= 84 && curr_kf_id_ <= 102;
++  gtsam::Values jt1522_pre_values;
++  gtsam::NonlinearFactorGraph jt1522_pre_graph;
++  std::set<gtsam::Key> jt1522_pre_keys;
++
++  auto jt1522_key_string = [](gtsam::Key key) {
++    const gtsam::Symbol s(key);
++    std::ostringstream os;
++    os << s.chr() << s.index();
++    return os.str();
++  };
++
++  if (jt1522_trace) {
++    jt1522_pre_values = smoother_->calculateEstimate();
++    jt1522_pre_graph = smoother_->getFactors();
++    for (const auto key : jt1522_pre_values.keys()) {
++      jt1522_pre_keys.insert(key);
++    }
++
++    std::ostringstream ts;
++    bool first = true;
++    for (const auto& kv : timestamps) {
++      if (!first) ts << ',';
++      first = false;
++      ts << jt1522_key_string(kv.first) << '@' << kv.second;
++    }
++
++    LOG(INFO) << "[JT15.22 PRE] kf=" << curr_kf_id_
++              << " values=" << jt1522_pre_values.size()
++              << " factors=" << jt1522_pre_graph.size()
++              << " new_factors=" << new_factors.size()
++              << " new_values=" << new_values.size()
++              << " delete_slots=" << delete_slots.size()
++              << " timestamps={" << ts.str() << "}";
++  }
++
+   // Store smoother as backup.
+   CHECK(smoother_);
+@@ -1399,8 +1448,62 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+     VLOG(10) << "Starting update of smoother_...";
+     *result =
+         smoother_->update(new_factors, new_values, timestamps, delete_slots);
++
++    if (jt1522_trace) {
++      const gtsam::Values jt1522_post_values = smoother_->calculateEstimate();
++      const gtsam::NonlinearFactorGraph jt1522_post_graph = smoother_->getFactors();
++      std::set<gtsam::Key> jt1522_post_keys;
++      for (const auto key : jt1522_post_values.keys()) {
++        jt1522_post_keys.insert(key);
++      }
++
++      std::vector<gtsam::Key> removed;
++      for (const auto key : jt1522_pre_keys) {
++        if (jt1522_post_keys.count(key) == 0) removed.push_back(key);
++      }
++
++      std::ostringstream removed_os;
++      for (size_t i = 0; i < removed.size(); ++i) {
++        if (i) removed_os << ',';
++        removed_os << jt1522_key_string(removed[i]);
++      }
++
++      LOG(INFO) << "[JT15.22 POST] kf=" << curr_kf_id_
++                << " values=" << jt1522_post_values.size()
++                << " factors=" << jt1522_post_graph.size()
++                << " removed={" << removed_os.str() << "}";
++
++      for (const auto removed_key : removed) {
++        size_t touching = 0;
++        std::ostringstream factors_os;
++        for (size_t slot = 0; slot < jt1522_pre_graph.size(); ++slot) {
++          const auto& factor = jt1522_pre_graph[slot];
++          if (!factor) continue;
++          bool hit = false;
++          for (const auto key : factor->keys()) {
++            if (key == removed_key) {
++              hit = true;
++              break;
++            }
++          }
++          if (!hit) continue;
++          ++touching;
++          factors_os << " slot=" << slot << " type=" << typeid(*factor).name() << " keys=";
++          for (const auto key : factor->keys()) {
++            factors_os << jt1522_key_string(key) << ',';
++          }
++        }
++        LOG(INFO) << "[JT15.22 DROP] kf=" << curr_kf_id_
++                  << " key=" << jt1522_key_string(removed_key)
++                  << " touching_pre_factors=" << touching
++                  << factors_os.str();
++      }
++    }
++
+     VLOG(10) << "Finished update of smoother_.";
+*** End Patch

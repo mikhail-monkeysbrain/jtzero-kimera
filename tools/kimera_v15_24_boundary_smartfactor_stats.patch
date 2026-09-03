@@ -1,0 +1,69 @@
+diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
+--- a/src/backend/VioBackend.cpp
++++ b/src/backend/VioBackend.cpp
+@@ -35,6 +35,8 @@
+ #include <limits>  // for numeric_limits<>
+ #include <map>
++#include <iostream>
++#include <set>
+ #include <string>
+ #include <utility>  // for make_pair
+ #include <vector>
+@@ -1385,6 +1387,58 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+                                 const std::map<Key, double>& timestamps,
+                                 const gtsam::FactorIndices& delete_slots) {
+   CHECK_NOTNULL(result);
++
++  // JT-ZERO v15.24: minimally inspect SmartStereo factors touching the pose
++  // that BatchFixedLagSmoother is about to marginalize.  This is deliberately
++  // restricted to kf 86..90 to avoid perturbing the sensitive replay.
++  if (curr_kf_id_ >= 86 && curr_kf_id_ <= 90 && smoother_) {
++    const gtsam::NonlinearFactorGraph& graph = smoother_->getFactors();
++    const size_t lag = static_cast<size_t>(backend_params_.nr_states_);
++    const size_t removed_idx = curr_kf_id_ > lag ? curr_kf_id_ - lag - 1 : 0;
++    const gtsam::Key removed_key = gtsam::Symbol('x', removed_idx);
++    size_t smart_count = 0;
++    size_t min_len = std::numeric_limits<size_t>::max();
++    size_t max_len = 0;
++    size_t total_len = 0;
++    std::set<size_t> end_poses;
++    for (size_t slot = 0; slot < graph.size(); ++slot) {
++      const auto& factor = graph[slot];
++      if (!factor) continue;
++      bool touches = false;
++      for (const gtsam::Key key : factor->keys()) {
++        if (key == removed_key) { touches = true; break; }
++      }
++      if (!touches) continue;
++      const std::string type_name = typeid(*factor).name();
++      if (type_name.find("SmartStereoProjectionPoseFactor") == std::string::npos) continue;
++      size_t pose_len = 0;
++      size_t first_pose = std::numeric_limits<size_t>::max();
++      size_t last_pose = 0;
++      for (const gtsam::Key key : factor->keys()) {
++        const gtsam::Symbol s(key);
++        if (s.chr() == 'x') {
++          ++pose_len;
++          first_pose = std::min(first_pose, static_cast<size_t>(s.index()));
++          last_pose = std::max(last_pose, static_cast<size_t>(s.index()));
++        }
++      }
++      ++smart_count;
++      min_len = std::min(min_len, pose_len);
++      max_len = std::max(max_len, pose_len);
++      total_len += pose_len;
++      end_poses.insert(last_pose);
++      std::cerr << "[JT15.24 SMART] kf=" << curr_kf_id_
++                << " removed=x" << removed_idx << " slot=" << slot
++                << " poses=" << pose_len << " first=x" << first_pose
++                << " last=x" << last_pose << std::endl;
++    }
++    std::cerr << "[JT15.24 SUMMARY] kf=" << curr_kf_id_
++              << " removed=x" << removed_idx << " smart=" << smart_count
++              << " min_poses=" << (smart_count ? min_len : 0)
++              << " max_poses=" << max_len
++              << " mean_poses=" << (smart_count ? static_cast<double>(total_len) / smart_count : 0.0)
++              << " distinct_last=" << end_poses.size() << std::endl;
++  }
++
+   // Store smoother as backup.

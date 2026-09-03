@@ -10,9 +10,11 @@ diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
 +#include <typeinfo>
  #include <utility>  // for make_pair
  #include <vector>
-@@ -1385,2 +1388,37 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+@@ -1386,5 +1389,42 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
+                                 const std::map<Key, double>& timestamps,
                                  const gtsam::FactorIndices& delete_slots) {
    CHECK_NOTNULL(result);
++
 +  const bool jt1522_trace = curr_kf_id_ >= 84 && curr_kf_id_ <= 102;
 +  gtsam::Values jt1522_pre_values;
 +  gtsam::NonlinearFactorGraph jt1522_pre_graph;
@@ -48,10 +50,14 @@ diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
 +              << " delete_slots=" << delete_slots.size()
 +              << " timestamps={" << ts.str() << "}";
 +  }
-@@ -1399,4 +1437,55 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
++
+   // Store smoother as backup.
+   CHECK(smoother_);
+@@ -1399,4 +1439,56 @@ bool VioBackend::updateSmoother(Smoother::Result* result,
      VLOG(10) << "Starting update of smoother_...";
      *result =
          smoother_->update(new_factors, new_values, timestamps, delete_slots);
++
 +    if (jt1522_trace) {
 +      const gtsam::Values jt1522_post_values = smoother_->calculateEstimate();
 +      const gtsam::NonlinearFactorGraph jt1522_post_graph = smoother_->getFactors();
@@ -103,4 +109,5 @@ diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
 +                  << factors_os.str();
 +      }
 +    }
++
      VLOG(10) << "Finished update of smoother_.";

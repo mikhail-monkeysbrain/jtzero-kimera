@@ -34,8 +34,8 @@ fi
 cp "$SRC" "$BACKUP"
 
 echo '[1/5] Apply trace patch'
-git apply --check "$PATCH"
-git apply "$PATCH"
+git apply --recount --check "$PATCH"
+git apply --recount "$PATCH"
 
 echo '[2/5] Rebuild Kimera-VIO'
 cmake --build build -j2 --target kimera_vio

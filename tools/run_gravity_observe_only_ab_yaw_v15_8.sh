@@ -35,7 +35,7 @@ sed -i 's/^[[:space:]]*return corrected;/    return gyro_in;/' "$OBS_SRC"
 
 DIFF_LINES="$(diff -u "$CUR_SRC" "$OBS_SRC" || true)"
 echo "============================================================"
-echo "JT-ZERO GRAVITY OBSERVE-ONLY A/B YAW REPLAY v15.8"
+echo "JT-ZERO GRAVITY OBSERVE-ONLY A/B YAW REPLAY v15.8 FIXED"
 echo "============================================================"
 echo "Dataset:"
 echo "  combined: $COMBINED"
@@ -46,25 +46,21 @@ echo
 echo "Source A/B diff:"
 echo "$DIFF_LINES"
 
-REMOVED="$(echo "$DIFF_LINES" | grep -c '^-.*return corrected;' || true)"
-ADDED="$(echo "$DIFF_LINES" | grep -c '^+.*return gyro_in;' || true)"
-if [[ "$REMOVED" != "1" || "$ADDED" != "1" ]]; then
+# Verify only actual changed source lines, not unified-diff context lines.
+CHANGED_LINES="$(printf '%s\n' "$DIFF_LINES" | grep -E '^[+-]' | grep -v -E '^(---|\+\+\+)' || true)"
+REMOVED="$(printf '%s\n' "$CHANGED_LINES" | grep -c '^-.*return corrected;' || true)"
+ADDED="$(printf '%s\n' "$CHANGED_LINES" | grep -c '^+.*return gyro_in;' || true)"
+CHANGE_COUNT="$(printf '%s\n' "$CHANGED_LINES" | sed '/^$/d' | wc -l)"
+
+if [[ "$REMOVED" != "1" || "$ADDED" != "1" || "$CHANGE_COUNT" != "2" ]]; then
   echo "[FATAL] OBSERVE_ONLY patch verification failed" >&2
+  echo "[FATAL] actual changed source lines were:" >&2
+  printf '%s\n' "$CHANGED_LINES" >&2
   exit 2
 fi
 
-if echo "$DIFF_LINES" | grep -q 'allow_gravity_feedback'; then
-  echo "[FATAL] gravity enable/disable logic was unexpectedly modified" >&2
-  exit 2
-fi
-
-if echo "$DIFF_LINES" | grep -q 'gravity_body_.*AngleAxis'; then
-  echo "[FATAL] gravity state propagation was unexpectedly modified" >&2
-  exit 2
-fi
-
-echo "[CHECK] PASS: B changes only the value returned to Kimera: corrected -> gyro_in"
-echo "[CHECK] Gravity detector/state/correction calculation/propagation remain identical"
+echo "[CHECK] PASS: exactly two diff lines: -return corrected / +return gyro_in"
+echo "[CHECK] Gravity detector/state/correction calculation/propagation are byte-identical"
 
 COMMON=(
   -std=c++17 -O2

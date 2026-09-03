@@ -60,7 +60,8 @@ run_once A "$A_LOG" "$A_CSV"
 run_once B "$B_LOG" "$B_CSV"
 
 echo
-echo "================ EXACT FILE CHECK ================================"nA_SHA="$(sha256sum "$A_CSV" | awk '{print $1}')"
+echo "================ EXACT FILE CHECK ================================"
+A_SHA="$(sha256sum "$A_CSV" | awk '{print $1}')"
 B_SHA="$(sha256sum "$B_CSV" | awk '{print $1}')"
 echo "A sha256: $A_SHA"
 echo "B sha256: $B_SHA"
@@ -73,7 +74,6 @@ fi
 echo
 echo "================ PAIRED STATE COMPARISON ========================="
 awk -F, '
-function abs(x){return x<0?-x:x}
 function wrap(x){while(x>180)x-=360; while(x<-180)x+=360; return x}
 NR==FNR {
   if (FNR==1) next

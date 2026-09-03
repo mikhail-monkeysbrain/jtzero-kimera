@@ -24,7 +24,9 @@ build_replay(){
 P="$OUT/params_H28"; rm -rf "$P"; cp -a "$ROOT/params/JTZeroMonoFLU" "$P"; sed -i -E 's/^[[:space:]]*nr_states:[[:space:]]*.*/nr_states: 28/' "$P/BackendParams.yaml"
 metric(){ awk -F': ' '/^final \|dP\| mm:/{print $2;exit}' "$1"; }
 run_case(){
- local name="$1" mode="$2" log="$OUT/$name.txt"
+ local name="$1"
+ local mode="$2"
+ local log="$OUT/$name.txt"
  rm -f /home/vio/jtzero_zxy_replay_v11_CURRENT.csv
  set +e
  JT1538_MODE="$mode" LD_LIBRARY_PATH="$K/build:/usr/local/lib:${LD_LIBRARY_PATH:-}" "$BIN" "$P" CURRENT "$IMU" "$CAM" "$MJPG" >"$log" 2>&1

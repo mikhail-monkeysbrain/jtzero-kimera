@@ -486,6 +486,109 @@ int main(int argc, char **argv)
             K,
             D);
 
+    // Coverage diagnostics for the final accepted calibration views.
+    std::vector<cv::Point2f> all_points;
+    for (const auto &view : image_points)
+        all_points.insert(all_points.end(), view.begin(), view.end());
+
+    double min_x = image_size.width;
+    double min_y = image_size.height;
+    double max_x = 0.0;
+    double max_y = 0.0;
+
+    for (const auto &p : all_points) {
+        min_x = std::min(min_x, static_cast<double>(p.x));
+        min_y = std::min(min_y, static_cast<double>(p.y));
+        max_x = std::max(max_x, static_cast<double>(p.x));
+        max_y = std::max(max_y, static_cast<double>(p.y));
+    }
+
+    const double coverage_width_pct =
+        all_points.empty() ? 0.0 :
+        100.0 * (max_x - min_x) / static_cast<double>(image_size.width);
+
+    const double coverage_height_pct =
+        all_points.empty() ? 0.0 :
+        100.0 * (max_y - min_y) / static_cast<double>(image_size.height);
+
+    cv::Mat coverage(
+        image_size,
+        CV_8UC3,
+        cv::Scalar(0, 0, 0));
+
+    for (const auto &p : all_points)
+        cv::circle(coverage, p, 3, cv::Scalar(0, 255, 0), -1);
+
+    if (!all_points.empty()) {
+        cv::rectangle(
+            coverage,
+            cv::Point(
+                static_cast<int>(std::floor(min_x)),
+                static_cast<int>(std::floor(min_y))),
+            cv::Point(
+                static_cast<int>(std::ceil(max_x)),
+                static_cast<int>(std::ceil(max_y))),
+            cv::Scalar(255, 255, 255),
+            1);
+    }
+
+    cv::line(
+        coverage,
+        cv::Point(image_size.width / 2, 0),
+        cv::Point(image_size.width / 2, image_size.height - 1),
+        cv::Scalar(128, 128, 128),
+        1);
+
+    cv::line(
+        coverage,
+        cv::Point(0, image_size.height / 2),
+        cv::Point(image_size.width - 1, image_size.height / 2),
+        cv::Scalar(128, 128, 128),
+        1);
+
+    cv::putText(
+        coverage,
+        cv::format("coverage %.1f%% x %.1f%%",
+                   coverage_width_pct,
+                   coverage_height_pct),
+        cv::Point(15, 25),
+        cv::FONT_HERSHEY_SIMPLEX,
+        0.6,
+        cv::Scalar(255, 255, 255),
+        1);
+
+    const fs::path coverage_path =
+        capture_dir / "coverage_map.png";
+
+    cv::imwrite(coverage_path.string(), coverage);
+
+    // Stability check: repeat calibration with k3 fixed to zero.
+    cv::Mat K_fix_k3 = cv::Mat::eye(3, 3, CV_64F);
+    cv::Mat D_fix_k3 = cv::Mat::zeros(5, 1, CV_64F);
+    std::vector<cv::Mat> rvecs_fix_k3;
+    std::vector<cv::Mat> tvecs_fix_k3;
+
+    const double rms_fix_k3 =
+        cv::calibrateCamera(
+            object_points,
+            image_points,
+            image_size,
+            K_fix_k3,
+            D_fix_k3,
+            rvecs_fix_k3,
+            tvecs_fix_k3,
+            cv::CALIB_FIX_K3,
+            criteria);
+
+    const double mean_reprojection_fix_k3 =
+        meanReprojectionError(
+            object_points,
+            image_points,
+            rvecs_fix_k3,
+            tvecs_fix_k3,
+            K_fix_k3,
+            D_fix_k3);
+
     if (!output.parent_path().empty())
         fs::create_directories(output.parent_path());
 
@@ -518,6 +621,18 @@ int main(int argc, char **argv)
     out << "usable_views" << static_cast<int>(object_points.size());
     out << "rejected_views" << static_cast<int>(rejected_files.size());
 
+    out << "coverage_min_x_px" << min_x;
+    out << "coverage_max_x_px" << max_x;
+    out << "coverage_min_y_px" << min_y;
+    out << "coverage_max_y_px" << max_y;
+    out << "coverage_width_percent" << coverage_width_pct;
+    out << "coverage_height_percent" << coverage_height_pct;
+
+    out << "fix_k3_rms_reprojection_error_px" << rms_fix_k3;
+    out << "fix_k3_mean_reprojection_error_px" << mean_reprojection_fix_k3;
+    out << "fix_k3_camera_matrix" << K_fix_k3;
+    out << "fix_k3_distortion_coefficients" << D_fix_k3;
+
     out << "accepted_files" << "[";
     for (const auto &name : accepted_files)
         out << name;
@@ -549,6 +664,28 @@ int main(int argc, char **argv)
               << D.at<double>(2) << ", "
               << D.at<double>(3) << ", "
               << D.at<double>(4) << "\n";
+
+    std::cout << "\nCoverage:\n";
+    std::cout << "  X range          : " << min_x << " .. " << max_x
+              << " px (" << coverage_width_pct << "% width)\n";
+    std::cout << "  Y range          : " << min_y << " .. " << max_y
+              << " px (" << coverage_height_pct << "% height)\n";
+    std::cout << "  Coverage map     : " << coverage_path << "\n";
+
+    std::cout << "\nFIX_K3 comparison:\n";
+    std::cout << "  RMS              : " << rms_fix_k3 << " px\n";
+    std::cout << "  Mean reproj      : " << mean_reprojection_fix_k3 << " px\n";
+    std::cout << "  fx               : " << K_fix_k3.at<double>(0,0) << "\n";
+    std::cout << "  fy               : " << K_fix_k3.at<double>(1,1) << "\n";
+    std::cout << "  cx               : " << K_fix_k3.at<double>(0,2) << "\n";
+    std::cout << "  cy               : " << K_fix_k3.at<double>(1,2) << "\n";
+    std::cout << "  D                : "
+              << D_fix_k3.at<double>(0) << ", "
+              << D_fix_k3.at<double>(1) << ", "
+              << D_fix_k3.at<double>(2) << ", "
+              << D_fix_k3.at<double>(3) << ", "
+              << D_fix_k3.at<double>(4) << "\n";
+
     std::cout << "Output             : " << output << "\n";
     std::cout << "Detection previews : " << preview_dir << "\n";
     std::cout << "========================================\n";

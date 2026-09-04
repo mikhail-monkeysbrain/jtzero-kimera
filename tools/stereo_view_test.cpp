@@ -6,6 +6,7 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <glob.h>
 
 #include <opencv2/opencv.hpp>
 
@@ -54,7 +55,18 @@ public:
 
     bool initialize(const char *usb_dev)
     {
-        if (!openUsb(usb_dev))
+        std::string resolved_usb = usb_dev ? usb_dev : "auto";
+
+        if (resolved_usb == "auto") {
+            resolved_usb = findUsbCamera();
+            if (resolved_usb.empty()) {
+                std::cerr << "[USB] Arducam OV9281 not found in /dev/video*\n";
+                return false;
+            }
+            std::cout << "[USB] auto-selected: " << resolved_usb << "\n";
+        }
+
+        if (!openUsb(resolved_usb.c_str()))
             return false;
 
         if (!openCsi())
@@ -123,6 +135,41 @@ public:
     }
 
 private:
+    static std::string findUsbCamera()
+    {
+        glob_t g{};
+        if (::glob("/dev/video*", 0, nullptr, &g) != 0)
+            return {};
+
+        std::string best;
+
+        for (size_t i = 0; i < g.gl_pathc; ++i) {
+            const char *path = g.gl_pathv[i];
+            int fd = ::open(path, O_RDWR | O_NONBLOCK);
+            if (fd < 0)
+                continue;
+
+            v4l2_capability cap{};
+            const bool ok = xioctl(fd, VIDIOC_QUERYCAP, &cap) == 0;
+            ::close(fd);
+
+            if (!ok)
+                continue;
+
+            const std::string card(
+                reinterpret_cast<const char *>(cap.card));
+
+            if (card.find("OV9281") != std::string::npos ||
+                card.find("Arducam") != std::string::npos) {
+                best = path;
+                break;
+            }
+        }
+
+        ::globfree(&g);
+        return best;
+    }
+
     bool openUsb(const char *dev)
     {
         usb_fd_ = ::open(dev, O_RDWR | O_NONBLOCK);
@@ -660,12 +707,14 @@ private:
 
 int main(int argc, char **argv)
 {
-    const char *usb_dev = argc > 1 ? argv[1] : "/dev/video0";
+    const char *usb_dev = argc > 1 ? argv[1] : "auto";
 
     std::cout << "========================================\n";
     std::cout << " JT-Zero stereo synchronized viewer\n";
     std::cout << "========================================\n";
-    std::cout << "USB camera : " << usb_dev << "\n";
+    std::cout << "USB camera : " << usb_dev
+              << (std::string(usb_dev) == "auto" ? " (auto-detect)" : "")
+              << "\n";
     std::cout << "CSI camera : OV5647\n";
     std::cout << "Max |dt|   : " << MAX_STEREO_DT_MS << " ms\n";
 

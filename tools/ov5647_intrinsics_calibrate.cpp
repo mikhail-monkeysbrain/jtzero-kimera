@@ -15,7 +15,7 @@ namespace fs = std::filesystem;
 
 static constexpr int BOARD_SQUARES_X = 7;
 static constexpr int BOARD_SQUARES_Y = 5;
-static constexpr int MIN_CORNERS_PER_VIEW = 8;
+static constexpr int MIN_CORNERS_PER_VIEW = 4;
 static constexpr int MIN_VIEWS = 15;
 
 struct Detection {
@@ -116,6 +116,74 @@ static double meanReprojectionError(
     }
 
     return count ? total / static_cast<double>(count) : 0.0;
+}
+
+
+static double medianOf(std::vector<double> v)
+{
+    if (v.empty())
+        return 0.0;
+
+    std::sort(v.begin(), v.end());
+    const size_t n = v.size();
+
+    if (n & 1)
+        return v[n / 2];
+
+    return 0.5 * (v[n / 2 - 1] + v[n / 2]);
+}
+
+static std::vector<double> perViewReprojectionError(
+    const std::vector<std::vector<cv::Point3f>> &object_points,
+    const std::vector<std::vector<cv::Point2f>> &image_points,
+    const std::vector<cv::Mat> &rvecs,
+    const std::vector<cv::Mat> &tvecs,
+    const cv::Mat &K,
+    const cv::Mat &D)
+{
+    std::vector<double> errors;
+    errors.reserve(object_points.size());
+
+    for (size_t i = 0; i < object_points.size(); ++i) {
+        std::vector<cv::Point2f> projected;
+
+        cv::projectPoints(
+            object_points[i],
+            rvecs[i],
+            tvecs[i],
+            K,
+            D,
+            projected);
+
+        double sum = 0.0;
+
+        for (size_t j = 0; j < projected.size(); ++j)
+            sum += cv::norm(projected[j] - image_points[i][j]);
+
+        errors.push_back(
+            projected.empty() ? 1e9 :
+            sum / static_cast<double>(projected.size()));
+    }
+
+    return errors;
+}
+
+static double robustViewThreshold(const std::vector<double> &errors)
+{
+    if (errors.empty())
+        return 1.0;
+
+    const double med = medianOf(errors);
+
+    std::vector<double> dev;
+    dev.reserve(errors.size());
+
+    for (double e : errors)
+        dev.push_back(std::abs(e - med));
+
+    const double mad = medianOf(dev);
+
+    return std::max(1.0, med + 2.5 * 1.4826 * mad);
 }
 
 int main(int argc, char **argv)
@@ -295,6 +363,9 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    const size_t initial_views = object_points.size();
+    std::vector<std::string> rejected_files;
+
     cv::Mat K = cv::Mat::eye(3, 3, CV_64F);
     cv::Mat D = cv::Mat::zeros(5, 1, CV_64F);
 
@@ -306,8 +377,15 @@ int main(int argc, char **argv)
         100,
         1e-9);
 
-    const double rms =
-        cv::calibrateCamera(
+    double rms = 0.0;
+
+    for (int iteration = 0; iteration < 3; ++iteration) {
+        K = cv::Mat::eye(3, 3, CV_64F);
+        D = cv::Mat::zeros(5, 1, CV_64F);
+        rvecs.clear();
+        tvecs.clear();
+
+        rms = cv::calibrateCamera(
             object_points,
             image_points,
             image_size,
@@ -317,6 +395,87 @@ int main(int argc, char **argv)
             tvecs,
             0,
             criteria);
+
+        const std::vector<double> view_errors =
+            perViewReprojectionError(
+                object_points,
+                image_points,
+                rvecs,
+                tvecs,
+                K,
+                D);
+
+        const double threshold =
+            robustViewThreshold(view_errors);
+
+        std::vector<size_t> keep;
+        std::vector<size_t> reject;
+
+        for (size_t i = 0; i < view_errors.size(); ++i) {
+            if (view_errors[i] > threshold)
+                reject.push_back(i);
+            else
+                keep.push_back(i);
+        }
+
+        std::cout << "\n[REFINE " << (iteration + 1) << "]"
+                  << " views=" << object_points.size()
+                  << " threshold=" << std::fixed << std::setprecision(3)
+                  << threshold << " px"
+                  << " reject=" << reject.size() << "\n";
+
+        for (size_t idx : reject) {
+            std::cout << "  reject " << accepted_files[idx]
+                      << " mean_reproj=" << view_errors[idx] << " px\n";
+        }
+
+        if (reject.empty())
+            break;
+
+        if (keep.size() < static_cast<size_t>(MIN_VIEWS)) {
+            std::cout << "  stop: pruning would leave fewer than "
+                      << MIN_VIEWS << " views\n";
+            break;
+        }
+
+        std::vector<std::vector<cv::Point3f>> new_obj;
+        std::vector<std::vector<cv::Point2f>> new_img;
+        std::vector<std::string> new_files;
+
+        new_obj.reserve(keep.size());
+        new_img.reserve(keep.size());
+        new_files.reserve(keep.size());
+
+        for (size_t idx : reject)
+            rejected_files.push_back(accepted_files[idx]);
+
+        for (size_t idx : keep) {
+            new_obj.push_back(object_points[idx]);
+            new_img.push_back(image_points[idx]);
+            new_files.push_back(accepted_files[idx]);
+        }
+
+        object_points.swap(new_obj);
+        image_points.swap(new_img);
+        accepted_files.swap(new_files);
+    }
+
+    // Final calibration after pruning.
+    K = cv::Mat::eye(3, 3, CV_64F);
+    D = cv::Mat::zeros(5, 1, CV_64F);
+    rvecs.clear();
+    tvecs.clear();
+
+    rms = cv::calibrateCamera(
+        object_points,
+        image_points,
+        image_size,
+        K,
+        D,
+        rvecs,
+        tvecs,
+        0,
+        criteria);
 
     const double mean_reprojection =
         meanReprojectionError(
@@ -355,10 +514,17 @@ int main(int argc, char **argv)
 
     out << "rms_reprojection_error_px" << rms;
     out << "mean_reprojection_error_px" << mean_reprojection;
+    out << "initial_usable_views" << static_cast<int>(initial_views);
     out << "usable_views" << static_cast<int>(object_points.size());
+    out << "rejected_views" << static_cast<int>(rejected_files.size());
 
     out << "accepted_files" << "[";
     for (const auto &name : accepted_files)
+        out << name;
+    out << "]";
+
+    out << "rejected_files" << "[";
+    for (const auto &name : rejected_files)
         out << name;
     out << "]";
 
@@ -368,7 +534,9 @@ int main(int argc, char **argv)
     std::cout << "\n========================================\n";
     std::cout << " RESULT\n";
     std::cout << "========================================\n";
-    std::cout << "Usable views      : " << object_points.size() << "\n";
+    std::cout << "Views initial     : " << initial_views << "\n";
+    std::cout << "Views final       : " << object_points.size() << "\n";
+    std::cout << "Rejected views    : " << rejected_files.size() << "\n";
     std::cout << "RMS               : " << rms << " px\n";
     std::cout << "Mean reprojection : " << mean_reprojection << " px\n";
     std::cout << "fx                 : " << K.at<double>(0,0) << "\n";

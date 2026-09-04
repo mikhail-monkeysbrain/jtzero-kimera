@@ -15,7 +15,7 @@ namespace fs = std::filesystem;
 
 static constexpr int BOARD_SQUARES_X = 7;
 static constexpr int BOARD_SQUARES_Y = 5;
-static constexpr int MIN_CORNERS_PER_VIEW = 4;
+static constexpr int MIN_CORNERS_PER_VIEW = 6;
 static constexpr int MIN_VIEWS = 15;
 
 struct Detection {

@@ -664,6 +664,49 @@ private:
                     cv::Scalar(255, 255, 255), 2);
     }
 
+    void saveLatestOv5647()
+    {
+        cv::Mat csi;
+        double dt = 0.0;
+
+        {
+            std::lock_guard<std::mutex> lock(display_mutex_);
+
+            if (latest_csi_raw_.empty()) {
+                std::cout << "[SAVE V] no OV5647 frame available yet\n";
+                return;
+            }
+
+            csi = latest_csi_raw_.clone();
+            dt = latest_dt_ms_;
+        }
+
+        namespace fs = std::filesystem;
+        const fs::path dir = "ov5647_intrinsics_captures";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+
+        const uint64_t id = ++saved_ov5647_frames_;
+        const std::string stem =
+            cv::format("ov5647_%06llu", (unsigned long long)id);
+
+        const fs::path image_path = dir / (stem + ".png");
+        const fs::path meta_path = dir / (stem + ".txt");
+
+        const bool ok = cv::imwrite(image_path.string(), csi);
+
+        std::ofstream meta(meta_path);
+        meta << std::fixed << std::setprecision(6);
+        meta << "dt_ms=" << dt << "\n";
+        meta << "source=OV5647_CSI\n";
+
+        if (ok)
+            std::cout << "[SAVE V] " << image_path.string() << "\n";
+        else
+            std::cout << "[SAVE V] failed to write "
+                      << image_path.string() << "\n";
+    }
+
     void saveLatestPair()
     {
         cv::Mat usb;

@@ -107,7 +107,7 @@ public:
             }
         }
 
-        std::cout << "\n[VIEW] Q/ESC = quit, S = save synchronized pair\n\n";
+        std::cout << "\n[VIEW] Q/ESC = quit, S = save stereo pair, V = save OV5647 mono\n\n";
 
         cv::namedWindow("JT-Zero Stereo View", cv::WINDOW_NORMAL);
 
@@ -127,6 +127,8 @@ public:
                 running_.store(false);
             } else if (key == 's' || key == 'S') {
                 saveLatestPair();
+            } else if (key == 'v' || key == 'V') {
+                saveLatestOv5647();
             }
         }
 
@@ -827,6 +829,7 @@ private:
     std::atomic<uint64_t> accepted_pairs_{0};
     std::atomic<uint64_t> rejected_pairs_{0};
     std::atomic<uint64_t> saved_pairs_{0};
+    std::atomic<uint64_t> saved_ov5647_frames_{0};
 };
 
 int main(int argc, char **argv)

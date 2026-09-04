@@ -72,7 +72,9 @@ static Detection detectCharuco(
     std::vector<std::vector<cv::Point2f>> marker_corners;
     std::vector<int> marker_ids;
 
-    cv::aruco::DetectorParameters params;
+    cv::Ptr<cv::aruco::DetectorParameters> params =
+        cv::makePtr<cv::aruco::DetectorParameters>();
+
     cv::aruco::detectMarkers(
         gray,
         dictionary,
@@ -283,9 +285,8 @@ int main(int argc, char **argv)
             cv::aruco::DICT_4X4_50);
 
     const auto board =
-        cv::aruco::CharucoBoard::create(
-            BOARD_SQUARES_X,
-            BOARD_SQUARES_Y,
+        cv::makePtr<cv::aruco::CharucoBoard>(
+            cv::Size(BOARD_SQUARES_X, BOARD_SQUARES_Y),
             square_m,
             marker_m,
             dictionary);

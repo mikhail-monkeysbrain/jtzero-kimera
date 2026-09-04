@@ -16,6 +16,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <deque>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -80,7 +82,7 @@ public:
             }
         }
 
-        std::cout << "\n[VIEW] Press Q or ESC to quit\n\n";
+        std::cout << "\n[VIEW] Q/ESC = quit, S = save synchronized pair\n\n";
 
         cv::namedWindow("JT-Zero Stereo View", cv::WINDOW_NORMAL);
 
@@ -96,8 +98,11 @@ public:
                 cv::imshow("JT-Zero Stereo View", composed);
 
             const int key = cv::waitKey(10);
-            if (key == 27 || key == 'q' || key == 'Q')
+            if (key == 27 || key == 'q' || key == 'Q') {
                 running_.store(false);
+            } else if (key == 's' || key == 'S') {
+                saveLatestPair();
+            }
         }
 
         cv::destroyAllWindows();
@@ -431,21 +436,12 @@ private:
                         if (usb.size() != csi.size())
                             cv::resize(usb, usb, csi.size());
 
-                        cv::putText(usb,
-                                    "OV9281 USB",
-                                    cv::Point(15, 30),
-                                    cv::FONT_HERSHEY_SIMPLEX,
-                                    0.8,
-                                    cv::Scalar(255,255,255),
-                                    2);
+                        // Keep pristine synchronized images for calibration capture.
+                        cv::Mat usb_raw = usb.clone();
+                        cv::Mat csi_raw = csi.clone();
 
-                        cv::putText(csi,
-                                    "OV5647 CSI",
-                                    cv::Point(15, 30),
-                                    cv::FONT_HERSHEY_SIMPLEX,
-                                    0.8,
-                                    cv::Scalar(255,255,255),
-                                    2);
+                        drawAlignmentOverlay(usb, "OV9281 USB");
+                        drawAlignmentOverlay(csi, "OV5647 CSI");
 
                         std::vector<cv::Mat> pair{usb, csi};
                         cv::Mat joined;
@@ -466,6 +462,10 @@ private:
                         {
                             std::lock_guard<std::mutex> lock(display_mutex_);
                             latest_display_ = joined;
+                            latest_usb_raw_ = usb_raw;
+                            latest_csi_raw_ = csi_raw;
+                            latest_dt_ms_ = dt_ms;
+                            latest_usb_seq_ = best.seq;
                         }
 
                         ++accepted_pairs_;
@@ -480,6 +480,87 @@ private:
             request->reuse(Request::ReuseBuffers);
             if (camera_->queueRequest(request) < 0)
                 std::cerr << "[CSI] queueRequest failed\n";
+        }
+    }
+
+    static void drawAlignmentOverlay(cv::Mat &img, const std::string &label)
+    {
+        const int cx = img.cols / 2;
+        const int cy = img.rows / 2;
+
+        cv::line(img, cv::Point(cx, 0), cv::Point(cx, img.rows - 1),
+                 cv::Scalar(255, 255, 255), 1);
+        cv::line(img, cv::Point(0, cy), cv::Point(img.cols - 1, cy),
+                 cv::Scalar(255, 255, 255), 1);
+        cv::circle(img, cv::Point(cx, cy), 12, cv::Scalar(255, 255, 255), 1);
+
+        // 25%/75% guides make FOV and roll mismatch easy to see.
+        cv::line(img, cv::Point(img.cols / 4, 0),
+                 cv::Point(img.cols / 4, img.rows - 1),
+                 cv::Scalar(160, 160, 160), 1);
+        cv::line(img, cv::Point(3 * img.cols / 4, 0),
+                 cv::Point(3 * img.cols / 4, img.rows - 1),
+                 cv::Scalar(160, 160, 160), 1);
+        cv::line(img, cv::Point(0, img.rows / 4),
+                 cv::Point(img.cols - 1, img.rows / 4),
+                 cv::Scalar(160, 160, 160), 1);
+        cv::line(img, cv::Point(0, 3 * img.rows / 4),
+                 cv::Point(img.cols - 1, 3 * img.rows / 4),
+                 cv::Scalar(160, 160, 160), 1);
+
+        cv::putText(img, label, cv::Point(15, 30),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 255, 255), 2);
+    }
+
+    void saveLatestPair()
+    {
+        cv::Mat usb;
+        cv::Mat csi;
+        double dt = 0.0;
+        uint64_t usb_seq = 0;
+
+        {
+            std::lock_guard<std::mutex> lock(display_mutex_);
+            if (latest_usb_raw_.empty() || latest_csi_raw_.empty()) {
+                std::cout << "[SAVE] no synchronized pair available yet\n";
+                return;
+            }
+
+            usb = latest_usb_raw_.clone();
+            csi = latest_csi_raw_.clone();
+            dt = latest_dt_ms_;
+            usb_seq = latest_usb_seq_;
+        }
+
+        namespace fs = std::filesystem;
+        const fs::path dir = "stereo_captures";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+
+        const uint64_t id = ++saved_pairs_;
+        const std::string stem = cv::format("pair_%06llu", (unsigned long long)id);
+
+        const fs::path left_path = dir / (stem + "_ov9281.png");
+        const fs::path right_path = dir / (stem + "_ov5647.png");
+        const fs::path meta_path = dir / (stem + ".txt");
+
+        const bool ok_left = cv::imwrite(left_path.string(), usb);
+        const bool ok_right = cv::imwrite(right_path.string(), csi);
+
+        std::ofstream meta(meta_path);
+        meta << std::fixed << std::setprecision(6);
+        meta << "dt_ms=" << dt << "\n";
+        meta << "usb_seq=" << usb_seq << "\n";
+        meta << "max_stereo_dt_ms=" << MAX_STEREO_DT_MS << "\n";
+
+        if (ok_left && ok_right) {
+            std::cout << "[SAVE] " << stem
+                      << " dt=" << std::showpos << std::fixed
+                      << std::setprecision(3) << dt << " ms"
+                      << std::noshowpos << "\n";
+        } else {
+            std::cout << "[SAVE] failed to write " << stem << "\n";
         }
     }
 
@@ -567,9 +648,14 @@ private:
 
     std::mutex display_mutex_;
     cv::Mat latest_display_;
+    cv::Mat latest_usb_raw_;
+    cv::Mat latest_csi_raw_;
+    double latest_dt_ms_{0.0};
+    uint64_t latest_usb_seq_{0};
 
     std::atomic<uint64_t> accepted_pairs_{0};
     std::atomic<uint64_t> rejected_pairs_{0};
+    std::atomic<uint64_t> saved_pairs_{0};
 };
 
 int main(int argc, char **argv)

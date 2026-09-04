@@ -9,6 +9,8 @@
 #include <glob.h>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/aruco.hpp>
+#include <opencv2/aruco/charuco.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -22,12 +24,18 @@
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <vector>
 
 using namespace libcamera;
 
 static constexpr double MAX_STEREO_DT_MS = 7.0;
+static constexpr int BOARD_SQUARES_X = 7;
+static constexpr int BOARD_SQUARES_Y = 5;
+static constexpr float BOARD_SQUARE_MM = 27.324f;
+static constexpr float BOARD_MARKER_MM = 20.043f;
+static constexpr int MIN_SHARED_FOR_SAVE = 10;
 
 struct UsbFrame {
     uint64_t seq{0};
@@ -38,6 +46,11 @@ struct UsbFrame {
 struct MMapBuf {
     void *ptr{nullptr};
     size_t len{0};
+};
+
+struct CharucoDetection {
+    std::vector<cv::Point2f> corners;
+    std::vector<int> ids;
 };
 
 static int xioctl(int fd, unsigned long request, void *arg)
@@ -487,8 +500,28 @@ private:
                         cv::Mat usb_raw = usb.clone();
                         cv::Mat csi_raw = csi.clone();
 
+                        const CharucoDetection dl = detectCharuco(usb_raw);
+                        const CharucoDetection dr = detectCharuco(csi_raw);
+                        const int shared = countSharedIds(dl, dr);
+
                         drawAlignmentOverlay(usb, "OV9281 USB");
                         drawAlignmentOverlay(csi, "OV5647 CSI");
+                        drawCharuco(usb, dl);
+                        drawCharuco(csi, dr);
+
+                        cv::putText(
+                            usb,
+                            "corners=" + std::to_string(dl.ids.size()),
+                            cv::Point(15, 58),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                            cv::Scalar(0, 255, 255), 2);
+
+                        cv::putText(
+                            csi,
+                            "corners=" + std::to_string(dr.ids.size()),
+                            cv::Point(15, 58),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                            cv::Scalar(0, 255, 255), 2);
 
                         std::vector<cv::Mat> pair{usb, csi};
                         cv::Mat joined;
@@ -496,7 +529,8 @@ private:
 
                         const std::string status =
                             "dt=" + cv::format("%+.3f ms", dt_ms) +
-                            "  max=7.0 ms";
+                            "  shared=" + std::to_string(shared) +
+                            (shared >= MIN_SHARED_FOR_SAVE ? "  SAVE=OK" : "  SAVE=NO");
 
                         cv::putText(joined,
                                     status,
@@ -513,6 +547,7 @@ private:
                             latest_csi_raw_ = csi_raw;
                             latest_dt_ms_ = dt_ms;
                             latest_usb_seq_ = best.seq;
+                            latest_shared_ = shared;
                         }
 
                         ++accepted_pairs_;
@@ -527,6 +562,73 @@ private:
             request->reuse(Request::ReuseBuffers);
             if (camera_->queueRequest(request) < 0)
                 std::cerr << "[CSI] queueRequest failed\n";
+        }
+    }
+
+    CharucoDetection detectCharuco(const cv::Mat &bgr)
+    {
+        CharucoDetection out;
+
+        cv::Mat gray;
+        if (bgr.channels() == 1)
+            gray = bgr;
+        else
+            cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+
+        std::vector<std::vector<cv::Point2f>> marker_corners;
+        std::vector<int> marker_ids;
+
+        auto params = cv::makePtr<cv::aruco::DetectorParameters>();
+        cv::aruco::detectMarkers(
+            gray, charuco_dictionary_,
+            marker_corners, marker_ids, params);
+
+        if (marker_ids.empty())
+            return out;
+
+        cv::Mat cc, ci;
+        const int n = cv::aruco::interpolateCornersCharuco(
+            marker_corners, marker_ids, gray,
+            charuco_board_, cc, ci);
+
+        if (n <= 0 || ci.empty())
+            return out;
+
+        out.corners.reserve(static_cast<size_t>(n));
+        out.ids.reserve(static_cast<size_t>(n));
+
+        for (int i = 0; i < n; ++i) {
+            out.corners.push_back(cc.at<cv::Point2f>(i));
+            out.ids.push_back(ci.at<int>(i));
+        }
+
+        return out;
+    }
+
+    static int countSharedIds(
+        const CharucoDetection &a,
+        const CharucoDetection &b)
+    {
+        std::set<int> ids_a(a.ids.begin(), a.ids.end());
+        int shared = 0;
+        for (int id : b.ids) {
+            if (ids_a.count(id))
+                ++shared;
+        }
+        return shared;
+    }
+
+    static void drawCharuco(
+        cv::Mat &img,
+        const CharucoDetection &d)
+    {
+        for (size_t i = 0; i < d.corners.size(); ++i) {
+            cv::circle(img, d.corners[i], 4,
+                       cv::Scalar(0, 255, 0), 1);
+            cv::putText(img, std::to_string(d.ids[i]),
+                        d.corners[i] + cv::Point2f(4, -4),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.4,
+                        cv::Scalar(0, 255, 0), 1);
         }
     }
 
@@ -566,6 +668,7 @@ private:
         cv::Mat csi;
         double dt = 0.0;
         uint64_t usb_seq = 0;
+        int shared = 0;
 
         {
             std::lock_guard<std::mutex> lock(display_mutex_);
@@ -578,6 +681,13 @@ private:
             csi = latest_csi_raw_.clone();
             dt = latest_dt_ms_;
             usb_seq = latest_usb_seq_;
+            shared = latest_shared_;
+        }
+
+        if (shared < MIN_SHARED_FOR_SAVE) {
+            std::cout << "[SAVE] rejected: shared=" << shared
+                      << " need>=" << MIN_SHARED_FOR_SAVE << "\n";
+            return;
         }
 
         namespace fs = std::filesystem;
@@ -599,10 +709,12 @@ private:
         meta << std::fixed << std::setprecision(6);
         meta << "dt_ms=" << dt << "\n";
         meta << "usb_seq=" << usb_seq << "\n";
+        meta << "shared_charuco_corners=" << shared << "\n";
         meta << "max_stereo_dt_ms=" << MAX_STEREO_DT_MS << "\n";
 
         if (ok_left && ok_right) {
             std::cout << "[SAVE] " << stem
+                      << " shared=" << shared
                       << " dt=" << std::showpos << std::fixed
                       << std::setprecision(3) << dt << " ms"
                       << std::noshowpos << "\n";
@@ -693,12 +805,24 @@ private:
 
     std::atomic<bool> running_{false};
 
+    const cv::aruco::Dictionary dictionary_value_ =
+        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50);
+    const cv::Ptr<cv::aruco::Dictionary> charuco_dictionary_ =
+        cv::makePtr<cv::aruco::Dictionary>(dictionary_value_);
+    const cv::Ptr<cv::aruco::CharucoBoard> charuco_board_ =
+        cv::makePtr<cv::aruco::CharucoBoard>(
+            cv::Size(BOARD_SQUARES_X, BOARD_SQUARES_Y),
+            BOARD_SQUARE_MM / 1000.0f,
+            BOARD_MARKER_MM / 1000.0f,
+            dictionary_value_);
+
     std::mutex display_mutex_;
     cv::Mat latest_display_;
     cv::Mat latest_usb_raw_;
     cv::Mat latest_csi_raw_;
     double latest_dt_ms_{0.0};
     uint64_t latest_usb_seq_{0};
+    int latest_shared_{0};
 
     std::atomic<uint64_t> accepted_pairs_{0};
     std::atomic<uint64_t> rejected_pairs_{0};

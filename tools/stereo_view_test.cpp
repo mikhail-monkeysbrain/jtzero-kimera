@@ -257,9 +257,14 @@ private:
         }
 
         stream_ = sc.stream();
+        csi_width_ = sc.size.width;
+        csi_height_ = sc.size.height;
+        csi_stride_ = sc.stride;
+
         std::cout << "[CSI] configured output: "
                   << sc.size.width << "x" << sc.size.height << " "
-                  << sc.pixelFormat.toString() << "\n";
+                  << sc.pixelFormat.toString()
+                  << " stride=" << sc.stride << "\n";
 
         allocator_ = std::make_unique<FrameBufferAllocator>(camera_);
         if (allocator_->allocate(stream_) < 0) {
@@ -328,21 +333,58 @@ private:
 
     cv::Mat mapCsiBuffer(FrameBuffer *fb)
     {
-        if (!fb || fb->planes().empty())
+        if (!fb || fb->planes().empty() || csi_width_ == 0 || csi_height_ == 0)
             return {};
 
         const auto &plane = fb->planes()[0];
-        const int fd = plane.fd.get();
-        const size_t length = plane.length;
+        const int dma_fd = plane.fd.get();
 
-        void *mem = ::mmap(nullptr, length, PROT_READ, MAP_SHARED, fd, 0);
-        if (mem == MAP_FAILED)
+        // For the diagnostic viewer we only need the Y plane.
+        // Do not assume that libcamera's YUV420 planes are one tightly-packed
+        // 640x720 block: on PiSP they may have offsets/strides in a DMA buffer.
+        const size_t map_len =
+            static_cast<size_t>(plane.offset) +
+            static_cast<size_t>(plane.length);
+
+        if (map_len == 0)
             return {};
 
-        cv::Mat yuv(480 + 240, 640, CV_8UC1, mem);
+        void *base = ::mmap(nullptr, map_len, PROT_READ, MAP_SHARED, dma_fd, 0);
+        if (base == MAP_FAILED) {
+            perror("mmap CSI");
+            return {};
+        }
+
+        const uint8_t *y =
+            static_cast<const uint8_t *>(base) + plane.offset;
+
+        const size_t stride =
+            csi_stride_ > 0 ? static_cast<size_t>(csi_stride_)
+                            : static_cast<size_t>(csi_width_);
+
+        const size_t required =
+            stride * static_cast<size_t>(csi_height_);
+
+        if (required > plane.length) {
+            std::cerr << "[CSI] Y plane too small: length=" << plane.length
+                      << " required=" << required
+                      << " stride=" << stride << "\n";
+            ::munmap(base, map_len);
+            return {};
+        }
+
+        cv::Mat gray(csi_height_,
+                     csi_width_,
+                     CV_8UC1,
+                     const_cast<uint8_t *>(y),
+                     stride);
+
+        // Clone before munmap: returned Mat must own its memory.
+        cv::Mat gray_copy = gray.clone();
+        ::munmap(base, map_len);
+
         cv::Mat bgr;
-        cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR_I420);
-        ::munmap(mem, length);
+        cv::cvtColor(gray_copy, bgr, cv::COLOR_GRAY2BGR);
         return bgr;
     }
 
@@ -515,6 +557,9 @@ private:
     bool camera_started_{false};
     std::unique_ptr<CameraConfiguration> config_;
     Stream *stream_{nullptr};
+    unsigned int csi_width_{0};
+    unsigned int csi_height_{0};
+    unsigned int csi_stride_{0};
     std::unique_ptr<FrameBufferAllocator> allocator_;
     std::vector<std::unique_ptr<Request>> requests_;
 

@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -402,9 +403,7 @@ int main(int argc, char **argv)
 
     std::cout << "\nMono views left   : " << mono_obj_l.size() << "\n";
     std::cout << "Mono views right  : " << mono_obj_r.size() << "\n";
-    std::cout << "Stereo pairs init : " << initial_stereo_pairs << "\n";
-    std::cout << "Stereo pairs final: " << stereo_obj.size() << "\n";
-    std::cout << "Rejected pairs    : " << rejected_stems.size() << "\n";
+    std::cout << "Stereo pairs      : " << stereo_obj.size() << "\n";
 
     if (mono_obj_l.size() < 10 || mono_obj_r.size() < 10) {
         std::cerr << "Need >=10 mono views for each camera\n";

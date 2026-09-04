@@ -550,6 +550,8 @@ private:
                             latest_dt_ms_ = dt_ms;
                             latest_usb_seq_ = best.seq;
                             latest_shared_ = shared;
+                            latest_ov5647_corners_ =
+                                static_cast<int>(dr.ids.size());
                         }
 
                         ++accepted_pairs_;
@@ -668,6 +670,7 @@ private:
     {
         cv::Mat csi;
         double dt = 0.0;
+        int corners = 0;
 
         {
             std::lock_guard<std::mutex> lock(display_mutex_);
@@ -679,6 +682,13 @@ private:
 
             csi = latest_csi_raw_.clone();
             dt = latest_dt_ms_;
+            corners = latest_ov5647_corners_;
+        }
+
+        if (corners < 6) {
+            std::cout << "[SAVE V] rejected: OV5647 corners="
+                      << corners << " need>=6\n";
+            return;
         }
 
         namespace fs = std::filesystem;
@@ -699,9 +709,11 @@ private:
         meta << std::fixed << std::setprecision(6);
         meta << "dt_ms=" << dt << "\n";
         meta << "source=OV5647_CSI\n";
+        meta << "charuco_corners=" << corners << "\n";
 
         if (ok)
-            std::cout << "[SAVE V] " << image_path.string() << "\n";
+            std::cout << "[SAVE V] " << image_path.string()
+                      << " corners=" << corners << "\n";
         else
             std::cout << "[SAVE V] failed to write "
                       << image_path.string() << "\n";
@@ -868,6 +880,7 @@ private:
     double latest_dt_ms_{0.0};
     uint64_t latest_usb_seq_{0};
     int latest_shared_{0};
+    int latest_ov5647_corners_{0};
 
     std::atomic<uint64_t> accepted_pairs_{0};
     std::atomic<uint64_t> rejected_pairs_{0};

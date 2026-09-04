@@ -202,6 +202,89 @@ static double meanEpipolarError(
     return count ? total / static_cast<double>(count) : 0.0;
 }
 
+static double medianOf(std::vector<double> v)
+{
+    if (v.empty())
+        return 0.0;
+
+    std::sort(v.begin(), v.end());
+    const size_t n = v.size();
+
+    if (n & 1)
+        return v[n / 2];
+
+    return 0.5 * (v[n / 2 - 1] + v[n / 2]);
+}
+
+static std::vector<double> rectifiedPairResiduals(
+    const std::vector<std::vector<cv::Point2f>> &left_points,
+    const std::vector<std::vector<cv::Point2f>> &right_points,
+    const cv::Mat &K1,
+    const cv::Mat &D1,
+    const cv::Mat &K2,
+    const cv::Mat &D2,
+    const cv::Mat &R1,
+    const cv::Mat &R2,
+    const cv::Mat &P1,
+    const cv::Mat &P2)
+{
+    std::vector<double> result;
+    result.reserve(left_points.size());
+
+    const double tx = std::abs(P2.at<double>(0, 3));
+    const double ty = std::abs(P2.at<double>(1, 3));
+    const bool vertical_stereo = ty > tx;
+
+    for (size_t i = 0; i < left_points.size(); ++i) {
+        std::vector<cv::Point2f> lr, rr;
+
+        cv::undistortPoints(
+            left_points[i], lr,
+            K1, D1, R1, P1);
+
+        cv::undistortPoints(
+            right_points[i], rr,
+            K2, D2, R2, P2);
+
+        if (lr.empty() || lr.size() != rr.size()) {
+            result.push_back(1e9);
+            continue;
+        }
+
+        double sum = 0.0;
+
+        for (size_t j = 0; j < lr.size(); ++j) {
+            sum += vertical_stereo
+                ? std::abs(double(lr[j].x) - double(rr[j].x))
+                : std::abs(double(lr[j].y) - double(rr[j].y));
+        }
+
+        result.push_back(sum / static_cast<double>(lr.size()));
+    }
+
+    return result;
+}
+
+static double robustOutlierThreshold(const std::vector<double> &errors)
+{
+    if (errors.empty())
+        return 2.5;
+
+    const double med = medianOf(errors);
+
+    std::vector<double> deviations;
+    deviations.reserve(errors.size());
+
+    for (double e : errors)
+        deviations.push_back(std::abs(e - med));
+
+    const double mad = medianOf(deviations);
+
+    // 1.4826 converts MAD to a Gaussian sigma estimate.
+    // Keep a practical floor so normal sub-pixel/low-pixel noise is not over-pruned.
+    return std::max(2.5, med + 2.5 * 1.4826 * mad);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 4) {
@@ -319,7 +402,9 @@ int main(int argc, char **argv)
 
     std::cout << "\nMono views left   : " << mono_obj_l.size() << "\n";
     std::cout << "Mono views right  : " << mono_obj_r.size() << "\n";
-    std::cout << "Stereo pairs      : " << stereo_obj.size() << "\n";
+    std::cout << "Stereo pairs init : " << initial_stereo_pairs << "\n";
+    std::cout << "Stereo pairs final: " << stereo_obj.size() << "\n";
+    std::cout << "Rejected pairs    : " << rejected_stems.size() << "\n";
 
     if (mono_obj_l.size() < 10 || mono_obj_r.size() < 10) {
         std::cerr << "Need >=10 mono views for each camera\n";
@@ -358,9 +443,98 @@ int main(int argc, char **argv)
     const double reproj2 = meanReprojectionError(
         mono_obj_r, mono_img_r, rvecs2, tvecs2, K2, D2);
 
-    cv::Mat R, T, E, F;
+    const size_t initial_stereo_pairs = stereo_obj.size();
+    std::vector<std::string> rejected_stems;
 
-    const double stereo_rms = cv::stereoCalibrate(
+    cv::Mat R, T, E, F;
+    cv::Mat R1, R2, P1, P2, Q;
+    cv::Rect roi1, roi2;
+    double stereo_rms = 0.0;
+
+    // Robust refinement: fit, measure rectified residual per pair,
+    // remove obvious outliers, then fit again. Intrinsics stay fixed.
+    for (int iteration = 0; iteration < 3; ++iteration) {
+        stereo_rms = cv::stereoCalibrate(
+            stereo_obj, stereo_l, stereo_r,
+            K1, D1, K2, D2, image_size,
+            R, T, E, F,
+            cv::CALIB_FIX_INTRINSIC,
+            criteria);
+
+        cv::stereoRectify(
+            K1, D1, K2, D2, image_size,
+            R, T, R1, R2, P1, P2, Q,
+            cv::CALIB_ZERO_DISPARITY, 0.0,
+            image_size, &roi1, &roi2);
+
+        const std::vector<double> pair_errors =
+            rectifiedPairResiduals(
+                stereo_l, stereo_r,
+                K1, D1, K2, D2,
+                R1, R2, P1, P2);
+
+        const double threshold =
+            robustOutlierThreshold(pair_errors);
+
+        std::vector<size_t> keep;
+        std::vector<size_t> reject;
+
+        for (size_t i = 0; i < pair_errors.size(); ++i) {
+            if (pair_errors[i] > threshold)
+                reject.push_back(i);
+            else
+                keep.push_back(i);
+        }
+
+        std::cout << "\n[REFINE " << (iteration + 1) << "]"
+                  << " pairs=" << stereo_obj.size()
+                  << " threshold=" << std::fixed << std::setprecision(3)
+                  << threshold << " px"
+                  << " reject=" << reject.size() << "\n";
+
+        for (size_t idx : reject) {
+            std::cout << "  reject " << stereo_stems[idx]
+                      << " mean_rectified_residual="
+                      << pair_errors[idx] << " px\n";
+        }
+
+        if (reject.empty())
+            break;
+
+        if (keep.size() < static_cast<size_t>(MIN_STEREO_PAIRS)) {
+            std::cout << "  stop: pruning would leave fewer than "
+                      << MIN_STEREO_PAIRS << " stereo pairs\n";
+            break;
+        }
+
+        std::vector<std::vector<cv::Point3f>> new_obj;
+        std::vector<std::vector<cv::Point2f>> new_l;
+        std::vector<std::vector<cv::Point2f>> new_r;
+        std::vector<std::string> new_stems;
+
+        new_obj.reserve(keep.size());
+        new_l.reserve(keep.size());
+        new_r.reserve(keep.size());
+        new_stems.reserve(keep.size());
+
+        for (size_t idx : reject)
+            rejected_stems.push_back(stereo_stems[idx]);
+
+        for (size_t idx : keep) {
+            new_obj.push_back(stereo_obj[idx]);
+            new_l.push_back(stereo_l[idx]);
+            new_r.push_back(stereo_r[idx]);
+            new_stems.push_back(stereo_stems[idx]);
+        }
+
+        stereo_obj.swap(new_obj);
+        stereo_l.swap(new_l);
+        stereo_r.swap(new_r);
+        stereo_stems.swap(new_stems);
+    }
+
+    // Final fit after the last pruning step.
+    stereo_rms = cv::stereoCalibrate(
         stereo_obj, stereo_l, stereo_r,
         K1, D1, K2, D2, image_size,
         R, T, E, F,
@@ -370,14 +544,74 @@ int main(int argc, char **argv)
     const double epi_error =
         meanEpipolarError(stereo_l, stereo_r, F);
 
-    cv::Mat R1, R2, P1, P2, Q;
-    cv::Rect roi1, roi2;
-
     cv::stereoRectify(
         K1, D1, K2, D2, image_size,
         R, T, R1, R2, P1, P2, Q,
         cv::CALIB_ZERO_DISPARITY, 0.0,
         image_size, &roi1, &roi2);
+
+    const std::vector<double> final_pair_errors =
+        rectifiedPairResiduals(
+            stereo_l, stereo_r,
+            K1, D1, K2, D2,
+            R1, R2, P1, P2);
+
+    std::vector<double> final_all_corner_residuals;
+    for (size_t i = 0; i < stereo_l.size(); ++i) {
+        std::vector<cv::Point2f> lr, rr;
+
+        cv::undistortPoints(
+            stereo_l[i], lr,
+            K1, D1, R1, P1);
+
+        cv::undistortPoints(
+            stereo_r[i], rr,
+            K2, D2, R2, P2);
+
+        const bool vertical_stereo =
+            std::abs(P2.at<double>(1, 3)) >
+            std::abs(P2.at<double>(0, 3));
+
+        for (size_t j = 0; j < lr.size(); ++j) {
+            final_all_corner_residuals.push_back(
+                vertical_stereo
+                    ? std::abs(double(lr[j].x) - double(rr[j].x))
+                    : std::abs(double(lr[j].y) - double(rr[j].y)));
+        }
+    }
+
+    const double final_rect_mean =
+        final_all_corner_residuals.empty()
+            ? 0.0
+            : std::accumulate(
+                  final_all_corner_residuals.begin(),
+                  final_all_corner_residuals.end(),
+                  0.0) /
+              static_cast<double>(final_all_corner_residuals.size());
+
+    const double final_rect_median =
+        medianOf(final_all_corner_residuals);
+
+    std::sort(
+        final_all_corner_residuals.begin(),
+        final_all_corner_residuals.end());
+
+    const size_t p95_idx =
+        final_all_corner_residuals.empty()
+            ? 0
+            : static_cast<size_t>(
+                  std::floor(
+                      0.95 * (final_all_corner_residuals.size() - 1)));
+
+    const double final_rect_p95 =
+        final_all_corner_residuals.empty()
+            ? 0.0
+            : final_all_corner_residuals[p95_idx];
+
+    const double final_rect_max =
+        final_all_corner_residuals.empty()
+            ? 0.0
+            : final_all_corner_residuals.back();
 
     if (!output.parent_path().empty())
         fs::create_directories(output.parent_path());
@@ -396,13 +630,19 @@ int main(int argc, char **argv)
     out << "marker_length_mm" << marker_mm;
     out << "mono_views_left" << static_cast<int>(mono_obj_l.size());
     out << "mono_views_right" << static_cast<int>(mono_obj_r.size());
-    out << "stereo_pairs" << static_cast<int>(stereo_obj.size());
+    out << "stereo_pairs_initial" << static_cast<int>(initial_stereo_pairs);
+    out << "stereo_pairs_final" << static_cast<int>(stereo_obj.size());
+    out << "rejected_stereo_pairs" << static_cast<int>(rejected_stems.size());
     out << "rms_left" << rms1;
     out << "rms_right" << rms2;
     out << "mean_reprojection_left_px" << reproj1;
     out << "mean_reprojection_right_px" << reproj2;
     out << "rms_stereo" << stereo_rms;
     out << "mean_epipolar_error_px" << epi_error;
+    out << "rectified_mean_residual_px" << final_rect_mean;
+    out << "rectified_median_residual_px" << final_rect_median;
+    out << "rectified_p95_residual_px" << final_rect_p95;
+    out << "rectified_max_residual_px" << final_rect_max;
     out << "baseline_m" << cv::norm(T);
     out << "K1" << K1;
     out << "D1" << D1;
@@ -417,6 +657,17 @@ int main(int argc, char **argv)
     out << "P1" << P1;
     out << "P2" << P2;
     out << "Q" << Q;
+
+    out << "rejected_pair_stems" << "[";
+    for (const std::string &stem : rejected_stems)
+        out << stem;
+    out << "]";
+
+    out << "final_pair_stems" << "[";
+    for (const std::string &stem : stereo_stems)
+        out << stem;
+    out << "]";
+
     out.release();
 
     std::cout << std::fixed << std::setprecision(6);
@@ -432,6 +683,10 @@ int main(int argc, char **argv)
     std::cout << "Right mean reproj : " << reproj2 << " px\n";
     std::cout << "Stereo RMS        : " << stereo_rms << " px\n";
     std::cout << "Epipolar error    : " << epi_error << " px\n";
+    std::cout << "Rect mean residual: " << final_rect_mean << " px\n";
+    std::cout << "Rect median resid : " << final_rect_median << " px\n";
+    std::cout << "Rect p95 residual : " << final_rect_p95 << " px\n";
+    std::cout << "Rect max residual : " << final_rect_max << " px\n";
     std::cout << "Baseline          : " << cv::norm(T) * 1000.0 << " mm\n";
     std::cout << "Calibration file  : " << output << "\n";
     std::cout << "========================================\n";

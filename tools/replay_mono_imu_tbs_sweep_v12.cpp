@@ -205,9 +205,9 @@ int main(int argc,char**argv){
     loadLegWindows(legs_path,kf_time,&gates,&leg_windows);
     VIO::VioParams vp(params);if(vp.camera_params_.empty())throw std::runtime_error("No camera params loaded");
     const gtsam::Pose3 old_pose=vp.camera_params_.at(0).body_Pose_cam_;
-    const gtsam::Rot3 corr=gtsam::Rot3::Rx(corr_roll_deg*M_PI/180.0).compose(
-                           gtsam::Rot3::Ry(corr_pitch_deg*M_PI/180.0));
-    vp.camera_params_.at(0).body_Pose_cam_=gtsam::Pose3(corr.compose(old_pose.rotation()),old_pose.translation());
+    const gtsam::Rot3 tbs_corr=gtsam::Rot3::Rx(corr_roll_deg*M_PI/180.0).compose(
+                               gtsam::Rot3::Ry(corr_pitch_deg*M_PI/180.0));
+    vp.camera_params_.at(0).body_Pose_cam_=gtsam::Pose3(tbs_corr.compose(old_pose.rotation()),old_pose.translation());
     const auto tt=vp.camera_params_.at(0).body_Pose_cam_.translation();const Eigen::Vector3d tbc(tt.x(),tt.y(),tt.z());
     std::cout<<"[TBS] correction roll="<<corr_roll_deg<<" deg pitch="<<corr_pitch_deg<<" deg\n";
     pipe=std::make_shared<HudPipeline>(vp);pipe->installBackendCallback();worker=std::thread([pipe](){pipe->spin();});started=true;

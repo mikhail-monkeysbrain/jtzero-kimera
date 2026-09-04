@@ -35,7 +35,7 @@ static constexpr int BOARD_SQUARES_X = 7;
 static constexpr int BOARD_SQUARES_Y = 5;
 static constexpr float BOARD_SQUARE_MM = 27.324f;
 static constexpr float BOARD_MARKER_MM = 20.043f;
-static constexpr int MIN_SHARED_FOR_SAVE = 10;
+static constexpr int MIN_SHARED_FOR_SAVE = 6;
 
 struct UsbFrame {
     uint64_t seq{0};

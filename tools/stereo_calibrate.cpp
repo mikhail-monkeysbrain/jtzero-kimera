@@ -280,16 +280,20 @@ int main(int argc, char **argv)
     const float marker_m =
         static_cast<float>(marker_mm / 1000.0);
 
-    const auto dictionary =
+    const cv::aruco::Dictionary dictionary_value =
         cv::aruco::getPredefinedDictionary(
             cv::aruco::DICT_4X4_50);
+
+    const cv::Ptr<cv::aruco::Dictionary> dictionary =
+        cv::makePtr<cv::aruco::Dictionary>(
+            dictionary_value);
 
     const auto board =
         cv::makePtr<cv::aruco::CharucoBoard>(
             cv::Size(BOARD_SQUARES_X, BOARD_SQUARES_Y),
             square_m,
             marker_m,
-            dictionary);
+            dictionary_value);
 
     const std::vector<cv::Point3f> board_corners =
         board->getChessboardCorners();

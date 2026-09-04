@@ -31,10 +31,10 @@ struct Detection {
 struct PairStats {
     std::string stem;
     int shared{0};
-    double mean_abs_dy{0.0};
-    double median_abs_dy{0.0};
-    double p95_abs_dy{0.0};
-    double max_abs_dy{0.0};
+    double mean_abs_epi{0.0};
+    double median_abs_epi{0.0};
+    double p95_abs_epi{0.0};
+    double max_abs_epi{0.0};
 };
 
 static std::vector<PairFiles> findPairs(const fs::path &dir)
@@ -200,6 +200,21 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    const double p2_tx =
+        P2.rows >= 2 && P2.cols >= 4 ? std::abs(P2.at<double>(0, 3)) : 0.0;
+    const double p2_ty =
+        P2.rows >= 2 && P2.cols >= 4 ? std::abs(P2.at<double>(1, 3)) : 0.0;
+
+    const bool vertical_stereo = p2_ty > p2_tx;
+
+    std::cout << "Rectification type : "
+              << (vertical_stereo ? "VERTICAL stereo (disparity along Y)" :
+                                    "HORIZONTAL stereo (disparity along X)")
+              << "\n";
+    std::cout << "Check residual     : "
+              << (vertical_stereo ? "|dx|" : "|dy|")
+              << "\n\n";
+
     const cv::aruco::Dictionary dictionary_value =
         cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50);
 
@@ -226,7 +241,7 @@ int main(int argc, char **argv)
     fs::create_directories(preview_dir);
 
     std::vector<PairStats> stats;
-    std::vector<double> all_abs_dy;
+    std::vector<double> all_abs_epi;
 
     std::cout << "========================================\n";
     std::cout << " JT-Zero stereo rectification check\n";
@@ -273,39 +288,40 @@ int main(int argc, char **argv)
             K2, D2,
             R2, P2);
 
-        std::vector<double> abs_dy;
-        abs_dy.reserve(lrect.size());
+        std::vector<double> abs_epi;
+        abs_epi.reserve(lrect.size());
 
         for (size_t i = 0; i < lrect.size(); ++i) {
-            const double dy =
-                std::abs(double(lrect[i].y) -
-                         double(rrect[i].y));
+            const double residual =
+                vertical_stereo
+                    ? std::abs(double(lrect[i].x) - double(rrect[i].x))
+                    : std::abs(double(lrect[i].y) - double(rrect[i].y));
 
-            abs_dy.push_back(dy);
-            all_abs_dy.push_back(dy);
+            abs_epi.push_back(residual);
+            all_abs_epi.push_back(residual);
         }
 
         const double mean =
-            std::accumulate(abs_dy.begin(), abs_dy.end(), 0.0) /
-            static_cast<double>(abs_dy.size());
+            std::accumulate(abs_epi.begin(), abs_epi.end(), 0.0) /
+            static_cast<double>(abs_epi.size());
 
         PairStats ps;
         ps.stem = pair.stem;
-        ps.shared = static_cast<int>(abs_dy.size());
-        ps.mean_abs_dy = mean;
-        ps.median_abs_dy = percentile(abs_dy, 0.50);
-        ps.p95_abs_dy = percentile(abs_dy, 0.95);
-        ps.max_abs_dy = *std::max_element(abs_dy.begin(), abs_dy.end());
+        ps.shared = static_cast<int>(abs_epi.size());
+        ps.mean_abs_epi = mean;
+        ps.median_abs_epi = percentile(abs_epi, 0.50);
+        ps.p95_abs_epi = percentile(abs_epi, 0.95);
+        ps.max_abs_epi = *std::max_element(abs_epi.begin(), abs_epi.end());
 
         stats.push_back(ps);
 
         std::cout
             << "[PAIR] " << std::setw(11) << pair.stem
             << " shared=" << std::setw(2) << ps.shared
-            << " mean|dy|=" << std::fixed << std::setprecision(3)
-            << ps.mean_abs_dy
-            << " p95=" << ps.p95_abs_dy
-            << " max=" << ps.max_abs_dy
+            << " mean|epi|=" << std::fixed << std::setprecision(3)
+            << ps.mean_abs_epi
+            << " p95=" << ps.p95_abs_epi
+            << " max=" << ps.max_abs_epi
             << " px\n";
 
         cv::Mat left_color, right_color;
@@ -366,17 +382,27 @@ int main(int argc, char **argv)
         cv::Mat joined;
         cv::hconcat(rl, rr, joined);
 
-        for (int y = 30; y < joined.rows; y += 30) {
-            cv::line(
-                joined,
-                cv::Point(0, y),
-                cv::Point(joined.cols - 1, y),
-                cv::Scalar(0,255,0), 1);
+        if (vertical_stereo) {
+            for (int x = 30; x < rl.cols; x += 30) {
+                cv::line(rl, cv::Point(x, 0), cv::Point(x, rl.rows - 1),
+                         cv::Scalar(0,255,0), 1);
+                cv::line(rr, cv::Point(x, 0), cv::Point(x, rr.rows - 1),
+                         cv::Scalar(0,255,0), 1);
+            }
+            cv::hconcat(rl, rr, joined);
+        } else {
+            for (int y = 30; y < joined.rows; y += 30) {
+                cv::line(
+                    joined,
+                    cv::Point(0, y),
+                    cv::Point(joined.cols - 1, y),
+                    cv::Scalar(0,255,0), 1);
+            }
         }
 
         cv::putText(
             joined,
-            "mean|dy|=" + cv::format("%.3f px", ps.mean_abs_dy),
+            "mean|epi|=" + cv::format("%.3f px", ps.mean_abs_epi),
             cv::Point(15, joined.rows - 18),
             cv::FONT_HERSHEY_SIMPLEX,
             0.65,
@@ -396,31 +422,31 @@ int main(int argc, char **argv)
     std::sort(
         stats.begin(), stats.end(),
         [](const PairStats &a, const PairStats &b) {
-            return a.mean_abs_dy > b.mean_abs_dy;
+            return a.mean_abs_epi > b.mean_abs_epi;
         });
 
     const double global_mean =
         std::accumulate(
-            all_abs_dy.begin(),
-            all_abs_dy.end(),
+            all_abs_epi.begin(),
+            all_abs_epi.end(),
             0.0) /
-        static_cast<double>(all_abs_dy.size());
+        static_cast<double>(all_abs_epi.size());
 
     std::cout << "\n========================================\n";
     std::cout << " GLOBAL\n";
     std::cout << "========================================\n";
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "Pairs evaluated   : " << stats.size() << "\n";
-    std::cout << "Corners evaluated : " << all_abs_dy.size() << "\n";
-    std::cout << "mean |dy|         : " << global_mean << " px\n";
-    std::cout << "median |dy|       : "
-              << percentile(all_abs_dy, 0.50) << " px\n";
-    std::cout << "p95 |dy|          : "
-              << percentile(all_abs_dy, 0.95) << " px\n";
-    std::cout << "max |dy|          : "
+    std::cout << "Corners evaluated : " << all_abs_epi.size() << "\n";
+    std::cout << "mean |epi|         : " << global_mean << " px\n";
+    std::cout << "median |epi|       : "
+              << percentile(all_abs_epi, 0.50) << " px\n";
+    std::cout << "p95 |epi|          : "
+              << percentile(all_abs_epi, 0.95) << " px\n";
+    std::cout << "max |epi|          : "
               << *std::max_element(
-                     all_abs_dy.begin(),
-                     all_abs_dy.end())
+                     all_abs_epi.begin(),
+                     all_abs_epi.end())
               << " px\n";
 
     std::cout << "\nWorst pairs:\n";
@@ -432,9 +458,9 @@ int main(int argc, char **argv)
         std::cout
             << "  " << stats[i].stem
             << " shared=" << stats[i].shared
-            << " mean|dy|=" << stats[i].mean_abs_dy
-            << " p95=" << stats[i].p95_abs_dy
-            << " max=" << stats[i].max_abs_dy
+            << " mean|epi|=" << stats[i].mean_abs_epi
+            << " p95=" << stats[i].p95_abs_epi
+            << " max=" << stats[i].max_abs_epi
             << " px\n";
     }
 

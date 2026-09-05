@@ -12,7 +12,11 @@
   std::snprintf(b,sizeof(b),"ПРОХОД %d / %d",std::min(leg+1,kLegCount),kLegCount);
   ru(panel,b,{18,55},25,{245,245,245},cv::QT_FONT_BOLD);
 #ifdef JTZERO_B_FIRST_HUD
+  #ifdef JTZERO_B_FIRST_FLAG
+  ru(panel,((leg%2==0)^JTZERO_B_FIRST_FLAG)?"A  →  B":"B  →  A",{18,105},30,{0,230,255},cv::QT_FONT_BOLD);
+  #else
   ru(panel,((leg%2==0)^gV23BFirst)?"A  →  B":"B  →  A",{18,105},30,{0,230,255},cv::QT_FONT_BOLD);
+  #endif
 #else
   ru(panel,(leg%2==0)?"A  →  B":"B  →  A",{18,105},30,{0,230,255},cv::QT_FONT_BOLD);
 #endif

@@ -11,7 +11,11 @@
   char b[256];
   std::snprintf(b,sizeof(b),"ПРОХОД %d / %d",std::min(leg+1,kLegCount),kLegCount);
   ru(panel,b,{18,55},25,{245,245,245},cv::QT_FONT_BOLD);
+#ifdef JTZERO_B_FIRST_HUD
+  ru(panel,((leg%2==0)^gV23BFirst)?"A  →  B":"B  →  A",{18,105},30,{0,230,255},cv::QT_FONT_BOLD);
+#else
   ru(panel,(leg%2==0)?"A  →  B":"B  →  A",{18,105},30,{0,230,255},cv::QT_FONT_BOLD);
+#endif
 
   VioState s; const bool have_state=pipeline.latest(&s);
   ru(panel,have_state?"КООРДИНАТЫ: ЕСТЬ":"КООРДИНАТЫ: НЕТ",{18,160},18,

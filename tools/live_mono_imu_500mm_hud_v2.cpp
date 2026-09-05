@@ -92,6 +92,22 @@ struct VioState {
   double px = 0, py = 0, pz = 0, vx = 0, vy = 0, vz = 0;
   double roll_deg = 0, pitch_deg = 0, yaw_deg = 0;
 };
+
+struct FrontendDebugState {
+  int64_t timestamp_ns = 0;
+  int64_t callback_wall_ns = 0;
+  int64_t frame_id = -1;
+  bool is_keyframe = false;
+  size_t detected_features = 0;
+  size_t tracked_features = 0;
+  size_t mono_inliers = 0;
+  size_t mono_putatives = 0;
+  size_t mono_ransac_iters = 0;
+  double feature_detection_time_s = 0.0;
+  double feature_tracking_time_s = 0.0;
+  double mono_ransac_time_s = 0.0;
+  std::string mono_status = "NO_STATUS";
+};
 struct MeanState {
   bool valid = false; size_t count = 0;
   double px = 0, py = 0, pz = 0, vx = 0, vy = 0, vz = 0;
@@ -226,11 +242,41 @@ class HudPipeline final : public VIO::MonoImuPipeline {
       if ((s.keyframe%10)==0) std::cout<<std::fixed<<std::setprecision(4)<<"[VIO] kf="<<s.keyframe<<" P=["<<s.px<<','<<s.py<<','<<s.pz<<"] V=["<<s.vx<<','<<s.vy<<','<<s.vz<<"] RPYdeg=["<<s.roll_deg<<','<<s.pitch_deg<<','<<s.yaw_deg<<"]\n";
     });
   }
+  void installFrontendDebugCallback() {
+    registerFrontendOutputCallback([this](const std::shared_ptr<VIO::FrontendOutputPacketBase>& out) {
+      if (!out) return;
+      FrontendDebugState d;
+      d.timestamp_ns = out->timestamp_;
+      d.callback_wall_ns = monotonicNs();
+      d.is_keyframe = out->is_keyframe_;
+      if (const auto* frame = out->getTrackingFrame()) d.frame_id = frame->id_;
+      const auto& info = out->debug_tracker_info_;
+      d.detected_features = info.nrDetectedFeatures_;
+      d.tracked_features = info.nrTrackerFeatures_;
+      d.mono_inliers = info.nrMonoInliers_;
+      d.mono_putatives = info.nrMonoPutatives_;
+      d.mono_ransac_iters = info.monoRansacIters_;
+      d.feature_detection_time_s = info.featureDetectionTime_;
+      d.feature_tracking_time_s = info.featureTrackingTime_;
+      d.mono_ransac_time_s = info.monoRansacTime_;
+      if (const auto* status = out->getTrackerStatus()) {
+        d.mono_status = VIO::TrackerStatusSummary::asString(status->kfTrackingStatus_mono_);
+      }
+      std::lock_guard<std::mutex> lock(mutex_);
+      frontend_states_.push_back(std::move(d));
+    });
+  }
   bool latest(VioState* out) const { std::lock_guard<std::mutex> l(mutex_); if(!have_latest_) return false; *out=latest_; return true; }
   JumpEvent lastJump() const { std::lock_guard<std::mutex> l(mutex_); return jump_; }
   std::vector<VioState> states() const { std::lock_guard<std::mutex> l(mutex_); return states_; }
+  std::vector<FrontendDebugState> frontendStates() const { std::lock_guard<std::mutex> l(mutex_); return frontend_states_; }
  private:
-  mutable std::mutex mutex_; bool have_latest_=false; VioState latest_; JumpEvent jump_; std::vector<VioState> states_;
+  mutable std::mutex mutex_;
+  bool have_latest_=false;
+  VioState latest_;
+  JumpEvent jump_;
+  std::vector<VioState> states_;
+  std::vector<FrontendDebugState> frontend_states_;
 };
 
 MeanState meanWindow(const std::vector<VioState>& states,int64_t begin_ns,int64_t end_ns) {

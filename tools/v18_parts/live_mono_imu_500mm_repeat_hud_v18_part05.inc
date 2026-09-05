@@ -13,8 +13,8 @@
 }
 
 void saveBackendTraceV8(const std::vector<VioState>& states,
-                        const std::vector<V8Leg>& rows) {
-  const char* path = "/home/vio/jtzero_500mm_v18_backend.csv";
+                        const std::vector<V8Leg>& rows,
+                        const char* path = "/home/vio/jtzero_500mm_v18_backend.csv") {
   std::ofstream f(path, std::ios::trunc);
   if (!f) return;
 

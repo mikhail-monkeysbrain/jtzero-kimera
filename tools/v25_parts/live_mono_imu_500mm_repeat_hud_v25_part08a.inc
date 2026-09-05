@@ -25,7 +25,7 @@
       }}}
       if(pending&&monotonicNs()-pending>20000000LL)pending=0;
 
-      if(pf[0].revents&POLLIN){for(;;){v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(camera_fd,VIDIOC_DQBUF,&b)==-1){if(errno==EAGAIN)break;fail("DQBUF");}++raw;const int64_t raw_ts_ns=timevalToNs(b.timestamp);const int64_t corrected=jtzero::timesync::correctCameraTimestampNs(raw_ts_ns);
+      if(pf[0].revents&POLLIN){for(;;){v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(camera_fd,VIDIOC_DQBUF,&b)==-1){if(errno==EAGAIN)break;fail("DQBUF");}++raw;last_camera_frame_wall_ns=monotonicNs();const int64_t raw_ts_ns=timevalToNs(b.timestamp);const int64_t corrected=jtzero::timesync::correctCameraTimestampNs(raw_ts_ns);
         // V25 diagnostic: do NOT synchronously write raw MJPEG in the acquisition loop.
         // This isolates filesystem/write stalls from camera + MAVLink ingestion.
         const uint64_t this_offset=0;

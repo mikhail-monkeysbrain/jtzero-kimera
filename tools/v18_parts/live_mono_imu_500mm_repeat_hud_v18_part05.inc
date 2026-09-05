@@ -76,8 +76,16 @@ void printSummaryV8(const std::vector<V8Leg>& rows,size_t raw,size_t rejected,
                     size_t selected,size_t decoded,size_t imu_rx,size_t imu_fed,
                     size_t att_rx,size_t sync_count,const ClockMapping& mapping,
                     size_t states) {
-  std::cout << "\n================ 500 MM x6 V18 RESULT ================\n"
-            << "fusion: v7 static-only gravity feedback\n"
+#ifdef JTZERO_SUMMARY_TITLE
+  std::cout << "\n================ " << JTZERO_SUMMARY_TITLE << " ================\n";
+#else
+  std::cout << "\n================ 500 MM x6 V18 RESULT ================\n";
+#endif
+#ifdef JTZERO_SUMMARY_FUSION
+  std::cout << "fusion: " << JTZERO_SUMMARY_FUSION << "\n";
+#else
+  std::cout << "fusion: v7 static-only gravity feedback\n";
+#endif
             << "startup convergence gate: " << kPostStartupWarmupSec << " s + " << kWarmupStableStatesNeeded << " stable backend states\n"
             << "endpoint capture: " << kStableStatesNeeded << " stable backend states, |V| <= "
             << kStableMaxSpeedMps*1000.0 << " mm/s, span <= " << kStableMaxSpanM*1000.0 << " mm\n"

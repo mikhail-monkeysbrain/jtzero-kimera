@@ -1,1 +1,11 @@
-#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part01.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part02.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part03.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part04.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part05.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part06a.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part06b.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part07a.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part07b.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part08a.inc"\n#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part08b.inc"\n
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part01.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part02.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part03.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part04.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part05.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part06a.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part06b.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part07a.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part07b.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part08a.inc"
+#include "v19_parts/live_mono_imu_500mm_repeat_hud_v19_part08b.inc"

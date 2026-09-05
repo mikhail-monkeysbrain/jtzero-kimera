@@ -63,9 +63,9 @@ for root in roots:
             rows.append(dict(b=b,fr=fr,dv=dv,dba=dba,dp=dp,dba0=dba0,v=v,ratio=ratio))
 
         # Data-driven event candidates. These are diagnostic rankings, not BAD/GOOD truth labels.
-        dv_vals=sorted((r["dv"],i) for i,r in enumerate(rows[1:]), reverse=True)
-        dba_vals=sorted((r["dba"],i) for i,r in enumerate(rows[1:]), reverse=True)
-        ratio_vals=sorted((r["ratio"],i) for i,r in enumerate(rows) if math.isfinite(r["ratio"]))
+        dv_vals=sorted(((r["dv"],i) for i,r in enumerate(rows[1:])), reverse=True)
+        dba_vals=sorted(((r["dba"],i) for i,r in enumerate(rows[1:])), reverse=True)
+        ratio_vals=sorted(((r["ratio"],i) for i,r in enumerate(rows) if math.isfinite(r["ratio"])))
         status_changes=[]
         for i in range(1,len(rows)):
             a=rows[i-1]["fr"]; b=rows[i]["fr"]

@@ -2,7 +2,11 @@
 #include "v18_parts/live_mono_imu_500mm_repeat_hud_v18_part02.inc"
 #include "v18_parts/live_mono_imu_500mm_repeat_hud_v18_part03.inc"
 #include "v18_parts/live_mono_imu_500mm_repeat_hud_v18_part04.inc"
+#define JTZERO_SUMMARY_TITLE "500 MM x2 V23 RESULT"
+#define JTZERO_SUMMARY_FUSION "pure FRD->FLU, ZXY OFF, gravity feedback OFF"
 #include "v18_parts/live_mono_imu_500mm_repeat_hud_v18_part05.inc"
+#undef JTZERO_SUMMARY_FUSION
+#undef JTZERO_SUMMARY_TITLE
 #include "v18_parts/live_mono_imu_500mm_repeat_hud_v18_part06a.inc"
 #define JTZERO_B_FIRST_HUD
 #include "v18_parts/live_mono_imu_500mm_repeat_hud_v18_part06b.inc"

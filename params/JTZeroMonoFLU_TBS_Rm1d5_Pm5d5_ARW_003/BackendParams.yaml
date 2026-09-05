@@ -62,9 +62,18 @@ betweenTranslationPrecision: 100 # 1/(0.1*0.1)
 # OPTIMIZATION PARAMETERS #####################################################
 relinearizeThreshold: 0.01
 relinearizeSkip: 1
-zero_velocity_precision: 1000
-no_motion_position_precision: 1000
-no_motion_rotation_precision: 10000
+# JT-ZERO bench-validated stationary constraints.
+# LOW_DISPARITY means the tracker has classified the platform as stationary.
+# Precision = 1 / variance. These values correspond approximately to:
+#   velocity sigma = 5 mm/s
+#   no-motion position sigma = 5 mm
+#   no-motion rotation sigma = 0.105 deg
+# The previous 1000/1000/10000 settings allowed ~31.6 mm/s residual velocity
+# and ~31.6 mm positional uncertainty while stationary, which caused long
+# post-stop settling and direction-dependent 500 mm scale errors.
+zero_velocity_precision: 40000
+no_motion_position_precision: 40000
+no_motion_rotation_precision: 300000
 constant_vel_precision: 100
 numOptimize: 1
 nr_states: 25 # number of nodes in horizon.

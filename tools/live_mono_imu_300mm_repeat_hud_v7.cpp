@@ -28,7 +28,11 @@
 
 namespace {
 constexpr double kTruthM = 0.300;
+#ifndef JTZERO_LEG_COUNT
 constexpr int kLegCount = 6;
+#else
+constexpr int kLegCount = JTZERO_LEG_COUNT;
+#endif
 constexpr int kFcAttitudeRateHz = 50;
 constexpr double kMaxLegErrorM = 0.060;
 constexpr double kMaxStdM = 0.040;

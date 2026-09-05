@@ -51,6 +51,14 @@
           start_press.s=s;start_press.valid=true;stable.reset();phase=CapturePhase::SETTLE_START;notice="НЕ ДВИГАТЬ — ФИКСИРУЮ СТАРТ";notice_until=monotonicNs()+1500000000LL;std::cout<<"LEG "<<leg+1<<" START key accepted KF="<<s.keyframe<<" event_wall_ns="<<event_wall_ns<<" state_ts="<<s.timestamp_ns<<" cb_wall_ns="<<s.callback_wall_ns<<" age_ms="<<(event_wall_ns-s.callback_wall_ns)/1e6<<" [settling]\n";}
         else if(phase==CapturePhase::MOVING){
           const int64_t event_wall_ns=monotonicNs();
+          const double end_backend_age_ms=(event_wall_ns-s.callback_wall_ns)/1e6;
+          if(end_backend_age_ms>kV25MaxStartBackendAgeMs){
+            notice="END INVALID — BACKEND СЛИШКОМ СТАРЫЙ";
+            notice_until=monotonicNs()+2500000000LL;
+            std::cout<<"LEG "<<leg+1<<" END REJECTED backend_age="<<end_backend_age_ms
+                     <<" ms > "<<kV25MaxStartBackendAgeMs<<" ms\n";
+            continue;
+          }
           if(v25_events){
             v25_events<<event_wall_ns<<",END,"<<(leg+1)<<","<<static_cast<int>(phase)<<","<<s.keyframe<<","<<s.timestamp_ns<<","<<s.callback_wall_ns<<","<<(event_wall_ns-s.callback_wall_ns)/1e6<<","<<s.px<<","<<s.py<<","<<s.pz<<","<<s.vx<<","<<s.vy<<","<<s.vz<<"\n";
             v25_events.flush();

@@ -18,7 +18,7 @@ void saveBackendTraceV8(const std::vector<VioState>& states,
   std::ofstream f(path, std::ios::trunc);
   if (!f) return;
 
-  f << "leg,phase,keyframe,timestamp_ns,"
+  f << "leg,phase,keyframe,timestamp_ns,callback_wall_ns,"
        "px_m,py_m,pz_m,vx_m_s,vy_m_s,vz_m_s,"
        "speed_m_s,roll_deg,pitch_deg,yaw_deg,"
        "bgx,bgy,bgz,bax,bay,baz\n";
@@ -58,6 +58,7 @@ void saveBackendTraceV8(const std::vector<VioState>& states,
       << phase << ','
       << s.keyframe << ','
       << s.timestamp_ns << ','
+      << s.callback_wall_ns << ','
       << s.px << ',' << s.py << ',' << s.pz << ','
       << s.vx << ',' << s.vy << ',' << s.vz << ','
       << speed << ','

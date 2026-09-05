@@ -30,7 +30,7 @@ for L in legs:
     cw=[r for r in sel if t0<=iv(r,"corrected_timestamp_ns")<=t1]
     kdt=[]; kdp=[]; kxy=[]; frames_per_kf=[]
     for a,b in zip(bw,bw[1:]):
-        dt=(iv(b,"timestamp_ns")-iv(a,"timestamp_ns"))*1e-3/1e6 # ms
+        dt=(iv(b,"timestamp_ns")-iv(a,"timestamp_ns"))/1e6 # ns -> ms
         dx=fv(b,"px_m")-fv(a,"px_m");dy=fv(b,"py_m")-fv(a,"py_m");dz=fv(b,"pz_m")-fv(a,"pz_m")
         kdt.append(dt);kdp.append(1000*math.sqrt(dx*dx+dy*dy+dz*dz));kxy.append(1000*math.hypot(dx,dy))
     if len(bw)>=2:

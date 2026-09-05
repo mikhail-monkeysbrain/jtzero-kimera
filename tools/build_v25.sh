@@ -4,14 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIMERA_ROOT="${KIMERA_ROOT:-/home/vio/Kimera-VIO}"
 OUT="${1:-/tmp/live_mono_imu_500mm_repeat_hud_v25}"
-
 CXX="${CXX:-g++}"
 
 OPENCV_CFLAGS="$(pkg-config --cflags opencv4)"
 OPENCV_LIBS="$(pkg-config --libs opencv4)"
 
 MAVLINK_INC=""
-for d in   "$KIMERA_ROOT/third_party/mavlink/include/mavlink/v2.0"   "$KIMERA_ROOT/third_party/mavlink/include"   "/usr/local/include/mavlink/v2.0"   "/usr/local/include/mavlink"; do
+for d in   "$KIMERA_ROOT/third_party/mavlink"   "$KIMERA_ROOT/third_party/mavlink/include/mavlink/v2.0"   "$KIMERA_ROOT/third_party/mavlink/include"   "/usr/local/include/mavlink/v2.0"   "/usr/local/include/mavlink"
+do
   if [ -f "$d/common/mavlink.h" ]; then
     MAVLINK_INC="-I$d"
     break
@@ -20,6 +20,7 @@ done
 
 if [ -z "$MAVLINK_INC" ]; then
   echo "ERROR: common/mavlink.h not found" >&2
+  echo "Checked under: $KIMERA_ROOT/third_party/mavlink and /usr/local/include/mavlink*" >&2
   exit 2
 fi
 

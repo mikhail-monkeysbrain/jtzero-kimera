@@ -1,0 +1,55 @@
+%YAML:1.0
+# JT-Zero controlled profile: same as ARW_003 baseline except stronger
+# LOW_DISPARITY stationary constraints.
+# Precision = inverse variance. Baseline 1000 corresponds to sigma ~=31.6 mm/s
+# for zero velocity, which is looser than the V25 endpoint gate (20 mm/s).
+backend_modality: 0
+
+autoInitialize: 1
+roundOnAutoInitialize: 0
+initialPositionSigma: 1e-05
+initialRollPitchSigma: 0.174533
+initialYawSigma: 0.00174533
+initialVelocitySigma: 0.001
+initialAccBiasSigma: 0.1
+initialGyroBiasSigma: 0.01
+
+linearizationMode: 0
+degeneracyMode: 1
+rankTolerance: 1
+landmarkDistanceThreshold: 10
+outlierRejection: 3
+retriangulationThreshold: 0.001
+
+smartNoiseSigma: 3.0
+monoNoiseSigma: 1.8
+monoNormType: 2
+monoNormParam: 4.6851
+stereoNoiseSigma: 1.8
+stereoNormType: 2
+stereoNormParam: 4.6851
+regularityNoiseSigma: 0.03
+regularityNormType: 1
+regularityNormParam: 0.04
+
+addBetweenStereoFactors: 0
+betweenRotationPrecision: 0
+betweenTranslationPrecision: 100
+
+relinearizeThreshold: 0.01
+relinearizeSkip: 1
+# Controlled change vs ARW_003 baseline:
+# zero velocity sigma = 1/sqrt(40000) = 0.005 m/s = 5 mm/s
+zero_velocity_precision: 40000
+# no-motion translation sigma = 5 mm per factor
+no_motion_position_precision: 40000
+# no-motion rotation sigma ~= 0.001826 rad ~= 0.105 deg
+no_motion_rotation_precision: 300000
+constant_vel_precision: 100
+numOptimize: 1
+nr_states: 25
+wildfire_threshold: 0.001
+useDogLeg: 0
+
+pose_guess_source: 0
+mono_translation_scale_factor: 0.1

@@ -23,8 +23,8 @@
 int main(int argc,char**argv){
   google::InitGoogleLogging(argv[0]);
   FLAGS_visualize=false;FLAGS_viz_type=2;FLAGS_use_lcd=false;FLAGS_log_output=false;FLAGS_extract_planes_from_the_scene=false;
-  const std::string params=argc>1?argv[1]:"params/JTZeroMonoFLU";
-  const std::string camera_device=argc>2?argv[2]:kCameraDevice;
+  const std::string params=argc>1?argv[1]:"params/JTZeroMonoFLU_TBS_Rm1d5_Pm5d5";
+  const std::string camera_device=argc>2?argv[2]:"/dev/video8";
   std::cout<<"[CAM] device="<<camera_device<<"\n";
 
   int camera_fd=-1,serial_fd=-1;bool streaming=false,imu_req=false,att_req=false,pipeline_started=false,aborted=false;

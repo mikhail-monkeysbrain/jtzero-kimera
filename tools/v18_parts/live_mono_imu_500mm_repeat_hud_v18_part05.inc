@@ -86,7 +86,7 @@ void printSummaryV8(const std::vector<V8Leg>& rows,size_t raw,size_t rejected,
 #else
   std::cout << "fusion: v7 static-only gravity feedback\n";
 #endif
-            << "startup convergence gate: " << kPostStartupWarmupSec << " s + " << kWarmupStableStatesNeeded << " stable backend states\n"
+  std::cout << "startup convergence gate: " << kPostStartupWarmupSec << " s + " << kWarmupStableStatesNeeded << " stable backend states\n"
             << "endpoint capture: " << kStableStatesNeeded << " stable backend states, |V| <= "
             << kStableMaxSpeedMps*1000.0 << " mm/s, span <= " << kStableMaxSpanM*1000.0 << " mm\n"
             << "raw camera frames: " << raw << "\n"

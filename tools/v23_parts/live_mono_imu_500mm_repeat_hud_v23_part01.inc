@@ -34,6 +34,7 @@ constexpr double kV8MinPairAngleDeg = 160.0;
 constexpr double kV23MaxStartSettleShiftM = 0.005;
 constexpr double kV23MaxStartBackendAgeMs = 300.0;
 constexpr int64_t kV23FatalLoopStallNs = 500000000LL;
+bool gV23BFirst = false;
 
 constexpr double kStartupStaticSec = 3.0;
 constexpr size_t kStartupMinSamples = 450;

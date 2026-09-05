@@ -91,6 +91,8 @@ struct VioState {
   int64_t timestamp_ns = 0, keyframe = 0, callback_wall_ns = 0;
   double px = 0, py = 0, pz = 0, vx = 0, vy = 0, vz = 0;
   double roll_deg = 0, pitch_deg = 0, yaw_deg = 0;
+  double bgx = 0, bgy = 0, bgz = 0;
+  double bax = 0, bay = 0, baz = 0;
 };
 
 struct FrontendDebugState {
@@ -226,9 +228,13 @@ class HudPipeline final : public VIO::MonoImuPipeline {
     registerBackendOutputCallback([this](const std::shared_ptr<VIO::BackendOutput>& out) {
       if (!out) return;
       const auto& st = out->W_State_Blkf_; const auto p = st.pose_.translation(); const auto rpy = st.pose_.rotation().rpy(); const auto& v = st.velocity_;
+      const auto bg = st.imu_bias_.gyroscope();
+      const auto ba = st.imu_bias_.accelerometer();
       VioState s; s.timestamp_ns = st.timestamp_; s.keyframe = out->cur_kf_id_; s.callback_wall_ns = monotonicNs();
       s.px=p.x(); s.py=p.y(); s.pz=p.z(); s.vx=v.x(); s.vy=v.y(); s.vz=v.z();
       s.roll_deg=rpy.x()*180.0/kPi; s.pitch_deg=rpy.y()*180.0/kPi; s.yaw_deg=rpy.z()*180.0/kPi;
+      s.bgx=bg.x(); s.bgy=bg.y(); s.bgz=bg.z();
+      s.bax=ba.x(); s.bay=ba.y(); s.baz=ba.z();
       std::lock_guard<std::mutex> lock(mutex_);
       if (!states_.empty()) {
         const auto& prev = states_.back(); double dx=s.px-prev.px,dy=s.py-prev.py,dz=s.pz-prev.pz;

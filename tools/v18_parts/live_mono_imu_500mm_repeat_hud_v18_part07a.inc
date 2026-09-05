@@ -26,7 +26,11 @@ int main(int argc,char**argv){
   const std::string params=argc>1?argv[1]:"params/JTZeroMonoFLU_TBS_Rm1d5_Pm5d5";
   const std::string camera_device=argc>2?argv[2]:"/dev/video8";
 #ifdef JTZERO_B_FIRST_HUD
+  #ifdef JTZERO_B_FIRST_FLAG
+  JTZERO_B_FIRST_FLAG=(argc>3 && std::string(argv[3])=="B_FIRST");
+  #else
   gV23BFirst=(argc>3 && std::string(argv[3])=="B_FIRST");
+  #endif
 #endif
   std::cout<<"[CAM] device="<<camera_device<<"\n";
 

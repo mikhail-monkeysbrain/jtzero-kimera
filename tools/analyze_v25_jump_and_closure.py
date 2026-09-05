@@ -27,8 +27,23 @@ for root in roots:
     f_by_ts={I(r["timestamp_ns"]):r for r in frontend}
     f_ts=sorted(f_by_ts)
     att.sort(key=lambda r:I(r["recv_ns"]))
-    cam.sort(key=lambda r:I(r["timestamp_ns"]))
-    imu.sort(key=lambda r:I(r["mapped_ns"]) if "mapped_ns" in r and r["mapped_ns"] else I(r["recv_ns"]))
+    def pick_col(rows, candidates):
+        if not rows:
+            return None
+        for c in candidates:
+            if c in rows[0]:
+                return c
+        return None
+
+    cam_ts_col = pick_col(cam, ("source_timestamp_ns", "camera_timestamp_ns",
+                                "capture_timestamp_ns", "timestamp_ns",
+                                "mapped_ns", "recv_ns", "wall_ns"))
+    if cam_ts_col:
+        cam.sort(key=lambda r:I(r[cam_ts_col]))
+
+    imu_ts_col = pick_col(imu, ("mapped_ns", "timestamp_ns", "recv_ns", "wall_ns"))
+    if imu_ts_col:
+        imu.sort(key=lambda r:I(r[imu_ts_col]))
 
     def nearest_front(ts):
         j=bisect.bisect_left(f_ts,ts)
@@ -91,9 +106,9 @@ for root in roots:
         # Time continuity around target.
         tr=bykf[tk]; t0=I(tr["timestamp_ns"])
         print("\nTIMING AROUND TARGET")
-        cwin=[r for r in cam if abs(I(r["timestamp_ns"])-t0)<=1500000000]
+        cwin=[r for r in cam if cam_ts_col and abs(I(r[cam_ts_col])-t0)<=1500000000]
         if cwin:
-            gaps=[(I(b["timestamp_ns"])-I(a["timestamp_ns"]))/1e6 for a,b in zip(cwin[:-1],cwin[1:])]
+            gaps=[(I(b[cam_ts_col])-I(a[cam_ts_col]))/1e6 for a,b in zip(cwin[:-1],cwin[1:])]
             seqj=[]
             if "sequence" in cwin[0]:
                 for a,b in zip(cwin[:-1],cwin[1:]):
@@ -102,9 +117,9 @@ for root in roots:
             print(f" camera rows={len(cwin)} maxGap={max(gaps) if gaps else 0:.2f}ms "
                   f"maxSeqJump={max(seqj) if seqj else 0}")
         iwin=[]
-        ikey="mapped_ns" if imu and "mapped_ns" in imu[0] else "recv_ns"
+        ikey=imu_ts_col
         for r in imu:
-            try: ts=I(r[ikey])
+            try: ts=I(r[ikey]) if ikey else 0
             except: continue
             if abs(ts-t0)<=1500000000: iwin.append(r)
         if iwin:

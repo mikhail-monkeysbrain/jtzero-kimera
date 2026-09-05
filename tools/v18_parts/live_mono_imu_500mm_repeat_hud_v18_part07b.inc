@@ -42,6 +42,20 @@
         std::cout<<"[LOOP-STALL] dt="<<std::fixed<<std::setprecision(3)
                  <<loop_dt_ns/1e6<<" ms phase="<<static_cast<int>(phase)
                  <<" leg="<<(leg+1)<<" raw="<<raw<<" imu_fed="<<imu_fed<<"\n";
+#ifdef JTZERO_STRICT_STALL_NS
+        if(loop_dt_ns>JTZERO_STRICT_STALL_NS){
+          if(phase==CapturePhase::SETTLE_START){
+            std::cout<<"LEG "<<leg+1<<" START REJECTED due to loop stall "<<loop_dt_ns/1e6<<" ms\n";
+            stable.reset();start_press.valid=false;phase=CapturePhase::WAIT_START;
+            notice="START INVALID — LOOP STALL, НАЖМИТЕ START ЕЩЕ РАЗ";
+            notice_until=monotonicNs()+2500000000LL;
+          }else if(phase==CapturePhase::MOVING||phase==CapturePhase::SETTLE_END){
+            std::cout<<"[RUN INVALID] loop stall "<<loop_dt_ns/1e6<<" ms during measured leg "<<leg+1<<"\n";
+            aborted=true;
+            break;
+          }
+        }
+#endif
       }
       prev_loop_wall_ns=now;
       if(now>=next_sync&&pending==0){pending=now;sendTimesync(serial_fd,pending,sys,comp);next_sync=now+kTimesyncPeriodNs;}

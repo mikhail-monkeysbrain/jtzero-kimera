@@ -62,8 +62,9 @@ class ImuCorrection {
   Eigen::Vector3d correctGyro(uint64_t imu_us,
                               const Eigen::Vector3d& accel_flu,
                               const Eigen::Vector3d& gyro_flu,
-                              bool allow_gravity_feedback = true) {
-    const Eigen::Vector3d gyro_zxy = applyZxy(gyro_flu);
+                              bool allow_gravity_feedback = true,
+                              bool apply_zxy = true) {
+    const Eigen::Vector3d gyro_zxy = apply_zxy ? applyZxy(gyro_flu) : gyro_flu;
 
     double dt = 0.0;
     if (last_imu_us_ != 0 && imu_us > last_imu_us_) {

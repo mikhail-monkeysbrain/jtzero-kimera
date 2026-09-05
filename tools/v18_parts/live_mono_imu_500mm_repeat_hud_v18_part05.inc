@@ -20,7 +20,8 @@ void saveBackendTraceV8(const std::vector<VioState>& states,
 
   f << "leg,phase,keyframe,timestamp_ns,"
        "px_m,py_m,pz_m,vx_m_s,vy_m_s,vz_m_s,"
-       "speed_m_s,roll_deg,pitch_deg,yaw_deg\n";
+       "speed_m_s,roll_deg,pitch_deg,yaw_deg,"
+       "bgx,bgy,bgz,bax,bay,baz\n";
 
   f << std::fixed << std::setprecision(9);
 
@@ -62,7 +63,9 @@ void saveBackendTraceV8(const std::vector<VioState>& states,
       << speed << ','
       << s.roll_deg << ','
       << s.pitch_deg << ','
-      << s.yaw_deg << '\n';
+      << s.yaw_deg << ','
+      << s.bgx << ',' << s.bgy << ',' << s.bgz << ','
+      << s.bax << ',' << s.bay << ',' << s.baz << '\n';
   }
 
   std::cout << "BACKEND TRACE CSV: " << path << '\n';

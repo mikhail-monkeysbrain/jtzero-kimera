@@ -5,7 +5,7 @@
     cv::setNumThreads(1);cv::namedWindow(kV8WindowName,cv::WINDOW_NORMAL);cv::resizeWindow(kV8WindowName,1280,900);
 
     std::vector<TimeSyncSample>sync;sync.reserve(500);ClockMapping mapping;int64_t pending=0,next_sync=monotonicNs();
-    size_t raw=0,rejected=0,selected=0,decoded=0,imu_rx=0,imu_fed=0,imu_skip=0,att_rx=0;
+    size_t raw=0,rejected=0,selected=0,decoded=0,imu_rx=0,imu_fed=0,imu_skip=0,att_rx=0;int64_t last_camera_frame_wall_ns=monotonicNs();
     uint32_t prev_seq=0;int64_t prev_ts=0,last_sel=0;bool have_prev=false;VIO::FrameId fid=0;FcAttitude fc;
     cv::Mat gray(kHeight,kWidth,CV_8UC1,cv::Scalar(0));jtzero::ImuCorrection imu_correction;StartupStaticGate startup_gate;VioWarmupGate warmup_gate;bool vio_feed_enabled=false;
     int leg=0;CapturePhase phase=CapturePhase::WAIT_START;StableCapture stable;Mark start_press,start_mark,end_press;
@@ -58,6 +58,13 @@
 #endif
       }
       prev_loop_wall_ns=now;
+      if(vio_feed_enabled&&raw>0&&now-last_camera_frame_wall_ns>1000000000LL){
+        std::cout<<"[CAM-STALL] no camera frame for "<<std::fixed<<std::setprecision(1)
+                 <<(now-last_camera_frame_wall_ns)/1e6<<" ms raw="<<raw
+                 <<" selected="<<selected<<" imu_fed="<<imu_fed<<"\n";
+        aborted=true;
+        break;
+      }
       if(now>=next_sync&&pending==0){pending=now;sendTimesync(serial_fd,pending,sys,comp);next_sync=now+kTimesyncPeriodNs;}
       pollfd pf[2]={{camera_fd,POLLIN,0},{serial_fd,POLLIN,0}};int rc=poll(pf,2,2);if(rc<0){if(errno==EINTR)continue;fail("poll");}
 

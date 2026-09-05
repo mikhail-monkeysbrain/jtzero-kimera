@@ -17,7 +17,7 @@
               << " mm  settle START/END " << row.start_settle_shift_m*1000.0
               << "/" << row.end_settle_shift_m*1000.0 << " mm\n";
     sum+=r.horizontal; sum2+=r.horizontal*r.horizontal;
-    if(r.index%2==0){ab+=r.horizontal;++nab;}else{ba+=r.horizontal;++nba;}
+    if(r.direction=="A->B"){ab+=r.horizontal;++nab;}else if(r.direction=="B->A"){ba+=r.horizontal;++nba;}
   }
   for(size_t i=0;i+1<rows.size();i+=2){
     std::cout << "PAIR " << (i/2)+1 << " reversal angle: "

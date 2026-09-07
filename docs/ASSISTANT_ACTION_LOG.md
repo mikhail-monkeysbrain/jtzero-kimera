@@ -1526,3 +1526,21 @@ Examples from the user output:
 **Conclusion:** the five physical runs are sufficient for the current stage; do NOT collect a third control run now. First repair the analysis by computing circular/unwrapped attitude excursions (or relative quaternion/rotation metrics) instead of naive Euler max-min. Then rerun the same five archives.
 
 **Status:** НА МЕСТЕ analytically — new data exposed an analysis bug rather than requiring more physical data. No parameter changes and no new physical test until corrected matching is evaluated.
+
+
+## 2026-09-07 — fixed Euler wrap in V25 raw-profile matcher
+
+**Cause:** the five-run matcher exposed impossible FC yaw spans near 360° because attitude span was computed as naive `max-min` on wrapped Euler angles.
+
+**Action:** updated `tools/analyze_v25_raw_profile_crossrun_match.py`:
+- added sequential degree unwrapping across ±180° boundaries;
+- roll/pitch/yaw spans are now computed on the unwrapped sequences;
+- matching output explicitly states that unwrapped FC attitude spans are used.
+
+**Why unwrap all three Euler components:** yaw exposed the bug, but using the same wrap-safe rule for roll/pitch avoids the same class of failure if any component crosses its representation boundary in future datasets.
+
+**Commit:** `464ffde` — fix Euler wrap in V25 raw-profile matcher.
+
+**Next action:** rerun the exact same five archived runs. No new physical run and no parameter change.
+
+**Статус:** НА МЕСТЕ — corrected analysis metric; causal interpretation waits for the rerun.

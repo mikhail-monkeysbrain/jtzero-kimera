@@ -340,3 +340,33 @@ This creates a narrower child hypothesis:
 The relevant quantity may be not total |BA| but its projection in world coordinates along the measured leg. Test with `tools/analyze_v25_bias_projection.py`.
 
 In parallel, Hypothesis 3 remains open: if bias projection does not track the directional scale error, run the existing LOW_DISPARITY/ZUPT guard on this exact dataset.
+
+
+### 2026-09-07 — Test 1B.2: accelerometer-bias projection along each leg
+
+Command: `python3 tools/analyze_v25_bias_projection.py`
+
+Result:
+- LEG1 A→B: scale 0.9832, mean BA_along = -0.03823 m/s².
+- LEG2 B→A: scale 1.0570, mean BA_along = +0.18045 m/s².
+- LEG3 A→B: scale 1.0028, mean BA_along = -0.15603 m/s².
+- LEG4 B→A: scale 1.0634, mean BA_along = +0.18485 m/s².
+- Direction means: A→B scale 0.9930 / BA_along -0.09713 m/s²; B→A scale 1.0602 / BA_along +0.18265 m/s².
+
+Conclusion: **Hypothesis 1B.2 gains strong support.** Both B→A legs independently reproduce almost the same positive along-leg estimated accelerometer bias (+0.180/+0.185 m/s²) together with almost the same positive scale error (+5.7/+6.3%). A→B has the opposite BA projection and mean scale close to 1.0.
+
+Important caveat: the printed `0.5*a*t²` values (several metres) are only dimensional scale indicators. They are not predicted VIO position error because BA is an estimated state inside the coupled optimizer and is actively compensated. Do not interpret those metre values literally.
+
+#### Подгипотеза 1B.3 — is BA direction dependence caused by actual FC accelerometer asymmetry or by VIO bias-state estimation?
+
+Next test must separate raw measured acceleration from the backend-estimated BA on each direction. For every leg:
+1. transform/match raw FC IMU into the same FLU/world convention;
+2. compare raw acceleration statistics projected along the measured leg;
+3. compare those projections with backend BA_along;
+4. check whether the sign flip follows the raw sensor or appears only in the optimizer state.
+
+Decision:
+- raw FC acceleration shows the same repeatable directional asymmetry → inspect FC accelerometer calibration, mounting/frame semantics, vibration/hand-motion excitation;
+- raw FC acceleration does **not** show it while backend BA does → bias-state estimation / visual-inertial coupling becomes the primary branch.
+
+Hypothesis 3 (LOW_DISPARITY/ZUPT) remains open as an independent guard and should still be tested on this dataset; it is not yet eliminated by Test 1B.2.

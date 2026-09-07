@@ -765,3 +765,31 @@ New discriminator:
 - if common-axis BA itself reverses with motion direction, true direction-dependent estimator behavior remains supported.
 
 Status: **ОТКАТИЛИСЬ** on the narrow claim "BA itself flips with direction" because the prior metric was not frame-invariant. The broader finding "backend BA is large while raw FC acceleration is near zero" remains supported.
+
+
+### 2026-09-07 — fixed-axis BA result: prior directional-sign interpretation rejected
+
+On `MANUAL_PROFILE_01_CLEAN`, one fixed A→B world axis was used for all legs.
+
+Result:
+- LEG1 A→B BA_common mean = -0.06492 m/s²;
+- LEG2 B→A BA_common mean = -0.26419 m/s²;
+- LEG3 A→B BA_common mean = -0.30898 m/s²;
+- LEG4 B→A BA_common mean = -0.35883 m/s².
+
+The sign remains negative across all reversals. Therefore the earlier A→B negative / B→A positive `BA_along` pattern was indeed caused by projecting onto opposite leg directions.
+
+Conclusion:
+- **the claim that backend BA itself reverses sign with motion direction is rejected**;
+- backend BA instead appears to persist/drift in one world-frame direction through the run;
+- BA magnitude grows substantially over time, but this alone does not map cleanly to scale error: LEG3 has a larger |BA_common| than LEG2 while its scale is much closer to 1.0;
+- therefore persistent BA remains an important state-estimation symptom, but is not yet sufficient to explain the B→A scale excess.
+
+Tree consequence:
+- H1B.2 directional-sign branch is closed as a projection artifact;
+- H1B.4 remains open in a narrower form: why does backend BA drift/persist away from raw FC acceleration?
+- H6/manual-motion/visual-observability branch remains necessary to explain why B→A scale is worse even when BA does not reverse.
+
+Next discriminator:
+- compare A→B and B→A **within this same archived run** for duration, speed distribution, acceleration proxy, FC attitude excursion, VALID/LOW_DISPARITY ratio and inlier quality.
+- Tool: `tools/analyze_v25_same_run_motion_visual.py`.

@@ -6,4 +6,4 @@ echo "[СБОРКА] $BIN"
 g++ -std=c++17 -O2 "$ROOT/tools/p11_visual_orientation_ab_gui.cpp" -o "$BIN" \
   $(pkg-config --cflags --libs opencv4)
 echo "[ЗАПУСК] P11 — независимая визуальная проверка A/B"
-"$BIN" "${1:-0}"
+"$BIN" "${1:-auto}"

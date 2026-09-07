@@ -59,7 +59,7 @@
 
 ## Следующие наиболее ценные действия
 
-1. **Калибровать внешний cross-marker video projectively.** Новый A→B→A video с двумя непараллельными направлениями уже получен и количественно имеет сильный closure: A_start→B projected changes ≈-2.317° (horizontal arm) и -1.588° (vertical arm), A_end−A_start только ≈-0.064°/-0.075°. Но marker translation ~750 px позволяет perspective влиять на local slopes. Следующий шаг — использовать static scene references / known marker geometry для calibrated planar-pose discrimination; новый video пока не нужен.
+1. **Оценить метрический внешний 3-D rotation.** Camera-calibration-free homography invariant уже отверг perspective-only translation: closest-eigenvalue mismatch A_start median ~0.00034, B ~0.2568, A_end ~0.00354. Значит rigid 2-D marker реально меняет 3-D orientation в B; простая перспектива от переноса не объясняет наблюдение. Следующий шаг — получить actual external rotation magnitude/axis через intrinsics/metric marker geometry и сравнить с gyro rotvec ~[-1.78,+1.65,-0.65]°.
 
 2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
 

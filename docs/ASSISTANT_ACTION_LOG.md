@@ -1035,3 +1035,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Коммиты:** `bda9777` — частичный patch логики; `79425db` — завершение patch с определением axis/констант. Итоговый source перечитан: старый `EPI_Y_MAX_PX` отсутствует, auto-axis detection присутствует.
 
 **Следующий шаг:** повторно запустить тот же observability analyzer на run 185426. Это не повтор физического теста, а повтор анализа после исправления подтверждённой ошибки.
+
+
+## 2026-09-07 — vertical-axis fix не решил observability: требуется второй forensic, без новых выводов о dataset
+
+**Результат исправленного v1 на run 185426:** axis корректно определён как VERTICAL, но A1..B3 дали usable=0/20, A4 только 1/20 (6 matches, epipolar residual 2.345 px, depth 0.184 m). OVERALL FAIL.
+
+**Что подтверждено:** первая horizontal/vertical ошибка была реальной, но она НЕ была единственной причиной 0 usable. Нельзя объявлять root cause полностью найденным. Предыдущее утверждение о полном аннулировании FAIL было слишком сильным.
+
+**Что пока НЕ подтверждено:** плохая stereo calibration, плохой physical dataset, неверный знак vertical disparity, недостаточный overlap, photometric mismatch, camera-order mismatch. Текущий analyzer снова скрывает, где именно пары отбрасываются после перехода на vertical geometry.
+
+**Следующий шаг:** forensic v3 должен использовать правильную vertical epipolar geometry и показать распределения |dx|, yL-yR, counts после ratio/epipolar/disparity gates и triangulated positive-depth counts. Никакого нового физического прогона и никакого normal estimator до этого.

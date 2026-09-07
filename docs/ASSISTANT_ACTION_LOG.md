@@ -791,3 +791,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Commit:** `e545636` — temporal geometry observability analyzer.
 
 **Статус:** новый физический прогон не нужен; следующий шаг — запустить analyzer на run 181857 и проверить overlay до любого causal interpretation.
+
+
+## 2026-09-07 — ruler-pass observability прошёл; добавлен calibrated plane-normal gate
+
+**Результат `analyze_p11_ruler_pass_geometry.py`:** raw-video run 181857 содержит 1062 кадров; реальный capture dt median 19.33 ms, то есть фактическая частота около 51.7 Hz, несмотря на container FPS=100. PRE_STILL_A=142 кадров, MOVE=761, POST_STILL_B=159. В A и B обнаруживаются две почти ортогональные line families: A примерно 59.97/149.08 deg, B примерно 54.60/144.94 deg. Их image-space shifts A→B составляют около 5.37 и 4.14 deg.
+
+**Самокритика:** эти 4–5 deg нельзя называть roll/pitch. Это только image-space line-family change. Дополнительно container FPS=100 не соответствует реальному capture timing; любые temporal derivative/velocity analyses обязаны использовать frame CSV timestamps, а не AVI FPS.
+
+**Почему следующий шаг не повтор:** предыдущий analyzer был observability gate на сырых углах линий. Новый `tools/analyze_p11_ruler_plane_normal.py` использует калибровку OV9281 640x480 (`fx=568.532, fy=569.680, cx=315.983, cy=239.881`, radtan distortion), undistort line endpoints, vanishing directions двух line families и их 3-D orthogonality для оценки camera-relative plane normal отдельно в PRE_STILL_A и POST_STILL_B.
+
+**Встроенные ограничения:** оцениваются только неподвижные A/B plateau; нужны высокая valid-frame доля, малый spread plane normal и малый 3-D orthogonality error. Даже успешный A/B normal change трактуется только как guide/stand/surface geometry effect candidate, потому что рулетка является механической направляющей.
+
+**Commit:** `b1ca862` — calibrated ruler plane-normal gate.
+
+**Статус:** observability достаточна для более сильной геометрической оценки; причинный вывод P11 всё ещё не сделан.

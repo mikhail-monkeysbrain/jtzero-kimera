@@ -1332,3 +1332,8 @@ User ran `tools/analyze_v23_vio_vs_fc_attitude.py` on all three canonical V23 ru
 ## 2026-09-07 — stationary raw-gravity vs FC-attitude discriminator
 
 Preflight search found no existing direct endpoint raw-accelerometer-vector vs FC ATTITUDE comparator. Added `tools/analyze_v23_raw_gravity_vs_fc_attitude.py`. It uses the central 50% of backend-labelled SETTLE_START/SETTLE_END, compares 3-D raw accel-vector angular change against FC relative roll/pitch tilt, and avoids component-sign assumptions because the vector angle is invariant under the verified FRD→FLU sign transform. No new run required. This can separate an FC-estimator-only excursion from a real/equivalent static IMU-vector rotation, but cannot distinguish whole-rig tilt from local FC/IMU flex.
+
+
+## 2026-09-07 — fix raw-gravity/FC attitude timestamp alignment
+
+First execution failed with `KeyError: mapped_ns` because `jtzero_500mm_v23_attitude.csv` is timestamped by `recv_ns`, not `mapped_ns`. This was an implementation error in the new analyzer. Fixed it by reusing the already validated alignment convention from `analyze_v23_vio_vs_fc_attitude.py`: backend `callback_wall_ns` -> nearest FC `recv_ns`. Raw HIGHRES_IMU remains aligned through `mapped_ns` to backend `timestamp_ns`. No physical data issue and no rerun is needed.

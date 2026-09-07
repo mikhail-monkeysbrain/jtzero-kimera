@@ -1618,3 +1618,29 @@ For each leg it reports:
 - `20260907_224543_v25_BASELINE_ARW_003_EXACT_B_FIRST`.
 
 **Статус:** ПРОДВИНУЛИСЬ — new no-rerun discriminator isolates whether the late-run FC yaw excursion is physical or estimator/reference-side.
+
+
+## 2026-09-07 — FC yaw in late -90° V25 runs is not physical; removed from raw-profile matching
+
+User ran `analyze_v25_fc_yaw_vs_raw_gyro.py` on the two late runs recorded at stand/drone yaw ≈ -90°.
+
+**Observed:** every leg shows a smooth FC yaw change of roughly +34..+55° with per-sample continuity only ~0.16..0.36° per ~20 ms, but raw HIGHRES_IMU gyro over the same operator START->END interval shows only ~2.3..2.9° net 3-D rotation. Signed raw Z-gyro integration is only about +0.17..+0.46° on A->B and -0.75..-1.29° on B->A. The ratio |FC dYaw| / raw gyro net rotation is ~11.7..23.6.
+
+**Conclusion:** the tens-of-degrees FC yaw excursion is not compatible with real rigid yaw rotation of that magnitude. It is FC attitude/reference-side behavior (smooth drift/reference evolution rather than a discrete jump), not physical angular input. Do not use FC yaw delta/span as a physical-motion descriptor for V25 matching.
+
+**Action:** updated `tools/analyze_v25_raw_profile_crossrun_match.py`:
+- removed FC yaw span from the matching score;
+- kept FC yaw span as diagnostic-only output;
+- added raw Z-gyro RMS and abs-p90 to matching so yaw-axis physical excitation is represented by an independent raw sensor;
+- retained FC roll/pitch spans, which have separate raw-gravity/gyro support in earlier diagnostics.
+
+**Commit:** `b56fc2b` — exclude FC yaw drift from V25 raw-profile matching.
+
+**Physical test yaw:** none — analysis only. Relevant late runs were recorded at approximately -90°.
+
+**Next action:** rerun raw-profile matching separately by geometry strata first:
+- early -45° group: 122838, 124712, 132115;
+- late -90° group: 224347, 224543.
+Do not pool -45° and -90° for causal direction estimates.
+
+**Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — FC yaw was identified as a non-physical estimator/reference signal in these runs and removed from the physical matching feature set.

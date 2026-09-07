@@ -450,7 +450,7 @@ int main(int argc, char** argv) {
 
     std::cout << "[ГОТОВО] " << out << "\n";
     std::cout << "[ВИДЕО] " << videoPath << "\n";
-    std::cout << "[КАДРЫ] " << framesCsv << "\n";
+    std::cout << "[КАДРЫ] " << csvPath << "\n";
     std::cout << "[СОБЫТИЯ] " << eventsPath << "\n";
 
     return 0;

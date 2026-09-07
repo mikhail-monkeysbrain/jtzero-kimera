@@ -3,6 +3,19 @@
     camera_fd=open(camera_device.c_str(),O_RDWR|O_NONBLOCK);if(camera_fd==-1)fail("open camera");configureCamera(camera_fd);buffers=initCameraBuffers(camera_fd);
     v4l2_buf_type type=V4L2_BUF_TYPE_VIDEO_CAPTURE;if(xioctl(camera_fd,VIDIOC_STREAMON,&type)==-1)fail("STREAMON");streaming=true;discardWarmup(camera_fd);
     cv::setNumThreads(1);cv::namedWindow(kV8WindowName,cv::WINDOW_NORMAL);cv::resizeWindow(kV8WindowName,1280,900);
+    // JT-ZERO V25 GUI control: the green action rectangle in the right panel
+    // is a real mouse button. No movement timer is imposed; the operator starts
+    // and ends each 500 mm leg when physically ready.
+    struct V25GuiAction { std::atomic<bool> requested{false}; } gui_action;
+    cv::setMouseCallback(kV8WindowName,
+      [](int event,int x,int y,int,void* userdata){
+        if(event!=cv::EVENT_LBUTTONUP) return;
+        // Canvas coordinates: panel starts at x=900; action button is
+        // panel Rect(18,395,344,92).
+        if(x>=918 && x<1262 && y>=395 && y<487){
+          static_cast<V25GuiAction*>(userdata)->requested.store(true);
+        }
+      }, &gui_action);
 
     std::vector<TimeSyncSample>sync;sync.reserve(500);ClockMapping mapping;int64_t pending=0,next_sync=monotonicNs();
     size_t raw=0,rejected=0,selected=0,decoded=0,imu_rx=0,imu_fed=0,imu_skip=0,att_rx=0;int64_t last_camera_frame_wall_ns=monotonicNs();

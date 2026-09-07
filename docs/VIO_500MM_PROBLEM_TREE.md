@@ -651,3 +651,16 @@ Methodological implication:
 - reproducibility will be judged *after the run* from recorded motion profile (duration, velocity, FC attitude, frontend quality), not forced by a timer;
 - multiple runs are accepted for A/B comparison only when their measured input profiles are sufficiently similar;
 - otherwise the comparison is INCONCLUSIVE.
+
+
+### 2026-09-07 — operator control finalized: untimed GUI with Space/Enter START/END
+
+Final interaction rule for V25 manual 500 mm tests:
+- no movement timer;
+- operator works in the V25 GUI window;
+- **Space or Enter** starts the current leg when the vehicle is stationary and ready;
+- after the 500 mm physical movement and stop, **Space or Enter** ends the leg;
+- mouse click on the action area may remain as an optional duplicate control, but keyboard Space/Enter is the primary workflow;
+- Q/ESC exits the test.
+
+This preserves the original fast operator workflow while keeping the experiment untimed.

@@ -120,6 +120,8 @@ def load_run(root):
         horiz = []
         totaldev = []
         gnorm = []
+        gz_abs = []
+        gz_signed = []
         roll = []
         pitch = []
         yaw = []
@@ -151,7 +153,10 @@ def load_run(root):
                     kg = keys
                     break
             if kg:
-                gnorm.append(norm((F(q, kg[0]), F(q, kg[1]), F(q, kg[2]))))
+                gv = (F(q, kg[0]), F(q, kg[1]), F(q, kg[2]))
+                gnorm.append(norm(gv))
+                gz_signed.append(gv[2])
+                gz_abs.append(abs(gv[2]))
 
         if not horiz or not roll:
             continue
@@ -171,6 +176,8 @@ def load_run(root):
                 total_dyn_acc_rms=rms(totaldev),
                 gyro_rms=rms(gnorm) if gnorm else float("nan"),
                 gyro_p90=pct(gnorm, 0.9) if gnorm else float("nan"),
+                gz_rms=rms(gz_signed) if gz_signed else float("nan"),
+                gz_abs_p90=pct(gz_abs, 0.9) if gz_abs else float("nan"),
                 roll_span=angular_span_deg(roll),
                 pitch_span=angular_span_deg(pitch),
                 yaw_span=angular_span_deg(yaw),
@@ -193,6 +200,8 @@ def pair_distance(a, b):
         parts += [
             ("gyroRMS", rel_delta(a["gyro_rms"], b["gyro_rms"], 0.005)),
             ("gyroP90", rel_delta(a["gyro_p90"], b["gyro_p90"], 0.005)),
+            ("gzRMS", rel_delta(a["gz_rms"], b["gz_rms"], 0.002)),
+            ("gzAbsP90", rel_delta(a["gz_abs_p90"], b["gz_abs_p90"], 0.002)),
         ]
 
     # Attitude spans are independent FC observables but can be near zero,
@@ -200,7 +209,6 @@ def pair_distance(a, b):
     parts += [
         ("rollSpan", abs(a["roll_span"] - b["roll_span"]) / 1.0),
         ("pitchSpan", abs(a["pitch_span"] - b["pitch_span"]) / 1.0),
-        ("yawSpan", abs(a["yaw_span"] - b["yaw_span"]) / 1.0),
     ]
     return mean([v for _, v in parts]), parts
 
@@ -231,8 +239,8 @@ for p in sys.argv[1:]:
 
 print("================ V25 RAW-PROFILE CROSS-RUN MATCH ================")
 print(f"runs={len(sys.argv)-1} legs={len(rows)}")
-print("INPUT FEATURES: operator duration + raw FC accel/gyro + unwrapped FC attitude spans")
-print("NOT USED FOR MATCHING: backend velocity, backend bias, VIO scale")
+print("INPUT FEATURES: operator duration + raw FC accel/gyro (including raw Z gyro) + FC roll/pitch spans")
+print("NOT USED FOR MATCHING: backend velocity, backend bias, VIO scale, FC yaw")
 
 for r in rows:
     print(
@@ -240,7 +248,9 @@ for r in rows:
         f'hAcc={r["horiz_acc_rms"]:.4f}/{r["horiz_acc_p90"]:.4f} '
         f'dyn={r["total_dyn_acc_rms"]:.4f} '
         f'gyro={r["gyro_rms"]:.5f}/{r["gyro_p90"]:.5f} '
-        f'R/P/Yspan={r["roll_span"]:.3f}/{r["pitch_span"]:.3f}/{r["yaw_span"]:.3f}'
+        f'gz={r["gz_rms"]:.5f}/{r["gz_abs_p90"]:.5f} '
+        f'R/Pspan={r["roll_span"]:.3f}/{r["pitch_span"]:.3f} '
+        f'FCyawSpan(diag-only)={r["yaw_span"]:.3f}'
     )
 
 pairs = []
@@ -324,6 +334,7 @@ print("- The score is a ranking metric, not a statistical proof that the physica
 print("- If the nearest opposite-direction pairs have small raw-profile mismatch but retain a large systematic scale delta,")
 print("  pure motion-profile confounding weakens and a direction/visual-estimator asymmetry becomes more plausible.")
 print("- If scale delta shrinks among the best-matched opposite-direction pairs, raw motion excitation remains a strong confounder.")
-print("- Attitude spans are computed after 360-deg unwrapping; Euler wrap must not inflate the match score.")
+print("- FC yaw is diagnostic-only and excluded from matching because late runs show tens-of-degrees FC yaw drift without raw-gyro support.")
+print("- Roll/pitch spans remain in matching; raw Z-gyro RMS/p90 now carries yaw-axis physical excitation.")
 print("- Same-direction low-score pairs are a run-to-run repeatability control.")
 print("- Do not convert n_legs into n_independent_runs; causal confidence is limited by the number of physical runs.")

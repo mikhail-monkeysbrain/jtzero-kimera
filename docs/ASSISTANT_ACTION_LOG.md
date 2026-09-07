@@ -1544,3 +1544,20 @@ Examples from the user output:
 **Next action:** rerun the exact same five archived runs. No new physical run and no parameter change.
 
 **Статус:** НА МЕСТЕ — corrected analysis metric; causal interpretation waits for the rerun.
+
+
+## 2026-09-07 — unwrap rerun: 360° artifact fixed, but new runs remain yaw-different from old baseline
+
+User reran the five-run matcher after commit `464ffde`.
+
+**Validation:** the ±180° wrap artifact is fixed: the previous ~359.87° yaw spans are now finite continuous excursions. However, the two late control runs still show genuinely large FC Euler yaw excursions (~34–55°), while the three earlier runs are ~0.19–1.74°. Therefore the late runs are not raw-attitude-profile comparable to the earlier baseline under the current matching feature set.
+
+**Consequence:** global one-to-one matching is still forced to make poor assignments for the late runs (scores 0.467, 1.148, 1.244, 2.400). Its aggregate mean/median BA-AB must not be interpreted as a clean matched causal estimate.
+
+**Useful retained evidence:** the best low-score pairs are still dominated by the original three runs. A late-run cross-pair appears at score 0.230 (224347 L3 A->B vs 224543 L1 B->A, BA-AB=+0.0456), but its gyro mismatch is large (gyroRMS component 0.506, gyroP90 0.418), so it is not a strong physical match.
+
+**New diagnostic question:** why do the two late control runs have ~34–55° FC yaw excursion despite modest gyro norm RMS? Before changing the matcher or collecting more motion tests, determine whether this is real yaw rotation, an FC attitude/reference/reset discontinuity, or an Euler representation/reference effect. Raw gyro integration and attitude time-series continuity must be compared within those legs.
+
+**Next action:** add/run a diagnostic that compares unwrapped FC yaw delta/path/range with integrated raw gyro rotation for the late runs. No new physical run and no Kimera parameter change.
+
+**Статус:** ПРОДВИНУЛИСЬ — wrap bug is fixed; the remaining large yaw is in the recorded data and must be classified before cross-run matching can be trusted.

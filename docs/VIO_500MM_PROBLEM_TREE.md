@@ -370,3 +370,22 @@ Decision:
 - raw FC acceleration does **not** show it while backend BA does → bias-state estimation / visual-inertial coupling becomes the primary branch.
 
 Hypothesis 3 (LOW_DISPARITY/ZUPT) remains open as an independent guard and should still be tested on this dataset; it is not yet eliminated by Test 1B.2.
+
+
+### 2026-09-07 — Test Hypothesis 3: slow-motion / ZUPT guard
+
+Command: `python3 tools/analyze_v25_slow_motion_zupt_guard.py`
+
+All four measured legs returned `PASS_GUARD`:
+- LEG1 A→B: 65.1% LOW_DISPARITY, 491.62 mm, PASS_GUARD.
+- LEG2 B→A: 59.0% LOW_DISPARITY, 528.52 mm, PASS_GUARD.
+- LEG3 A→B: 43.6% LOW_DISPARITY, 501.41 mm, PASS_GUARD.
+- LEG4 B→A: 42.9% LOW_DISPARITY, 531.71 mm, PASS_GUARD.
+
+Observed pose plateaus are concentrated at the beginning/end of legs and do not indicate that the stationary constraint froze the completed real translation.
+
+Conclusion: **the current simple Hypothesis 3 (LOW_DISPARITY/ZUPT freezes real slow motion and directly causes the directional distance error) is not supported by this dataset.** Keep it as a regression/guard branch, not the primary root-cause branch.
+
+Priority remains Hypothesis 1B.2/1B.3:
+- B→A independently repeats BA_along ≈ +0.18 m/s² and scale ≈ 1.06;
+- next discriminator is raw FC acceleration projected along each leg versus backend-estimated BA projection.

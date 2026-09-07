@@ -321,3 +321,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Действие:** добавлены `tools/read_p11_fc_accel_params.cpp` и `tools/run_read_p11_fc_accel_params.sh`. Инструмент отправляет только `PARAM_REQUEST_LIST`, собирает `PARAM_VALUE` и выводит accel calibration/ID и AHRS orientation/trim. Записи параметров нет.
 
 **Коммиты:** `4f1fce3`, `e340308`.
+
+
+## 2026-09-07 — одиночный PARAM_REQUEST_READ probe
+
+**Pre-check на повтор выполнен.** Поиск по журналу и репозиторию не нашёл уже выполненного одиночного `PARAM_REQUEST_READ` probe.
+
+**Что уже делалось:** C++ reader через `PARAM_REQUEST_LIST` успешно получил HEARTBEAT от FC (sysid=1, compid=1), но получил `0 PARAM_VALUE`. Это доказало, что serial/MAVLink transport работает, а проблема находится дальше.
+
+**Чем новый шаг отличается:** вместо запроса полного списка параметров отправляются три одиночных read-only запроса по имени: `AHRS_ORIENTATION`, `INS_ACC_ID`, `INS_ACC2_ID`. Цель — отделить отказ `PARAM_REQUEST_LIST` от общего отказа parameter protocol на этом MAVLink-канале.
+
+**Безопасность:** `PARAM_SET` не используется; FC не изменяется.
+
+**Добавлены файлы:** `tools/read_p11_fc_param_probe.cpp`, `tools/run_read_p11_fc_param_probe.sh`.
+
+**Коммиты:** `0b56354`, `f8aa003`.
+
+**Статус:** ПРОДВИНУЛИСЬ — следующий шаг проверяет transport/service boundary без нового физического P11-прогона.

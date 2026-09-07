@@ -59,7 +59,7 @@
 
 ## Следующие наиболее ценные действия
 
-1. **Сделать внешний 2-D orientation discriminator.** Signed gyro rotation axis уже разрешён: A->B rotvec FRD median ≈[-1.782,+1.651,-0.654]°, B->A ≈[+1.555,-1.590,+0.658]°. Это диагональная 3-D rotation, не pure roll/pitch. Один внешний line reference не наблюдает все DOF, поэтому прежний single-line video не может окончательно исключить ~2.3° body/IMU rotation. Следующий решающий тест — неподвижная внешняя камера + жёсткая 2-D метка с двумя непараллельными направлениями на той же механической части, что FC.
+1. **Калибровать внешний cross-marker video projectively.** Новый A→B→A video с двумя непараллельными направлениями уже получен и количественно имеет сильный closure: A_start→B projected changes ≈-2.317° (horizontal arm) и -1.588° (vertical arm), A_end−A_start только ≈-0.064°/-0.075°. Но marker translation ~750 px позволяет perspective влиять на local slopes. Следующий шаг — использовать static scene references / known marker geometry для calibrated planar-pose discrimination; новый video пока не нужен.
 
 2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
 

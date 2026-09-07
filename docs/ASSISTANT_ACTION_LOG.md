@@ -1644,3 +1644,33 @@ User ran `analyze_v25_fc_yaw_vs_raw_gyro.py` on the two late runs recorded at st
 Do not pool -45° and -90° for causal direction estimates.
 
 **Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — FC yaw was identified as a non-physical estimator/reference signal in these runs and removed from the physical matching feature set.
+
+
+## 2026-09-07 — geometry-stratified V25 matching result (-45° vs -90°)
+
+User supplied both corrected matcher outputs after FC yaw was removed from physical matching.
+
+### Early geometry stratum: stand/drone yaw ≈ -45°
+Runs: 122838, 124712, 132115 (3 independent physical runs, 12 legs).
+Global one-to-one: mean score=0.213, mean BA-AB=+0.0554, median=+0.0486, positive=4/6.
+Best opposite-direction pair score=0.137 has BA-AB=+0.0217; several other reasonably matched pairs retain +0.06..+0.11, but some are near zero or negative. Same-direction controls can also differ materially (up to ~0.064 among relatively close pairs).
+
+### Late geometry stratum: stand/drone yaw ≈ -90°
+Runs: 224347, 224543 (2 independent physical runs, 8 legs).
+Global one-to-one: mean score=0.341, mean BA-AB=+0.0744, median=+0.0678, positive=4/4.
+All eight listed cross-run opposite-direction pairs have positive BA-AB (+0.0193..+0.1597).
+However matching quality is weaker than in the -45° stratum (best score=0.223), and same-direction controls show very large run-to-run scale shifts: A->B +0.079..+0.187 and B->A -0.046..-0.107 for several pairs.
+
+### Interpretation
+A residual tendency for B->A scale > A->B exists in both yaw strata after matching on raw accel/gyro, raw Z-gyro and FC roll/pitch. This weakens a pure raw-motion-profile-only explanation.
+
+But the -90° same-direction control exposes a strong run/order/state component: the A-first run is globally low on A->B and high on B->A, while the B-first run compresses toward ~1.02..1.06. Therefore the evidence does NOT support a simple fixed direction-only scale bias. The current best model is a mixed effect involving direction plus run/order/estimator/visual state, with physical motion excitation still contributing.
+
+Do not pool the -45° and -90° strata into one causal estimate.
+
+### Next action
+No immediate physical test. Before designing another run, analyze scale against leg order / initialization state and frontend visual quality within each fixed-yaw stratum, especially the -90° A-first vs B-first pair. The next discriminator should ask whether the large run-level scale shift is already visible in frontend geometry/track quality or appears only after inertial/backend coupling.
+
+**Physical test yaw:** none — analysis only.
+
+**Статус:** ПРОДВИНУЛИСЬ — residual directional tendency survives in both geometry strata, but same-direction controls rule out a simple direction-only defect.

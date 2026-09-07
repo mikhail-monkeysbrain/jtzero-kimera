@@ -1,4 +1,4 @@
-# JT-Zero P11 / V21-V23 — текущий статус
+# JT-Zero P11 / V21-V25 — текущий статус
 
 Назначение: компактная operational memory. Полная хронология остаётся в `docs/ASSISTANT_ACTION_LOG.md`.
 
@@ -6,69 +6,104 @@
 
 ## Главный вопрос
 
-Почему при стендовом горизонтальном движении возникает direction-dependent VIO/PIM Z/attitude asymmetry, хотя TF-Luna показывает практически неизменную физическую высоту?
+Почему при стендовом горизонтальном движении возникают ложный VIO/PIM Z и нестабильный horizontal scale, и какая часть эффекта связана с реальной механикой стенда, raw FC IMU и visual-inertial observability?
 
 ## Что подтверждено
 
-- Ложный вертикальный velocity появляется уже на PIM/inertial prediction до основной backend correction.
+- TF-Luna показывает практически постоянную реальную высоту при корректном bench horizontal motion, тогда как VIO создаёт ложный Z.
+- Ложный vertical velocity появляется уже на PIM/inertial prediction до основной backend correction.
 - Backend accelerometer bias не является единственным источником directional Z.
 - В FC HIGHRES_IMU наблюдается A/B-зависимый stationary acceleration signal.
 - Два независимых raw position runs дали norm split:
   - 151131: B-A = -0.039198 m/s²;
   - 160342: B-A = -0.036468 m/s².
-- Эта **межпрогонная воспроизводимость пока предварительная: n=2**.
-- В отдельном paired vector run 162057 три A→B пары дали acceleration-vector direction change примерно 2.2–2.4°; основная часть vector delta перпендикулярна gravity vector (~0.39–0.40 m/s²), при гораздо меньшем norm drop.
-- External world-fixed phone video single-run projective test не поддержал реальный body tilt порядка 2.3°: raw 2-D edge change ~1.33° объясняется перспективой; остаточная projective deviation в B порядка нескольких десятых градуса. **Это предварительный discriminator n=1, не окончательное исключение механики.**
+- Эта межпрогонная воспроизводимость norm split пока предварительная: n=2 independent runs.
+- Paired raw-vector analysis дал acceleration-vector direction change порядка 2.2–2.4°.
+- На canonical V23 все шесть legs показывают:
+  - stationary raw gravity-vector change примерно 2.20–2.36°;
+  - FC relative tilt примерно 2.18–2.48°;
+  - VIO tilt того же порядка;
+  - gyro-integrated rigid rotation, предсказывающий endpoint gravity-vector orientation с ошибкой примерно 0.07–0.25°.
+- Signed raw-gyro rotation vector стабильно меняет знак при A↔B. Типичные direction medians в FC FRD:
+  - A->B ≈ [-1.782, +1.651, -0.654]°;
+  - B->A ≈ [+1.555, -1.590, +0.658]°.
+- Внешний world-fixed 2-D cross-marker A→B→A имеет хорошее closure и projective-invariant test отвергает pure fixed-orientation translation как объяснение B deformation. Это поддерживает реальное изменение orientation жёсткой marker/body structure, а не только перспективный slope artifact.
+- Поэтому реальная обратимая механическая rotation во время V23 translation сейчас поддерживается несколькими разными сигналами: raw gyro, raw gravity, FC attitude, VIO attitude и внешний 2-D marker.
+- При этом ранний Z drift существует до существенного gyro rotation/VIO tilt. Следовательно mechanical rotation не является единственной причиной vertical error.
+- Endpoint rotation magnitude и простой rotation exposure не объясняют horizontal scale: при близких ~2.3–2.6° endpoint rotations scale V23 сильно меняется.
+- На V25 `MANUAL_PROFILE_01_CLEAN` raw FC motion profile показал, что B->A legs были физически сильнее возбуждены:
+  - A->B mean: scale=1.0196, duration=9.36 s, hAcc RMS=0.3222 m/s², p90=0.4783 m/s², dyn RMS=0.3332 m/s², yaw span=0.321°;
+  - B->A mean: scale=1.0963, duration=7.69 s, hAcc RMS=0.4331 m/s², p90=0.6661 m/s², dyn RMS=0.4549 m/s², yaw span=1.140°.
+- Поэтому этот V25 run не изолирует pure direction-dependent scale defect от motion-profile dependence.
+- Backend BA common-axis analysis показал persistent/drifting BA одного знака; прежний A->B/B->A sign flip был projection artifact. BA остаётся estimator symptom, но сам по себе не объясняет scale.
+- V25 ARW=0.0003 causal test ухудшил scale/Z; простая гипотеза «BA слишком свободен, tighten ARW исправит distance» отвергнута.
 
-## Важная количественная сверка V21/V23 ↔ P11
+## Важная количественная сверка
 
-Не смешивать две разные величины.
+Не смешивать разные величины:
 
-1. Stationary **norm split** ~0.037–0.039 m/s²:
-   - относительная величина ~0.0038 g;
+1. Stationary norm split ~0.037–0.039 m/s²:
+   - ~0.0038 g;
    - грубый g-equivalent angle ~0.22°.
-   - Сам по себе этот norm split не объясняет VIO attitude asymmetry ~1.6–1.7°.
+   - Сам по себе не объясняет ~2° attitude effect.
 
-2. Stationary **vector-direction split** из P11 paired vector analysis:
-   - angle(A,B) ~2.2–2.4°;
-   - perpendicular delta ~0.39–0.40 m/s².
-   - Это тот же порядок величины, что V21/V23 attitude difference ~1.6–1.7°.
+2. Stationary vector-direction / rigid-rotation effect:
+   - raw acceleration-vector change ~2.2–2.4°;
+   - gyro-integrated rotation того же порядка;
+   - FC/VIO attitude того же порядка.
+   - Эти величины согласуются по масштабу и времени на V23.
 
-Вывод: утверждение «IMU effect в 8 раз меньше VIO effect» верно только если сравнивать VIO angle с norm split, что некорректно. По vector-direction magnitude явления сопоставимы. Но причинная передача IMU→PIM→VIO **ещё не доказана**: нужен явный gain/transfer reconciliation по времени и осям.
+Это поддерживает реальную rotation branch, но не превращает её автоматически в объяснение horizontal scale или раннего Z drift.
 
 ## Что НЕ установлено
 
-- Почему физическая позиция A/B меняет FC acceleration vector/norm.
-- Является ли это MEMS/FC processing, механическим напряжением, кабелями, локальной вибрацией/нагрузкой или другим фактором.
-- Объясняет ли P11 IMU vector split весь V21/V23 VIO attitude/position asymmetry или только часть.
-- Есть ли filter amplification / weak observability mechanism, превращающий IMU error в VIO asymmetry.
-- Переносится ли bench A/B effect на свободный полёт.
+- Механизм раннего pre-motion Z/Vz drift до существенной rotation.
+- Почему physical A/B/handling state меняет stationary FC acceleration norm/vector в P11 raw position tests.
+- Как именно реальная mechanical rotation передаётся в horizontal scale error и какую долю scale variance она объясняет.
+- Есть ли независимый direction-dependent visual/estimator defect после matching по raw physical excitation.
+- Почему backend BA drift/persistence возникает при raw FC acceleration, близком к симметричному вдоль общей оси.
+- Насколько bench A/B effects переносятся на свободный полёт.
+- Какая часть наблюдаемой rotation относится к whole-rig rigid motion, а какая потенциально к local flex между marker/body/FC mount. Внешний 2-D marker сильно ослабил pure local-FC-only branch, но метрическая 3-D ось/угол внешней камеры ещё не восстановлены.
 
 ## Заблокированные / закрытые ветки
 
-- Pure monocular homography → physical tilt: закрыто; translation/plane terms неразделимы надёжно.
-- Onboard stereo plane-normal route: не доведён до причинного результата из-за rectification/matching instability и физического ограничения стенда.
-- Fixed-target stereo stability test: физически невыполним на текущем стенде без удержания БПЛА руками.
-- ChArUco pose из P11 stereo run: невалидно для этого dataset; target не гарантированно виден обеим камерам.
+- Pure monocular homography → physical tilt: закрыто как неразделимое translation/plane explanation.
+- Fixed-target onboard stereo stability: закрыто физическим ограничением стенда.
+- ChArUco pose из старого P11 stereo run: невалидно для dataset.
+- Backend-speed-as-physical-motion-evidence: запрещено как circular metric.
+- BA along-leg sign reversal: закрыто как projection artifact.
+- «Tighten accelerometer random walk = fix scale»: отвергнуто ARW=0.0003 causal test.
+- Pure perspective translation как объяснение внешнего cross-marker B state: отвергнуто projective-invariant test в одном внешнем run.
 
-## Предварительные результаты, требующие независимого повтора
+## Предварительные результаты
 
-- raw A/B norm split: n=2 independent runs → нужен минимум ещё 1–2 идентичных raw position run.
-- external world-fixed projective tilt discriminator: n=1 → нужен второй независимый внешний video pass перед сильным исключением mechanical tilt.
-- ruler-pass 181857 и stereo run 185426: single-run geometry evidence; не использовать как окончательный causal proof.
+- raw A/B norm split: n=2 independent runs.
+- external cross-marker orientation discriminator: один физический внешний A→B→A video run; сильный, но single-run.
+- Некоторые geometry/stereo results остаются n=1 и не должны использоваться как окончательное causal proof.
 
 ## Следующие наиболее ценные действия
 
-1. **Разделить Z-drift и horizontal scale mechanism.** V23 timeline показал, что real gyro rotation и VIO tilt практически синхронны и возникают вместе с основным горизонтальным движением (обычно 60–80% нормализованного leg), поэтому механическая rotation→VIO coupling временно правдоподобна. Но Z уже заметно дрейфует на ранней неподвижной части при gyro≈0 и VIO tilt≈0 (например A->B run 170418: Z -15.2 mm к 50%; A->B run 170636: -19.9 mm; B->A 170524: +6.4 mm). Значит реальный поворот не является единственной причиной vertical error. Следующий диагностический шаг должен отдельно проверить pre-motion stationary Z/Vz drift против bias/PIM и затем horizontal scale против motion/rotation timing.
+1. **Не делать новый physical run до использования существующего архива.**
+   Сопоставить V25 legs между архивными baseline runs только по независимым raw-input descriptors:
+   operator duration + raw FC accel/gyro + FC attitude spans. Не использовать backend speed или backend BA для matching.
 
-2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
+2. **Новый cross-run discriminator:** `tools/analyze_v25_raw_profile_crossrun_match.py`.
+   Он ранжирует opposite-direction legs по близости raw physical excitation и отдельно same-direction pairs как repeatability control.
+   Scale не входит в matching score и используется только как проверяемый output.
 
-3. **Повторить external world-fixed video pass** с той же жёсткой кромкой и неподвижным телефоном, если механический tilt используется как discriminator.
+3. Если среди существующих runs найдутся близкие raw-matched opposite-direction пары:
+   - большой сохраняющийся scale delta ослабит pure motion-profile confounding и усилит direction/visual-estimator branch;
+   - уменьшение scale delta при хорошем raw matching усилит motion-excitation explanation.
 
-## Обязательный preflight перед новым кодом
+4. Только если архив не содержит достаточно близких raw-matched legs, собирать дополнительные baseline V25 runs тем же untimed Space/Enter protocol, немедленно архивируя каждый run. Принимать causal comparison только после post-run raw matching.
+
+5. Early Z branch вести отдельно от horizontal scale: rotation уже не может быть единственным объяснением Z из-за pre-motion drift.
+
+## Обязательный preflight перед новым кодом/тестом
 
 - Прочитать этот STATUS и релевантный участок ACTION_LOG.
 - Проверить, не повторяется ли действие.
+- Не использовать backend/VIO output как доказательство physical input, если доступен raw FC signal.
 - Для geometry/calibration code сначала открыть фактический calibration/config и проверить sensor order, stereo axis/type, frames, units, K/D/R/T/P.
 - Перед причинным выводом выполнить order-of-magnitude reconciliation.
-- n<3 independent physical runs = предварительный результат.
+- n<3 independent physical runs = предварительный результат, если нет отдельного независимого discriminator.

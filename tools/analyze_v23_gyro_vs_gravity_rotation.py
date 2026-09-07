@@ -132,10 +132,10 @@ for arg in sys.argv[1:]:
         print(f"  gyro bias FRD=[{bias[0]:+.6f},{bias[1]:+.6f},{bias[2]:+.6f}] rad/s")
         print(f"  RAW gravity-vector change={raw_grav_tilt:.4f} deg")
         print(f"  gyro-predicted gravity change={gyro_grav_tilt:.4f} deg")
-        print(f"  net gyro rotation total={total_deg:.4f} deg horizontal-rotvec={horiz_rot:.4f} deg")
+        print(f"  net gyro rotation total={total_deg:.4f} deg horizontal-rotvec={horiz_rot:.4f} deg")\n        print(f"  net gyro rotvec FRD=[{math.degrees(rv[0]):+.4f},{math.degrees(rv[1]):+.4f},{math.degrees(rv[2]):+.4f}] deg")
         print(f"  predicted-vs-measured end gravity error={end_pred_err:.4f} deg")
         print(f"  gyro/raw gravity ratio={ratio:.3f}")
-        allr.append((direction,raw_grav_tilt,gyro_grav_tilt,end_pred_err,horiz_rot,total_deg,ratio))
+        allr.append((direction,raw_grav_tilt,gyro_grav_tilt,end_pred_err,horiz_rot,total_deg,ratio,math.degrees(rv[0]),math.degrees(rv[1]),math.degrees(rv[2])))
 
 print("\n================ DIRECTION SUMMARY ================")
 for d in ("A->B","B->A"):
@@ -145,7 +145,7 @@ for d in ("A->B","B->A"):
               f"GYRO-pred={med([x[2] for x in rr]):.4f}deg "
               f"end-error={med([x[3] for x in rr]):.4f}deg "
               f"horiz-rot={med([x[4] for x in rr]):.4f}deg "
-              f"GYRO/RAW={med([x[6] for x in rr]):.3f}")
+              f"GYRO/RAW={med([x[6] for x in rr]):.3f} " +\n              f"rotvecFRD_med=[{med([x[7] for x in rr]):+.3f},{med([x[8] for x in rr]):+.3f},{med([x[9] for x in rr]):+.3f}]deg")
 
 print("\n================ DECISION ================")
 print("- GYRO-predicted gravity change ~= RAW gravity change, with small end error: supports a real rotation of the IMU/body between A and B.")

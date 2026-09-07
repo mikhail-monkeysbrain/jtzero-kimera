@@ -263,3 +263,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Commit:** `93020f4` — `diag: decompose P11 A/B IMU vector shift`.
 
 **Статус после действия:** ПРОДВИНУЛИСЬ — подготовлена более строгая офлайн-проверка уже записанного dataset; новый физический тест не назначен.
+
+
+## 2026-09-07 — pairwise A/B vector decomposition on existing multi-IMU run
+
+**Pre-check на повтор выполнен.** Поиск по репозиторию не нашёл отдельного pairwise A1-B1/A2-B2/A3-B3 анализатора.
+
+**Что уже делалось:** `analyze_p11_imu_vector_ab.py` строит общий A-mean и B-mean по всем plateau и раскладывает общий B-A вектор на parallel/perpendicular components.
+
+**Чем новый шаг отличается:** новый анализ использует те же данные, но считает три соседние пары отдельно: A1-B1, A2-B2, A3-B3. Это проверяет, не является ли общий split артефактом усреднения по времени, и отдельно оценивает повторяемость norm drop, tilt-angle и направления B-A vector. Также сравнивается направление mean B-A vector между IMU1/IMU2/HIGHRES.
+
+**Добавлен файл:** `tools/analyze_p11_imu_pairwise_ab.py`.
+
+**Commit:** `c7c7944` — `diag: add pairwise P11 IMU A/B decomposition`.
+
+**Методологическая поправка:** в новом analyzer доли parallel/perpendicular выводятся как energy shares (квадраты компонент), чтобы они корректно суммировались к 100%. Предыдущие значения вида 8.6% / 99.6% из `analyze_p11_imu_vector_ab.py` были отношениями модулей к |d|, а не аддитивными долями; направление вывода о доминировании perpendicular component остаётся корректным, но формулировка была потенциально вводящей в заблуждение.
+
+**Статус после действия:** ПРОДВИНУЛИСЬ — проверяем повторяемость эффекта на соседних парах без нового физического теста.

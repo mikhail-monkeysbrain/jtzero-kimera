@@ -664,3 +664,19 @@ Final interaction rule for V25 manual 500 mm tests:
 - Q/ESC exits the test.
 
 This preserves the original fast operator workflow while keeping the experiment untimed.
+
+
+### 2026-09-07 — V25 GUI mouse callback removed after Qt startup crash
+
+Observed:
+`[FATAL] OpenCV(4.10.0) ... window_QT.cpp:753 ... NULL window handler in cvSetMouseCallback`.
+
+Cause is in the newly added optional mouse-control path, not in VIO/Kimera. The callback was registered against the Qt HighGUI window and caused startup failure in the current VNC/Qt environment.
+
+Action:
+- removed mouse callback support entirely;
+- START/END is again **Space or Enter only** in the existing GUI window;
+- no timers;
+- Q/ESC exits.
+
+This run produced no VIO measurement data and must not be counted as an experiment result.

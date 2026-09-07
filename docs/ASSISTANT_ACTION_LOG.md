@@ -1353,3 +1353,8 @@ User ran `analyze_v23_gyro_vs_gravity_rotation.py` on the three canonical V23 ru
 **Consequence:** the A/B vector shift is not well explained by an accelerometer-only bias/misalignment change. A real angular rotation of the IMU package/body occurred during the legs, because the independent gyro history predicts essentially the same endpoint gravity-vector rotation.
 
 **Critical remaining contradiction:** the single external world-fixed video projective test did not show ~2.3° rotation of the tracked upper-platform edge. Therefore we must not jump to “whole drone tilts 2.3°”. The current evidence is compatible with (a) whole-rig rotation about an axis poorly observed by that external edge/camera geometry, or (b) local mechanical rotation/flex of FC/IMU relative to the externally tracked platform. Next step is to expose the signed gyro rotation-vector components and compare them to what the external camera geometry was actually sensitive to.
+
+
+## 2026-09-07 — fix escaped-newline regression in gyro analyzer
+
+The rotvec print-line edit accidentally inserted a literal `\\n` into Python source, causing `SyntaxError: unexpected character after line continuation character`. Fixed the source to use two real Python lines. This is an analyzer-edit regression only; no data/run issue and no physical rerun is needed. This repeats the escaped-newline failure mode already identified in the process log and reinforces the rule to avoid textual escape injection in source edits.

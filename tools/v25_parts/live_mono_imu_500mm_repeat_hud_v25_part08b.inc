@@ -19,7 +19,7 @@
             }
           }
           else {V8Leg row;row.start_press=start_press;row.end_press=end_press;row.measured=makeLeg500(leg,start_mark,settled);
-            row.measured.direction=(leg%2==0)?"A->B":"B->A";
+            row.measured.direction=((leg%2==0)^gV25BFirst)?"A->B":"B->A";
             row.start_settle_shift_m=markDistance(start_press,start_mark);row.end_settle_shift_m=markDistance(end_press,settled);rows.push_back(row);std::cout<<"LEG "<<leg+1<<' '<<row.measured.direction<<" horizontal="<<std::fixed<<std::setprecision(2)<<row.measured.horizontal*1000.0<<" mm error="<<row.measured.error*1000.0<<" mm dz="<<row.measured.dz*1000.0<<" mm end_settle_shift="<<row.end_settle_shift_m*1000.0<<" mm\n";++leg;phase=CapturePhase::WAIT_START;notice="КОНЕЦ СТАБИЛИЗИРОВАН — СЛЕДУЮЩИЙ ПРОХОД";notice_until=monotonicNs()+1500000000LL;}
         }}
       }
@@ -86,7 +86,7 @@
     saveCsvV8(rows);
     saveBackendTraceV8(states,rows,"/home/vio/jtzero_500mm_v25_backend.csv");
     if(imu_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);imu_req=false;}if(att_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);att_req=false;}requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,0);if(streaming){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(camera_fd,VIDIOC_STREAMOFF,&t);streaming=false;}for(auto&bf:buffers)if(bf.start&&bf.start!=MAP_FAILED)munmap(bf.start,bf.length);if(camera_fd!=-1)close(camera_fd);if(serial_fd!=-1)close(serial_fd);
-    std::cout<<"V25 MODE: A->B->A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF\n";
+    std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
     printSummaryV8(rows,raw,rejected,selected,decoded,imu_rx,imu_fed,att_rx,sync.size(),mapping,states.size());
     raw_combined.flush();raw_camera.flush();raw_mjpg.flush();raw_attitude.flush();raw_range.flush();
     std::cout<<"RAW IMU CSV: "<<kV11CombinedPath<<" rows="<<raw_imu_rows<<"\n"

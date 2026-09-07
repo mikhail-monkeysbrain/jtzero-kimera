@@ -1026,3 +1026,12 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Следствие:** физический run 185426 валиден и повторять его не нужно. FAIL v1 полностью аннулируется как analyzer bug.
 
 **Исправление:** observability analyzer должен автоматически определять baseline axis из P2: для vertical stereo использовать epipolar residual `|xL-xR|`, signed disparity `yL-yR`, и triangulation через исходные P1/P2. Только после этого снова запускать stereo quality gate.
+
+
+## 2026-09-07 — observability analyzer исправлен под vertical stereo
+
+**Исправление кода:** `tools/analyze_p11_stereo_observability.py` теперь определяет rectified baseline axis непосредственно из P2. Для текущей калибровки выбирается `VERTICAL`: epipolar residual = `|xL-xR|`, disparity = `yL-yR`. Triangulation остаётся через калиброванные P1/P2.
+
+**Коммиты:** `bda9777` — частичный patch логики; `79425db` — завершение patch с определением axis/констант. Итоговый source перечитан: старый `EPI_Y_MAX_PX` отсутствует, auto-axis detection присутствует.
+
+**Следующий шаг:** повторно запустить тот же observability analyzer на run 185426. Это не повтор физического теста, а повтор анализа после исправления подтверждённой ошибки.

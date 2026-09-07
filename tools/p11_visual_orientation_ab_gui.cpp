@@ -4,9 +4,39 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <ctime>
+#include <ctime>\n#include <glob.h>\n#include <linux/videodev2.h>\n#include <sys/ioctl.h>\n#include <fcntl.h>\n#include <unistd.h>
 
-namespace fs = std::filesystem;
+namespace fs = std::filesystem;\n
+static int xioctl(int fd, unsigned long req, void* arg) {
+    int r;
+    do { r = ::ioctl(fd, req, arg); } while (r == -1 && errno == EINTR);
+    return r;
+}
+
+static std::string findOv9281() {
+    glob_t g{};
+    if (::glob("/dev/video*", 0, nullptr, &g) != 0)
+        return {};
+    std::string best;
+    for (size_t i = 0; i < g.gl_pathc; ++i) {
+        const char* path = g.gl_pathv[i];
+        int fd = ::open(path, O_RDWR | O_NONBLOCK);
+        if (fd < 0) continue;
+        v4l2_capability cap{};
+        const bool ok = xioctl(fd, VIDIOC_QUERYCAP, &cap) == 0;
+        ::close(fd);
+        if (!ok) continue;
+        const std::string card(reinterpret_cast<const char*>(cap.card));
+        if (card.find("OV9281") != std::string::npos ||
+            card.find("Arducam") != std::string::npos) {
+            best = path;
+            break;
+        }
+    }
+    ::globfree(&g);
+    return best;
+}
+
 
 static std::string nowStamp() {
     const auto t = std::time(nullptr);

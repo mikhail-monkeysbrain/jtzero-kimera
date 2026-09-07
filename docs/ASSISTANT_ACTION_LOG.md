@@ -280,3 +280,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Методологическая поправка:** в новом analyzer доли parallel/perpendicular выводятся как energy shares (квадраты компонент), чтобы они корректно суммировались к 100%. Предыдущие значения вида 8.6% / 99.6% из `analyze_p11_imu_vector_ab.py` были отношениями модулей к |d|, а не аддитивными долями; направление вывода о доминировании perpendicular component остаётся корректным, но формулировка была потенциально вводящей в заблуждение.
 
 **Статус после действия:** ПРОДВИНУЛИСЬ — проверяем повторяемость эффекта на соседних парах без нового физического теста.
+
+
+## 2026-09-07 — чтение accel calibration parameters FC
+
+**Pre-check на повтор выполнен.** Проверены журнал, existing multi-stream IMU tests и поиск по репозиторию по `INS_ACCSCAL` / `INS_ACCOFFS`; готового read-only dump для текущей P11-ветки не найдено.
+
+**Что уже делалось:** pairwise A/B decomposition показал, что три соседние пары A→B воспроизводят norm drop и что более 99% энергии полного B-A vector лежит в perpendicular component. IMU1/IMU2 видят почти одинаковое направление изменения (около 1° между mean B-A vectors).
+
+**Отличие нового действия:** новый шаг не повторяет физический A/B test и не меняет FC. Он только читает текущие ArduPilot accelerometer calibration/selection/orientation parameters, чтобы проверить, может ли меньший повторяемый norm shift быть связан с orientation-dependent response после per-axis calibration.
+
+**Добавлен файл:** `tools/read_p11_fc_accel_params.py`.
+
+**Commit:** `f996fd1` — `diag: add read-only P11 FC accel parameter dump`.
+
+**Безопасность:** script выполняет только `PARAM_REQUEST_LIST`; `PARAM_SET` не используется.
+
+**Статус:** ПРОДВИНУЛИСЬ — следующий discriminator использует текущую конфигурацию FC без нового физического прогона и без изменения параметров.

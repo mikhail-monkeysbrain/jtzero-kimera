@@ -1015,3 +1015,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Почему это следующий правильный шаг:** v1 не показывал, на каком именно фильтре исчезают все пары. До forensic результата нельзя менять калибровку, знак disparity, пороги или повторять эксперимент наугад.
 
 **Commit:** `61f7dca`.
+
+
+## 2026-09-07 — ROOT CAUSE stereo v1 найден: анализатор ошибочно предполагал горизонтальную стереопару
+
+**Forensic v2:** по всем stages ratio-test matches есть, но после rectification |dy| ~299–301 px. Это не признак плохой rectification. Финальная калибровка явно имеет `stereo_type: VERTICAL`, а P2 содержит baseline в вертикальном компоненте проекции (`P2[1,3] = -55.6715`). Значит после rectification совпадать должны X-координаты, а disparity лежит по Y.
+
+**Ошибка ассистента:** `analyze_p11_stereo_observability.py` был написан как для horizontal stereo: фильтровал `|yL-yR|` как epipolar residual и использовал `xL-xR` как disparity. Для этой системы это методологически неверно. Именно поэтому 140/140 пар были отброшены. Я должен был проверить `stereo_type: VERTICAL` и структуру P2 до написания analyzer.
+
+**Следствие:** физический run 185426 валиден и повторять его не нужно. FAIL v1 полностью аннулируется как analyzer bug.
+
+**Исправление:** observability analyzer должен автоматически определять baseline axis из P2: для vertical stereo использовать epipolar residual `|xL-xR|`, signed disparity `yL-yR`, и triangulation через исходные P1/P2. Только после этого снова запускать stereo quality gate.

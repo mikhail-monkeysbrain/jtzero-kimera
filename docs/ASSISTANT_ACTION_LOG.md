@@ -1764,3 +1764,30 @@ Do not interpret the mild B->A frontend quality degradation as causal proof; the
 **Next command:** run `analyze_v25_first_bad_state.py` on 224347 and 224543.
 
 **Статус:** ПРОДВИНУЛИСЬ — selected an archive-compatible downstream discriminator; no new physical test.
+
+
+## 2026-09-07 — added archived V25 inter-leg state inheritance analysis
+
+**Preflight / repeat check:** no existing V25 tool directly compares previous settled END state to next settled START state and relates the inherited next-start state to the next leg scale. Existing stationary-drift tools are partial; chain-based tools require a non-archived live chain file.
+
+**Added:** `tools/analyze_v25_interleg_state_inheritance.py`.
+
+For each leg it reports settled START/END backend:
+- accelerometer bias;
+- gyro bias;
+- velocity magnitude/vector;
+- roll/pitch;
+- leg scale.
+
+For each transition Lk->Lk+1 it reports:
+- |dBA|, |dBG|, |dV| and |dRP| from previous settled END to next settled START;
+- the actual inherited next-start BA, velocity and roll/pitch state;
+- diagnostic associations with next-leg scale across the supplied runs.
+
+**Physical test yaw:** none — analysis only. Target datasets are the two already recorded runs at stand/drone yaw ≈ -90°.
+
+**Commit:** `1c686da` — add V25 inter-leg state inheritance analysis.
+
+**Next action:** run on 224347 and 224543. Do not design a reset-between-legs physical test until this result shows whether state inheritance is actually present.
+
+**Статус:** ПРОДВИНУЛИСЬ — archive-compatible inheritance discriminator added; no new physical test.

@@ -946,3 +946,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Статус P11:** визуальное видео подтверждает сильную и очень качественную геометрическую связность кадр→кадр, но не позволяет из текущей monocular translational sequence надёжно извлечь независимый physical tilt. Механический наклон остаётся гипотезой, не доказательством.
 
 **Следующий принцип:** не писать ещё один homography-rotation estimator на этом же monocular dataset. Для независимого угла нужен либо внешний метрический reference/второй viewpoint/stereo, либо прямой механический измеритель ориентации. Если такой reference недоступен, visual route следует остановить как исчерпанный для P11 causal closure.
+
+
+## 2026-09-07 — monocular route остановлен; выбран существующий stereo route
+
+**Причина перехода:** calibrated monocular rotation-consistency gate на run 181857 дал FAIL и показал, что трансляция по близкой плоскости не позволяет надёжно отделить physical tilt от planar/translation component. Писать ещё один monocular homography estimator запрещено.
+
+**Pre-check на повтор:** в ветке main уже существуют рабочие stereo assets для OV9281 USB + OV5647 CSI: `tools/stereo_sync_test.cpp`, `tools/stereo_view_test.cpp` и финальная калибровка `calibration/stereo_ov9281_ov5647_final.yaml`. На test/fc-imu-ab их нет. Это не повтор P11 visual/ruler тестов: второй viewpoint даёт глубину/геометрию, которой принципиально не хватало monocular sequence.
+
+**Калибровка main подтверждена:** baseline 48.3317 mm, stereo RMS 0.675 px, rectified median residual 0.649 px, p95 1.850 px, vertical stereo. Эти значения достаточно хороши для диагностического stereo observability gate, но не гарантируют точность конечного plane-normal estimator.
+
+**Понятная цель следующего теста:** независимо от FC IMU проверить, меняется ли 3-D нормаль видимой поверхности/направляющей между физическими точками A и B по stereo depth.
+
+**План физического теста:** A1→B1→A2→B2→A3→B3→A4. В каждой точке БПЛА полностью неподвижен; между точками переносится по обычной направляющей. Для stereo plane-normal не нужен непрерывный проход и не нужна временная синхронизация во время движения — нужны качественные пары только на неподвижных plateau.
+
+**Методологический контроль:** сначала только stereo observability (overlap, disparity, valid depth, plane-fit residual) отдельно в A и B. Физическую A/B normal difference считать только если обе позиции проходят одинаковый quality gate. Нельзя использовать FC ATTITUDE/IMU в измеряемом stereo-канале.
+
+**Статус:** следующий route — stereo static A/B. Новый код logger должен быть отдельным русским GUI и использовать существующий main stereo capture код как основу, но без Charuco-save gate, потому что маркеры видны только в A.

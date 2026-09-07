@@ -72,7 +72,7 @@
     {
       std::ofstream ff("/home/vio/jtzero_500mm_v25_frontend.csv",std::ios::trunc);
       if(ff){
-        ff<<"timestamp_ns,callback_wall_ns,frame_id,is_keyframe,detected_features,tracked_features,mono_inliers,mono_putatives,mono_inlier_ratio,mono_ransac_iters,feature_detection_time_s,feature_tracking_time_s,mono_ransac_time_s,mono_status,mono_pose_valid,mono_tx,mono_ty,mono_tz,mono_t_norm,mono_body_tx,mono_body_ty,mono_body_tz,mono_body_t_norm,mono_roll_deg,mono_pitch_deg,mono_yaw_deg\n";
+        ff<<"timestamp_ns,callback_wall_ns,frame_id,is_keyframe,detected_features,tracked_features,mono_inliers,mono_putatives,mono_inlier_ratio,mono_ransac_iters,feature_detection_time_s,feature_tracking_time_s,mono_ransac_time_s,mono_status,mono_pose_valid,mono_tx,mono_ty,mono_tz,mono_t_norm,mono_body_tx,mono_body_ty,mono_body_tz,mono_body_t_norm,mono_roll_deg,mono_pitch_deg,mono_yaw_deg,pim_valid,pim_dt_s,pim_dpx,pim_dpy,pim_dpz,pim_dvx,pim_dvy,pim_dvz,pim_droll_deg,pim_dpitch_deg,pim_dyaw_deg\n";
         ff<<std::fixed<<std::setprecision(9);
         for(const auto& d:frontend_states){
           const double ratio=d.mono_putatives?static_cast<double>(d.mono_inliers)/static_cast<double>(d.mono_putatives):0.0;
@@ -82,7 +82,11 @@
             <<d.feature_tracking_time_s<<','<<d.mono_ransac_time_s<<','<<d.mono_status<<','
             <<(d.mono_pose_valid?1:0)<<','<<d.mono_tx<<','<<d.mono_ty<<','<<d.mono_tz<<','<<d.mono_t_norm<<','
             <<d.mono_body_tx<<','<<d.mono_body_ty<<','<<d.mono_body_tz<<','<<d.mono_body_t_norm<<','
-            <<d.mono_roll_deg<<','<<d.mono_pitch_deg<<','<<d.mono_yaw_deg<<'\n';
+            <<d.mono_roll_deg<<','<<d.mono_pitch_deg<<','<<d.mono_yaw_deg<<','
+            <<(d.pim_valid?1:0)<<','<<d.pim_dt_s<<','
+            <<d.pim_dpx<<','<<d.pim_dpy<<','<<d.pim_dpz<<','
+            <<d.pim_dvx<<','<<d.pim_dvy<<','<<d.pim_dvz<<','
+            <<d.pim_droll_deg<<','<<d.pim_dpitch_deg<<','<<d.pim_dyaw_deg<<'\n';
         }
       }
     }

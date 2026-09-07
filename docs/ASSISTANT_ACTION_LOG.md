@@ -1508,3 +1508,21 @@ User verified the actual archive list. The correct B-first archive is:
 **Next action:** rerun the same 5-run matcher with the corrected B-first path.
 
 **Статус:** НА МЕСТЕ — corrected path/provenance only; no new causal data.
+
+
+## 2026-09-07 — five-run V25 matcher exposed yaw-wrap defect; physical testing paused
+
+User ran the corrected raw-profile matcher on five archived physical runs (20 legs).
+
+**Raw result before validity filtering:** global one-to-one matching reported mean BA-AB=+0.0630, median=+0.0626, positive=8/10. This number must NOT be used as final causal evidence because the newly added runs exposed a bug in the matching descriptor.
+
+**Critical defect found:** `yaw_span = max(yaw)-min(yaw)` is invalid for wrapped Euler yaw. New runs contain reported yaw spans of 359.876° / 359.874° and other apparent 34–55° spans despite gyro RMS only ~0.014–0.029 rad/s. The 359.87° values are an obvious ±180° wrap artifact, and the large yaw-span terms dominate the matching score. This produced pathological one-to-one scores, including 2.400, and forced poor pair assignments.
+
+Examples from the user output:
+- 224347 L2 B->A yawSpan=359.876°;
+- 224543 L2 A->B yawSpan=359.874°;
+- global pair #08 score=2.400.
+
+**Conclusion:** the five physical runs are sufficient for the current stage; do NOT collect a third control run now. First repair the analysis by computing circular/unwrapped attitude excursions (or relative quaternion/rotation metrics) instead of naive Euler max-min. Then rerun the same five archives.
+
+**Status:** НА МЕСТЕ analytically — new data exposed an analysis bug rather than requiring more physical data. No parameter changes and no new physical test until corrected matching is evaluated.

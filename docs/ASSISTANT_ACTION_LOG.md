@@ -821,3 +821,16 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Следующий шаг:** не новый физический прогон. Нужен temporal family tracker, который один раз фиксирует две line families в PRE_STILL_A и затем непрерывно сопоставляет их через MOVE_A_TO_B до POST_STILL_B по углу/поддержке, запрещая frame-wise перескакивание на другие пары. Только затем повторить calibrated plane-normal estimate.
 
 **Статус:** текущий plane-normal result rejected; P11 cause still unresolved.
+
+
+## 2026-09-07 — добавлен temporal family tracker после rejected plane-normal
+
+**Pre-check:** это не повтор `analyze_p11_ruler_pass_geometry.py` и не повтор rejected `analyze_p11_ruler_plane_normal.py`. Первый независимо выбирал state-level line families в A/B; второй заново выбирал лучшую пару на каждом кадре и поэтому мог переключать физические линии. Новый analyzer фиксирует пару в PRE_STILL_A и ведёт именно эти angular families последовательно через MOVE до POST_STILL_B с hard continuity gate и без re-seed после пропуска.
+
+**Добавлен:** `tools/analyze_p11_ruler_temporal_track.py`.
+
+**Gate:** обе A-seeded families должны иметь достаточный hit-rate в A, MOVE и B; иначе FAIL и дальнейшая 3-D интерпретация этого dataset запрещена. Сохраняется `ruler_temporal_track/contact_sheet.png` для проверки, что F1/F2 действительно лежат на одной и той же физической структуре.
+
+**Самокритика:** continuity по углу всё ещё не гарантирует физическую identity при наличии нескольких почти параллельных линий. Поэтому даже PASS — только более сильный gate; следующий calibrated geometry step допустим лишь после проверки overlay. Новый физический тест пока не требуется.
+
+**Commit:** `97841fd`.

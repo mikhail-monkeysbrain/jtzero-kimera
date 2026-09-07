@@ -931,3 +931,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** nearest-rotation projection homography не является строгой unique decomposition planar motion; translation relative to plane может попадать в rotation-like term. Поэтому gate специально включает residual и subset robustness и остаётся discriminator, а не final pose estimator.
 
 **Commit:** `78f6ecb`.
+
+
+## 2026-09-07 — calibrated rotation-consistency gate FAIL; integrated 87.8° rejected
+
+**Результат:** PRE_STILL_A и POST_STILL_B ведут себя правильно: межкадровое rotation-like increment median ~0.005° и pure-rotation residual ~7e-5. Во время MOVE median increment всего 0.0172°, p90 0.6182°. Формально накопленный nearest-rotation candidate = 87.826°, rotvec ~[50.74,71.69,-0.18]°.
+
+**Критический вывод:** 87.826° полностью отвергается как физический угол. CONSISTENCY GATE=FAIL: move_signal=False, spatial_robustness_ok=False. Разные пространственные subsets кадра во время движения дают заметно разные rotation-like оценки (spread p90 0.312°), что указывает на сильное загрязнение translation/planar/parallax component. Малые локальные ошибки homography не спасают физическую интерпретацию cumulative nearest-rotation.
+
+**Что подтверждено:** модель корректно видит почти нулевое движение на STILL, то есть сам pipeline не генерирует большой fake rotation в статике. Проблема появляется именно при трансляции A→B, где general homography нельзя безопасно свести к pure rotation.
+
+**Самокритика:** идея интегрировать nearest-SO(3) projection каждой homography оказалась методологически недостаточной для translational pass по близкой плоскости. Накопление приводит к огромному псевдовороту даже при малых pairwise residuals. Этот route для физического угла закрыт.
+
+**Статус P11:** визуальное видео подтверждает сильную и очень качественную геометрическую связность кадр→кадр, но не позволяет из текущей monocular translational sequence надёжно извлечь независимый physical tilt. Механический наклон остаётся гипотезой, не доказательством.
+
+**Следующий принцип:** не писать ещё один homography-rotation estimator на этом же monocular dataset. Для независимого угла нужен либо внешний метрический reference/второй viewpoint/stereo, либо прямой механический измеритель ориентации. Если такой reference недоступен, visual route следует остановить как исчерпанный для P11 causal closure.

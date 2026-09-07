@@ -1113,3 +1113,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Что проверяет:** pair-level median dx, adjacent A1→B1/A2→B2/A3→B3 deltas, same-position A/B drift, глобальный тренд по порядку записи и остаточную B-A разницу после linear detrend. Это отличается от предыдущего spatial residual analyzer: новый вопрос — time drift vs position effect.
 
 **Commit:** `661b5da`.
+
+
+## 2026-09-07 — time/position test: position effect слаб и неповторяем; добавлен spatially balanced dx test
+
+**Результат time/position analyzer:** adjacent B-A dx: -1.344 px, +0.193 px, +0.022 px — знак и величина не повторяются. Same-position A drift=1.268 px, B drift=0.515 px. Global linear time trend слабый (R2=0.233). После linear detrend A median residual=+0.022 px, B=-0.198 px, то есть residual B-A≈-0.220 px.
+
+**Критический вывод:** стабильного position-specific rectification offset по текущей метрике не видно. Первый A1→B1 эффект большой, но следующие пары почти нулевые/противоположного знака. Это не похоже на устойчивую A/B причину.
+
+**Самокритика:** time detrend всё ещё может путать temporal drift с тем, что в A и B matcher видит разные области кадра. Поэтому следующий шаг должен сравнивать A/B только в одинаковых spatial bins.
+
+**Добавлен:** `tools/analyze_p11_rectified_dx_balanced_spatial.py`.
+
+**Метод:** 8x6 grid, stage-level median dx по bins, используются только bins с достаточной поддержкой одновременно в >=3 A stages и >=2 B stages; затем считаются balanced stage medians, per-bin B-A effect и same-position bin drift.
+
+**Commit:** `ac87c25`.

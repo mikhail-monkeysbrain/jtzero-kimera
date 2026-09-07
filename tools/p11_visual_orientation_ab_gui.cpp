@@ -18,7 +18,7 @@ int main(int argc,char**argv){
     const int cam = argc>1 ? std::atoi(argv[1]) : 0;
     cv::VideoCapture cap(cam, cv::CAP_V4L2);
     cap.set(cv::CAP_PROP_FRAME_WIDTH,640); cap.set(cv::CAP_PROP_FRAME_HEIGHT,480);
-    cap.set(cv::CAP_PROP_FPS,100);
+    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M','J','P','G'));\n    cap.set(cv::CAP_PROP_FPS,100);\n    cap.set(cv::CAP_PROP_BUFFERSIZE,1);
     if(!cap.isOpened()){ std::cerr<<"[ОШИБКА] OV9281 не открыта.\n"; return 1; }
 
     const std::vector<std::string> stages={"A1","B1","A2","B2","A3","B3","A4"};

@@ -7,11 +7,17 @@
 //   4) require 8 consecutive stable backend states before measurements.
 // Goal: isolate the systematic short LEG1 seen in v12 from T_BS effects.
 
+#ifndef JTZERO_LEG_COUNT
 #define JTZERO_LEG_COUNT 4
+#define JTZERO_V25_OWNS_LEG_COUNT
+#endif
 #define JTZERO_V7_EMBEDDED
 #include "live_mono_imu_300mm_repeat_hud_v7.cpp"
 #undef JTZERO_V7_EMBEDDED
+#ifdef JTZERO_V25_OWNS_LEG_COUNT
 #undef JTZERO_LEG_COUNT
+#undef JTZERO_V25_OWNS_LEG_COUNT
+#endif
 #undef main
 
 namespace {

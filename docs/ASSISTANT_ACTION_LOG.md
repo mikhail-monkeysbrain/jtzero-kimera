@@ -351,3 +351,16 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Повтор не требуется:** физический P11 A/B прогон и повтор одиночного probe сейчас не нужны. Следующий шаг должен исправить read-only parameter collector: учитывать delayed/out-of-order replies и получать только необходимые calibration/ID/orientation параметры адресными запросами, а не полагаться на полный LIST.
 
 **Статус:** ПРОДВИНУЛИСЬ — проблема локализована до поведения parameter retrieval/timing; доступ к параметрам FC подтверждён.
+
+
+## 2026-09-07 — robust адресный collector accel-параметров FC
+
+**Pre-check на повтор выполнен.** Этот шаг не повторяет прежний `PARAM_REQUEST_LIST` и не повторяет одиночный 3-параметровый probe. Он использует подтверждённый рабочий `PARAM_REQUEST_READ`, но исправляет выявленную проблему delayed/out-of-order replies.
+
+**Отличие:** все нужные accel calibration/ID/orientation параметры запрашиваются адресно в нескольких раундах; ответы принимаются глобально по имени независимо от того, на какой запрос они пришли по времени. Отсутствующие параметры повторно запрашиваются до 5 раундов. `PARAM_SET` отсутствует.
+
+**Добавлены файлы:** `tools/read_p11_fc_accel_params_robust.cpp`, `tools/run_read_p11_fc_accel_params_robust.sh`.
+
+**Коммиты:** `fe16142`, `1251d74`.
+
+**Статус:** ПРОДВИНУЛИСЬ — чтение параметров адаптировано к фактически наблюдаемой задержке MAVLink parameter replies; новый физический P11 тест не требуется.

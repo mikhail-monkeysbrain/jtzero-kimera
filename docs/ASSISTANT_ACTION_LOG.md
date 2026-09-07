@@ -1074,3 +1074,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** disparity corridor 220..380 px выбран по текущему физическому setup и forensic depth ~0.18 m; это diagnostic prior, не универсальный stereo matcher. Если gate PASS, следующий normal analysis должен отдельно проверить устойчивость к разумному изменению corridor/thresholds.
 
 **Commit:** `a8f285f`.
+
+
+## 2026-09-07 — guided stereo: данные сильные, но gate FAIL вызван только внутренне противоречивым dx threshold
+
+**Результат:** все 140/140 pairs успешно прошли guided matching/triangulation/plane fit. Median matches: A 113–152, B 48–55; depth 0.184–0.186 m; plane inlier ratio ~0.79–0.85; plane residual ~0.58–1.16 mm.
+
+**Почему напечатан FAIL:** source проверен. Matcher допускает X_CORRIDOR=6.0 px, но pass_stage() затем требует dx_med<=3.0 px. Фактические median dx=3.189..4.361 px, поэтому все stages FAIL по этому условию; остальные gate criteria проходят.
+
+**Самокритика:** нельзя просто ослабить threshold до 5/6 px, потому что это превратит результат в post-hoc PASS. Более того, residual x 3–4 px существенно хуже старой calibration validation (rect mean residual ~0.766 px, p95 ~1.85 px), поэтому это может быть реальная проблема переносимости stereo calibration / image pipeline, а не только плохой threshold.
+
+**Решение:** текущий gate не использовать как PASS/FAIL доказательство. Следующий анализ должен измерить signed rectified x-residual как функцию координаты/глубины/stage и сравнить его с calibration residual, а также проверить, можно ли объяснить систематический residual постоянным offset/rectification mismatch. Plane normals пока не сравнивать, чтобы не получить biased A/B tilt.

@@ -793,3 +793,26 @@ Tree consequence:
 Next discriminator:
 - compare A→B and B→A **within this same archived run** for duration, speed distribution, acceleration proxy, FC attitude excursion, VALID/LOW_DISPARITY ratio and inlier quality.
 - Tool: `tools/analyze_v25_same_run_motion_visual.py`.
+
+
+### 2026-09-07 — methodological correction: backend speed cannot prove input-motion differences
+
+The same-run motion/visual comparison showed:
+- B→A has larger reported VIO speed and shorter duration on average;
+- LEG4 also has much lower VALID fraction than LEG3.
+
+However, the speed used by that analyzer was `backend speed_m_s`, i.e. a VIO output. Since scale is the quantity under investigation, using VIO speed to prove that the physical input motion was different is circular.
+
+Therefore:
+- duration from operator START/END remains a valid independent observable;
+- FC attitude excursion remains independent enough for comparison;
+- frontend status/inlier quality is also independent of backend scale;
+- **backend speed distribution must not be used as causal evidence for different physical motion excitation.**
+
+New test:
+- `tools/analyze_v25_raw_motion_profile.py`
+- uses only raw FC IMU, FC ATTITUDE and operator event timestamps;
+- compares horizontal acceleration RMS/p90/max, total dynamic acceleration, gyro, attitude spans and duration between legs;
+- no backend velocity is used.
+
+Status: **ОТКАТИЛИСЬ partially on the claim that B→A was physically faster based on VIO speed.** The observed scale asymmetry itself remains valid, as does the frontend-quality difference on LEG4.

@@ -18,12 +18,19 @@ att=rows(ATT)
 def f(r,k): return float(r[k])
 def i(r,k): return int(float(r[k]))
 
-# Use backend states before LEG1 START as the stationary analysis window.
-pre=[r for r in be if r["leg"]=="0" and r["phase"]=="OUTSIDE"]
+# Use the actual LEG1 START event timestamp as the boundary.
+# Do NOT rely on leg==0/OUTSIDE: after an aborted/incomplete run V25 can return
+# to OUTSIDE, so that label may also contain late/post-motion states.
+start1 = next((r for r in rows(HOME/"jtzero_500mm_v25_events.csv")
+               if r.get("event")=="START" and r.get("leg")=="1"), None)
+if start1 is None:
+    raise SystemExit("LEG1 START event not found")
+start1_ts = i(start1, "state_timestamp_ns")
+pre=[r for r in be if i(r,"timestamp_ns") <= start1_ts]
 if not pre:
-    raise SystemExit("No pre-LEG1 backend states found")
+    raise SystemExit("No backend states before LEG1 START")
 t0=min(i(r,"timestamp_ns") for r in pre)
-t1=max(i(r,"timestamp_ns") for r in pre)
+t1=start1_ts
 
 # Raw IMU CSV stores original FRD values in ax..gz columns.
 imu_pre=[r for r in imu if r.get("type")=="IMU" and t0 <= i(r,"mapped_ns") <= t1]
@@ -71,6 +78,7 @@ raw_r,raw_p=tilt(a_flu)
 pred_r,pred_p=tilt(pred)
 
 print("================ V25 STATIC ACCEL/BIAS FORENSIC ================")
+print(f"LEG1 START state timestamp: {start1_ts}")
 print(f"backend pre-LEG1 window: KF {pre[0]['keyframe']}..{pre[-1]['keyframe']}  states={len(pre)}")
 print(f"raw IMU samples in mapped window: {len(imu_pre)}")
 print()

@@ -39,6 +39,11 @@
 8. Не использовать backend/VIO output как доказательство различий физического входа, если имеется независимый raw-сигнал.
 9. Для P11 не менять `T_BS`, ARW, gravity feedback или backend-параметры без отдельного причинного основания.
 10. В каждом сообщении пользователю завершать ответ текущим **СТАТУСОМ**. После каждых 10 сообщений давать сводку последних 10 шагов.
+11. Перед написанием любого geometry/calibration-dependent analyzer сначала открыть и прочитать фактический calibration/config source: sensor order, stereo axis/type, frame conventions, intrinsics/extrinsics, units и projection matrices. Не выводить это из привычки или имени файла.
+12. Для количественного причинного вывода обязательно выполнять **order-of-magnitude reconciliation**: сравнить величину найденного входного эффекта с величиной VIO/PIM/backend-эффекта, который он должен объяснить. Если величины не согласуются, явно записать недостающий механизм усиления/преобразования или считать явления частично независимыми.
+13. Любой результат с независимыми физическими прогонами n<3 помечать как **предварительный**, даже если within-run repeatability хорошая. Не использовать слово «установлено» для воспроизводимости по n=2 без дополнительного независимого основания.
+14. Геометрический/внешний discriminator, полученный на одном физическом run, считать **предварительным n=1** до повторения на независимом run, если он используется для причинного исключения.
+15. `docs/STATUS.md` — компактный канонический статус текущих гипотез и численных связей; перед новым действием читать его вместе с этим журналом. Хронологию хранить здесь, а не раздувать STATUS.
 
 ## Статусы
 
@@ -98,12 +103,13 @@
 - Разложение PIM показало, что простой X/Y→Z leakage не объясняет основной эффект; значимый вклад лежит в native-Z + gravity cancellation.
 - Backend accelerometer bias `baz` не является единственным источником directional Z.
 - Сигнал, соответствующий PIM Z residual, найден уже в raw FC HIGHRES_IMU.
-- В отдельных A/B тестах stationary `|a|` отличается между физическими точками A и B.
+- В отдельных A/B тестах stationary `|a|` отличается между физическими точками A и B. **Воспроизводимость пока предварительная: независимых raw position runs n=2.**
 - Два независимых raw A/B прогона дали очень близкий split по `|a|`:
   - run `20260907_151131_P11_RAW_IMU_AB_POSITION_GUI`: B-A = **-0.039198 m/s²**;
   - run `20260907_160342_P11_RAW_IMU_AB_POSITION_GUI`: B-A = **-0.036468 m/s²**.
 - Температурные средние A/B в этих тестах практически совпадали, поэтому простое объяснение temperature drift ослаблено.
 - Изменение `|a|` нельзя объяснить только поворотом координат/наклоном: чистый rotation меняет компоненты, но не норму.
+- **Не смешивать две разные величины:** norm split ~0.037–0.039 m/s² соответствует всего ~0.22° в грубой g-equivalent шкале, но более поздний paired vector analysis показал отдельное изменение **направления** acceleration vector ~2.2–2.4° (перпендикулярная составляющая ~0.39–0.40 m/s²) при меньшем norm drop. Именно vector-angle, а не norm split, сопоставим по порядку величины с ранее наблюдавшейся VIO attitude asymmetry ~1.6–1.7°. Причинная передача между ними пока не доказана.
 - Известный наклон поверхности уже учитывался ранее; не считать его новой веткой диагностики.
 
 ## Не установлено
@@ -1248,3 +1254,26 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Self-critique / limits:** this is a single external-camera pass and the edge extractor is not a calibrated 3-D pose estimator. The ~0.2° residual is an image/projective consistency bound, not a metrologically calibrated physical pitch angle. Nevertheless, it directly falsifies the simplistic reading of the ~1.3° 2-D slope change as physical tilt, and it provides no evidence for the ~2.3° tilt needed to explain the P11 IMU vector rotation.
 
 **Consequence for P11:** mechanical tilt remains possible only below the external-video sensitivity/axis ambiguity, but the hypothesis that the full ~2.3° IMU A/B vector rotation is caused by a real stand tilt is substantially weakened by an independent world-fixed camera.
+
+
+---
+
+## 2026-09-07 — внешний аудит журнала: приняты методологические корректировки
+
+Пользователь передал внешний критический разбор текущего журнала. Проверка полного файла подтвердила несколько замечаний.
+
+**1. Quantitative reconciliation V21/V23 ↔ P11 действительно отсутствовала.** В журнале нет явных упоминаний V21/V23, `roll_end`/`pitch_end`, residual velocity projection или VIO-JUMP. Это пробел интеграции двух параллельных расследований.
+
+**Уточнение к замечанию про порядок величины:** сравнивать stationary `|a|` norm split ~0.038 m/s² напрямую с attitude 1.6–1.7° неверно. Norm split — маленькая параллельная/scale-like часть (~0.22° g-equivalent). Поздний P11 vector analysis дал acceleration-vector direction change ~2.2–2.4°, то есть тот же порядок величины, что VIO attitude asymmetry. Но это только совместимость по масштабу, не причинное доказательство. Нужна отдельная передаточная сверка IMU→PIM→VIO.
+
+**2. n=2 raw A/B split.** Замечание принято. Два независимых raw position runs — предварительная воспроизводимость, не окончательно «установленный» факт. Within-run A1/B1, A2/B2, A3/B3 repeatability усиливает наблюдение, но не заменяет независимые runs.
+
+**3. Геометрические discriminators по n=1.** Принято. Ruler-pass 181857, stereo 185426 и внешний world-fixed video каждый являются single-run evidence. Особенно внешний projective result, который сейчас ослабляет full-mechanical-tilt hypothesis, должен быть повторён независимым внешним видео до сильного причинного исключения.
+
+**4. Невынужденные implementation bugs.** Принято. В обязательные правила добавлен preflight чтения calibration/config до geometry-dependent code. Horizontal-vs-vertical stereo bug был предотвратим и не должен повторяться.
+
+**5. Два расследования не сведены.** Принято. Создаётся `docs/STATUS.md` с одной общей картиной P11/V21/V23 и обязательной order-of-magnitude reconciliation.
+
+**6. Правило сводки каждые 10 сообщений фактически не соблюдалось.** Поиск по полному journal нашёл только само правило, но не регулярные записи сводок. Это нарушение собственного процесса. Дальше STATUS будет использоваться как компактная operational memory; 10-message summaries остаются обязательными, но не должны заменять обновление STATUS.
+
+**Статус:** ПРОДВИНУЛИСЬ — исправлена структура доказательств и интеграция расследований; новых физических данных этим действием не получено.

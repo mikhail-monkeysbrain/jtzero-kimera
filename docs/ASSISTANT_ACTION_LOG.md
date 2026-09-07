@@ -873,3 +873,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Следующий методологически корректный вариант:** не искать глобальные одинаковые объекты A и B, а строить локальные frame-to-frame correspondences внутри полосы рулетки (кромки + риски + локальная текстура) и вести геометрию непрерывно по видео. Это принципиально отличается от angular-mode tracking: отслеживаются конкретные image points/patches между соседними кадрами, а не только направления линий. Нужен RANSAC planar homography/optical-flow consistency gate и контроль накопленного drift; до этого код не должен выдавать физический tilt.
 
 **Статус:** marker A↔B route закрыт; ruler-local correspondence route открыт как следующий кандидат.
+
+
+## 2026-09-07 — добавлен frame-to-frame planar correspondence gate
+
+**Pre-check:** в репозитории не было KLT/RANSAC analyzer для ruler-pass. Это не повтор line-angle tracking: новый шаг отслеживает конкретные image points между соседними кадрами и строит локальную homography только при согласованных correspondences.
+
+**Добавлен:** `tools/analyze_p11_incremental_planar_chain.py`.
+
+**Что проверяет:** реальную непрерывность кадр→кадр через KLT forward/backward check, RANSAC homography, inlier ratio, inlier count и reprojection error отдельно в PRE_STILL_A / MOVE_A_TO_B / POST_STILL_B. Также оценивает здоровье накопленной цепочки, но накопленную homography пока НЕ трактует как физический tilt.
+
+**Почему это методологически лучше предыдущего angular-family tracker:** correspondence строится по конкретным точкам между соседними кадрами, а не по наличию похожих углов в сцене. Маркеры, видимые только в A, могут помочь локально, но цепочка должна продолжаться через новые точки по мере их появления; прямой A↔B marker match не требуется.
+
+**Самокритика:** global frame homography предполагает доминирующую примерно плоскую сцену. Если в кадре значимо смешаны разные глубины/плоскости, RANSAC может выбирать не ту поверхность. Поэтому первый этап — только quality gate; физический motion decomposition запрещён до PASS и visual inspection contact sheet.
+
+**Commit:** `77be87d`.
+
+**Статус:** новый физический прогон не нужен; следующий шаг — запустить gate на run 181857.

@@ -14,7 +14,7 @@
   ru(panel,"Разворот каждой пары ≥160°",{18,725},12,{185,185,185});
   ru(panel,"Q / ESC — выход",{18,755},14,{215,215,215});
   if(!notice.empty()){cv::rectangle(panel,{10,790,360,70},cv::Scalar(35,35,125),-1);ru(panel,notice,{20,835},13,{255,255,255},cv::QT_FONT_BOLD);}
-  panel.copyTo(canvas(cv::Rect(900,0,380,900)));
+  panel.copyTo(canvas(cv::Rect(900,0,380,720)));
   cv::imshow(kV8WindowName,canvas);
 }
 
@@ -33,6 +33,8 @@ int main(int argc,char**argv){
   #endif
 #endif
   std::cout<<"[CAM] device="<<camera_device<<"\n";
+  cv::namedWindow(kV8WindowName, cv::WINDOW_NORMAL);
+  cv::setWindowProperty(kV8WindowName, cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
 
   int camera_fd=-1,serial_fd=-1;bool streaming=false,imu_req=false,att_req=false,pipeline_started=false,aborted=false;
   uint8_t sys=0,comp=0;std::vector<CameraBuffer>buffers;std::shared_ptr<HudPipeline>pipeline;std::thread pipeline_thread;

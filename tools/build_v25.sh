@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIMERA_ROOT="${KIMERA_ROOT:-/home/vio/Kimera-VIO}"
 OUT="${1:-/tmp/live_mono_imu_500mm_repeat_hud_v25}"
+SRC="${JTZERO_V25_SOURCE:-$ROOT/tools/live_mono_imu_500mm_repeat_hud_v25.cpp}"
 CXX="${CXX:-g++}"
 
 OPENCV_CFLAGS="$(pkg-config --cflags opencv4)"
@@ -25,9 +26,10 @@ if [ -z "$MAVLINK_INC" ]; then
 fi
 
 echo "Building: $OUT"
+echo "Source:   $SRC"
 echo "MAVLink:  ${MAVLINK_INC#-I}"
 
-"$CXX"   -std=c++17 -O2 -DNDEBUG -pthread   $OPENCV_CFLAGS   -I"$ROOT/tools"   -I"$KIMERA_ROOT/include"   -I/usr/local/include   -I/usr/include/eigen3   $MAVLINK_INC   "$ROOT/tools/live_mono_imu_500mm_repeat_hud_v25.cpp"   -o "$OUT"   -L"$KIMERA_ROOT/build"   -L/usr/local/lib   -Wl,-rpath,"$KIMERA_ROOT/build:/usr/local/lib"   -lkimera_vio   -lgtsam -lgtsam_unstable   -lKimeraRPGO   -lgflags -lglog   -lboost_system   $OPENCV_LIBS   -ldl -lpthread
+"$CXX"   -std=c++17 -O2 -DNDEBUG -pthread   $OPENCV_CFLAGS   -I"$ROOT/tools"   -I"$KIMERA_ROOT/include"   -I/usr/local/include   -I/usr/include/eigen3   $MAVLINK_INC   "$SRC"   -o "$OUT"   -L"$KIMERA_ROOT/build"   -L/usr/local/lib   -Wl,-rpath,"$KIMERA_ROOT/build:/usr/local/lib"   -lkimera_vio   -lgtsam -lgtsam_unstable   -lKimeraRPGO   -lgflags -lglog   -lboost_system   $OPENCV_LIBS   -ldl -lpthread
 
 echo "OK: $OUT"
 ldd "$OUT" | grep -Ei 'kimera|gtsam|opencv' | head -30 || true

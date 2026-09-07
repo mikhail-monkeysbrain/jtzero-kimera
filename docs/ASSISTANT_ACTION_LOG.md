@@ -1492,3 +1492,19 @@ User ran `analyze_v25_raw_profile_crossrun_match.py` on three archived V25 runs 
 **Next action:** rerun the same command and use the new `GLOBAL ONE-TO-ONE OPPOSITE-DIRECTION MATCH` section. No new physical run and no parameter change.
 
 **Статус:** ПРОДВИНУЛИСЬ — current archive already weakens a pure motion-profile-only explanation, but the first ranking had pseudoreplication; the corrected discriminator is required before increasing confidence in a residual direction-dependent estimator/visual effect.
+
+
+## 2026-09-07 — correction: B-first archive path was guessed incorrectly
+
+User attempted the 5-run raw-profile matcher and received `FileNotFoundError` because the previously suggested B-first archive path `20260907_224439_v25_BASELINE_ARW_003_EXACT_B_FIRST` did not exist.
+
+User verified the actual archive list. The correct B-first archive is:
+`/home/vio/jtzero_runs/20260907_224543_v25_BASELINE_ARW_003_EXACT_B_FIRST`.
+
+**Cause:** assistant guessed the timestamp instead of requiring/using the runner-reported archive path. This is an infrastructure/path error only; no physical run is invalidated and no rerun is needed.
+
+**Process correction:** do not infer archive timestamps. Use the exact path printed by the runner or verify with `ls -1dt /home/vio/jtzero_runs/*v25*`.
+
+**Next action:** rerun the same 5-run matcher with the corrected B-first path.
+
+**Статус:** НА МЕСТЕ — corrected path/provenance only; no new causal data.

@@ -14,7 +14,9 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <climits>
 #include <cmath>
+#include <ctime>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -315,7 +317,8 @@ public:
             txt(ui,"ПРАВАЯ: OV5647",rx,150,18,cv::Scalar(205,210,220));
 
             txt(ui,
-                "Синхронизация: dt = " + cv::format("%+.2f мс", pair.dt_ms),
+                std::string("Синхронизация: dt = ") +
+                    std::string(cv::format("%+.2f мс", pair.dt_ms)),
                 40,565,17,
                 (std::abs(pair.dt_ms) <= MAX_STEREO_DT_MS)
                     ? cv::Scalar(120,235,160)

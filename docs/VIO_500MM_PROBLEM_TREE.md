@@ -412,3 +412,30 @@ Next discriminator should determine *when* BA separates from the raw-IMU-consist
 - determine whether BA moves mainly during visual VALID motion, during LOW_DISPARITY intervals, or during endpoint settling.
 
 This is now a deeper internal VIO branch, not a broad hardware/FC branch.
+
+
+### 2026-09-07 — Test 1B.4: when does BA move?
+
+Command: `python3 tools/analyze_v25_bias_timeline_vs_frontend.py`
+
+Result:
+- LEG1: VALID contributes sum|dBA|=0.46843, signed=-0.21636; LOW_DISPARITY only 0.00993.
+- LEG2: VALID contributes 0.13636, signed=-0.04556; LOW_DISPARITY only 0.00989.
+- LEG3: VALID contributes 0.09398, signed=+0.01354; LOW_DISPARITY only 0.01035.
+- LEG4: VALID contributes 0.16810, signed=+0.04959; LOW_DISPARITY only 0.00513.
+
+Conclusion: **BA changes overwhelmingly during VALID visual motion, not during LOW_DISPARITY stationary handling.** This strongly weakens endpoint/ZUPT as the mechanism that creates the directional bias and strengthens the visual-inertial coupling / scale-observability branch.
+
+#### Подгипотеза 1B.5 — accelerometer bias is too free during visual-inertial optimization
+
+Controlled causal test:
+- baseline `accelerometer_random_walk = 0.003`;
+- test value `0.0003` (10× tighter);
+- all other parameters and exact-gravity initialization unchanged.
+
+Runner: `tools/run_v25_arw_0003_test.sh`.
+
+Decision:
+- if BA_along directional split and B→A +6% scale error both shrink, bias-state freedom is causal;
+- if BA is constrained but scale error remains, BA is mainly a symptom and visual scale/geometry becomes primary;
+- if the run degrades globally, 0.0003 is too restrictive and the result still informs the model.

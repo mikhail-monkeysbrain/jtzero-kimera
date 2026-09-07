@@ -963,3 +963,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Методологический контроль:** сначала только stereo observability (overlap, disparity, valid depth, plane-fit residual) отдельно в A и B. Физическую A/B normal difference считать только если обе позиции проходят одинаковый quality gate. Нельзя использовать FC ATTITUDE/IMU в измеряемом stereo-канале.
 
 **Статус:** следующий route — stereo static A/B. Новый код logger должен быть отдельным русским GUI и использовать существующий main stereo capture код как основу, но без Charuco-save gate, потому что маркеры видны только в A.
+
+
+## 2026-09-07 — реализован понятный P11 stereo A/B GUI logger
+
+**Pre-check:** существующие stereo инструменты были только в `main` и ориентированы на sync/viewer/Charuco capture. Для P11 нужен отдельный logger без Charuco-save gate, потому что маркеры есть только в A.
+
+**Добавлено в `test/fc-imu-ab`:** финальная stereo calibration `calibration/stereo_ov9281_ov5647_final.yaml`; `tools/p11_stereo_ab_gui.cpp`; `tools/run_p11_stereo_ab_gui.sh`.
+
+**Понятный протокол GUI:** A1→B1→A2→B2→A3→B3→A4. Перед каждым stage GUI прямо пишет физическое действие: установить/переместить БПЛА в конкретную точку, отпустить, дождаться полного покоя, затем нажать ПРОБЕЛ. Во время записи крупно отображается `БПЛА НЕ ПЕРЕМЕЩАТЬ`; запись 20 stereo-пар завершается автоматически. Следующий stage не стартует без нового operator confirmation.
+
+**Измеряемый канал:** OV9281 USB + OV5647 CSI, synchronized pair accepted only при |dt| <= 7 ms. В каждом stage сохраняются 20 уникальных PNG-пар с паузой >=150 ms, плюс `p11_stereo_pairs.csv` и `p11_stereo_events.csv`. Charuco/FC IMU/ATTITUDE в gate записи не участвуют.
+
+**GUI:** русский полноэкранный 1280x720, два live preview и отдельная панель инструкций; текст через `cv::addText`/DejaVu Sans. Source перечитан после commit: escaped-newline artefacts отсутствуют, `cv::putText` не используется.
+
+**Коммиты:** `325267e` calibration, `a9158dd` logger, `f6a4eb1` runner, `98e00bc` build hardening.
+
+**Самокритика:** logger пока только собирает synchronized static stereo data. Он не доказывает качество depth/plane fit. Следующий analyzer должен сначала пройти stereo observability/plane-fit gate отдельно для A и B и только потом сравнивать normals.

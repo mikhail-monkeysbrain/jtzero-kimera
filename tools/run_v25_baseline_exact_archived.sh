@@ -13,6 +13,9 @@ export JTZERO_STAGED_ZUPT="${JTZERO_STAGED_ZUPT:-1}"
 echo "[BASELINE] params=$PARAMS"
 grep -nE 'accelerometer_random_walk|accelerometer_noise_density|gyroscope_random_walk'   "$PARAMS/ImuParams.yaml"
 
+echo "[BASELINE] rebuilding V25 binary from current sources..."
+bash "$ROOT/tools/build_v25.sh" /tmp/live_mono_imu_500mm_repeat_hud_v25
+
 set +e
 bash "$ROOT/tools/run_v25_auto_camera.sh"
 rc=$?

@@ -1085,3 +1085,16 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** нельзя просто ослабить threshold до 5/6 px, потому что это превратит результат в post-hoc PASS. Более того, residual x 3–4 px существенно хуже старой calibration validation (rect mean residual ~0.766 px, p95 ~1.85 px), поэтому это может быть реальная проблема переносимости stereo calibration / image pipeline, а не только плохой threshold.
 
 **Решение:** текущий gate не использовать как PASS/FAIL доказательство. Следующий анализ должен измерить signed rectified x-residual как функцию координаты/глубины/stage и сравнить его с calibration residual, а также проверить, можно ли объяснить систематический residual постоянным offset/rectification mismatch. Plane normals пока не сравнивать, чтобы не получить biased A/B tilt.
+
+
+## 2026-09-07 — добавлен rectified x-residual forensic analyzer
+
+**Pre-check:** отдельного анализа signed x-residual после vertical rectification в репозитории не было. Это не повтор guided matcher: новый analyzer не оценивает plane normal и не выносит PASS/FAIL, а пытается понять структуру остаточного dx≈3–4 px.
+
+**Добавлен:** `tools/analyze_p11_rectified_x_residual.py`.
+
+**Что проверяет:** signed dx по каждому stage; median/mean/std; зависимость dx от image x, image y и vertical disparity; сравнение A vs B; constant-offset test; глобальную affine-модель dx≈a*x+b*y+c*disp+d и остаток после неё.
+
+**Методологическая цель:** отличить простой постоянный rectification offset от residual rotation/distortion/geometry mismatch. Если A и B имеют разный systematic dx, будущий normal comparison может быть biased и его нельзя запускать.
+
+**Commit:** `425d937`.

@@ -42,6 +42,26 @@ def norm(v):
     return math.sqrt(sum(x * x for x in v))
 
 
+def unwrap_deg(xs):
+    if not xs:
+        return []
+    out = [xs[0]]
+    for x in xs[1:]:
+        prev_raw = out[-1]
+        y = x
+        while y - prev_raw > 180.0:
+            y -= 360.0
+        while y - prev_raw < -180.0:
+            y += 360.0
+        out.append(y)
+    return out
+
+
+def angular_span_deg(xs):
+    u = unwrap_deg(xs)
+    return max(u) - min(u) if u else float("nan")
+
+
 def RzRyRx(r, p, y):
     cr, sr = math.cos(r), math.sin(r)
     cp, sp = math.cos(p), math.sin(p)
@@ -151,9 +171,9 @@ def load_run(root):
                 total_dyn_acc_rms=rms(totaldev),
                 gyro_rms=rms(gnorm) if gnorm else float("nan"),
                 gyro_p90=pct(gnorm, 0.9) if gnorm else float("nan"),
-                roll_span=max(roll) - min(roll),
-                pitch_span=max(pitch) - min(pitch),
-                yaw_span=max(yaw) - min(yaw),
+                roll_span=angular_span_deg(roll),
+                pitch_span=angular_span_deg(pitch),
+                yaw_span=angular_span_deg(yaw),
                 att_match_mean_ms=mean(match),
             )
         )
@@ -211,7 +231,7 @@ for p in sys.argv[1:]:
 
 print("================ V25 RAW-PROFILE CROSS-RUN MATCH ================")
 print(f"runs={len(sys.argv)-1} legs={len(rows)}")
-print("INPUT FEATURES: operator duration + raw FC accel/gyro + FC attitude spans")
+print("INPUT FEATURES: operator duration + raw FC accel/gyro + unwrapped FC attitude spans")
 print("NOT USED FOR MATCHING: backend velocity, backend bias, VIO scale")
 
 for r in rows:
@@ -304,5 +324,6 @@ print("- The score is a ranking metric, not a statistical proof that the physica
 print("- If the nearest opposite-direction pairs have small raw-profile mismatch but retain a large systematic scale delta,")
 print("  pure motion-profile confounding weakens and a direction/visual-estimator asymmetry becomes more plausible.")
 print("- If scale delta shrinks among the best-matched opposite-direction pairs, raw motion excitation remains a strong confounder.")
+print("- Attitude spans are computed after 360-deg unwrapping; Euler wrap must not inflate the match score.")
 print("- Same-direction low-score pairs are a run-to-run repeatability control.")
 print("- Do not convert n_legs into n_independent_runs; causal confidence is limited by the number of physical runs.")

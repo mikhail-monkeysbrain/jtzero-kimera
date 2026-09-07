@@ -310,3 +310,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Действие:** Python-файл оставлен только с понятным русским сообщением при отсутствии зависимости. Следующий вариант чтения параметров должен использовать существующий C++ MAVLink stack проекта без `pymavlink`.
 
 **Commit исправления Python:** `b3ce4cc`.
+
+
+## 2026-09-07 — C++ read-only чтение accel-параметров FC
+
+**Проверка повтора:** физический A/B тест не повторяется. Это замена неработавшей реализации Python/pymavlink того же диагностического чтения параметров.
+
+**Отличие:** вместо новой зависимости `pymavlink` используется тот же C++ MAVLink header stack и serial-конфигурация `/dev/ttyAMA0 @ 460800`, которые уже применяются в P11 GUI logger.
+
+**Действие:** добавлены `tools/read_p11_fc_accel_params.cpp` и `tools/run_read_p11_fc_accel_params.sh`. Инструмент отправляет только `PARAM_REQUEST_LIST`, собирает `PARAM_VALUE` и выводит accel calibration/ID и AHRS orientation/trim. Записи параметров нет.
+
+**Коммиты:** `4f1fce3`, `e340308`.

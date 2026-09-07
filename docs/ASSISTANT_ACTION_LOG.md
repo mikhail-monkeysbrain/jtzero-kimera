@@ -1370,3 +1370,25 @@ The vectors are approximately sign-reversed between directions and are stable ac
 **Implication for external-video contradiction:** the single tracked platform edge cannot observe all rotational DOF. A rotation component about (or near) that edge direction can be nearly invisible in the edge's image slope, while the orthogonal component changes it. Therefore the previous single-line projective video test cannot by itself exclude the ~2.3 deg 3-D IMU/body rotation. The contradiction is weakened: the video constrained one projected line direction, whereas gyro resolves a 3-D rotation vector.
 
 **Next physically decisive test:** use an external world-fixed camera with a rigid 2-D marker/plate attached to the same mechanical body as the FC (or directly above the FC mount), so two non-parallel directions are visible. A planar ChArUco/ArUco target or simply two perpendicular high-contrast lines is sufficient. Record A->B->A while the phone remains fixed. This can recover full plane orientation change and distinguish whole-rig rotation from local FC/IMU flex. A single line is no longer considered sufficient for final exclusion.
+
+
+## 2026-09-07 — external 2-D cross-marker video quantified (A→B→A)
+
+Dataset: user video `video_2026-09-07_21-51-03.mp4`, 1280x720, 913 frames, 30.012 fps, 30.421 s. Protocol clarified by user: exactly one A→B pass and one B→A pass, giving stationary plateaus A_start, B, A_end.
+
+Method used on uploaded video: template-track the rigid white cross marker, then ECC homography-register its local patch to an A_start reference. Evaluate the local projected directions of the two orthogonal cross arms. This is an image/projective measurement, not yet a calibrated 3-D pose estimate.
+
+Stable plateau windows and medians:
+- A_start (0.5–2.5 s): horizontal-axis relative image angle +0.001°; vertical-axis +0.023°; projected arm separation 90.025°.
+- B (12.7–17.0 s): horizontal-axis -2.316°; vertical-axis -1.565°; projected arm separation 90.749°.
+- A_end (27.5–30.3 s): horizontal-axis -0.063°; vertical-axis -0.052°; projected arm separation 90.009°.
+Within-plateau std is only ~0.02–0.04° for each projected axis.
+
+Derived changes:
+- A_start→B: horizontal projected direction ≈ -2.317°, vertical ≈ -1.588°.
+- B→A_end: approximately +2.253° / +1.514°.
+- Closure A_end−A_start: only about -0.064° / -0.075°.
+
+Interpretation: the new two-direction marker has excellent A→B→A closure and shows a repeatable position-dependent projective change at B. The fact that the two arms change by different amounts and their projected orthogonality shifts by ~0.72° means the observation is not merely a single-line slope artifact. However, because the marker translates by ~750 px across the image, pinhole perspective alone can also change local slopes relative to fixed vanishing points. Therefore these ~2.3°/~1.6° image-angle changes must NOT yet be called physical body roll/pitch.
+
+Important consequence: unlike the earlier single-edge video, this dataset is good enough for a calibrated/projective 2-D-plane pose test. It also has a strong closure control (A_end≈A_start), so no new recording is required before attempting camera/projective calibration from static scene references and/or known marker geometry.

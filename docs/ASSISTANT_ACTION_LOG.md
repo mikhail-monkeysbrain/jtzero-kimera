@@ -1004,3 +1004,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** v1 скрывал причину отбраковки каждой пары и сразу применял несколько жёстких фильтров (ratio-test, rectified |dy|, знак/диапазон disparity, triangulation depth, plane fit). Поэтому `usable=0` сейчас НЕ означает «stereo не работает» и НЕ является основанием повторять физический тест.
 
 **Следующий шаг:** forensic v2 на том же run 185426. Он должен посчитать отдельно: keypoints left/right, raw KNN matches, ratio-test matches, распределение rectified dy, signed disparity, количество пар после каждого фильтра, причины FAIL, а также сохранить representative rectified/match overlays. До этого plane-fit и normal analysis приостановлены.
+
+
+## 2026-09-07 — добавлен stereo forensic v2 после 0/140 usable
+
+**Добавлен:** `tools/analyze_p11_stereo_forensic_v2.py`.
+
+**Назначение:** без нового физического прогона разложить полный systematic FAIL по этапам: keypoints, raw KNN, ratio-test matches, rectified epipolar |dy|, signed disparity и количество совпадений после положительного/отрицательного disparity gate. Также сохраняются representative rectified pair/match overlays по каждому stage.
+
+**Почему это следующий правильный шаг:** v1 не показывал, на каком именно фильтре исчезают все пары. До forensic результата нельзя менять калибровку, знак disparity, пороги или повторять эксперимент наугад.
+
+**Commit:** `61f7dca`.

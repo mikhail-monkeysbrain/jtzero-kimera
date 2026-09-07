@@ -834,3 +834,16 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** continuity по углу всё ещё не гарантирует физическую identity при наличии нескольких почти параллельных линий. Поэтому даже PASS — только более сильный gate; следующий calibrated geometry step допустим лишь после проверки overlay. Новый физический тест пока не требуется.
 
 **Commit:** `97841fd`.
+
+
+## 2026-09-07 — temporal ruler-family tracker PASS на run 181857
+
+**Результат:** обе A-seeded angular families прошли continuity gate до B. Family1: A 59.967° -> B 54.556° (delta -5.411°), hits A/MOVE/B = 30/30, 127/156, 31/33. Family2: A 149.445° -> B 144.835° (delta -4.610°), hits = 30/30, 148/156, 31/33. GATE=PASS.
+
+**Что это подтверждает:** отличие A/B по двум line-family angles не является артефактом независимого повторного выбора новой пары только в B; две A-seeded orientation families удалось проследить через движение с высокой полнотой.
+
+**Самокритика:** continuity по углу не гарантирует, что F1/F2 реально соответствуют кромке и поперечным делениям рулетки, а не двум другим устойчивым структурам сцены. Поэтому до calibrated 3-D geometry обязательно визуально проверить `ruler_temporal_track/contact_sheet.png`.
+
+**Следующий шаг:** НЕ новый физический прогон и НЕ ещё один estimator. Сначала visual overlay validation. Только если F1/F2 действительно лежат на двух нужных семействах рулетки в A/MOVE/B, разрешён следующий calibrated tracked-plane-normal analyzer.
+
+**Статус:** temporal continuity PASS; physical line identity pending visual confirmation.

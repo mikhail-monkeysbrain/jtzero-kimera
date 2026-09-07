@@ -59,12 +59,8 @@
 
 ## Следующие наиболее ценные действия
 
-1. **Quantitative transfer check IMU→PIM→VIO.**
-   Свести на одном и том же временном/осевом базисе:
-   - FC acceleration-vector A/B delta;
-   - PIM attitude/velocity delta;
-   - VIO roll/pitch endpoint asymmetry V21/V23;
-   - проверить magnitude, sign, axis mapping и возможный amplification.
+1. **Quantitative transfer check IMU→backend/VIO (PIM state в старых V23 не логировался отдельно).**
+   Первый coordinate-safe analyzer уже добавлен: `tools/analyze_v23_raw_backend_scale_coupling.py`. Он проверяет raw Δa/Δ|a| ↔ backend ΔRPY/ΔBa/ΔV ↔ scale без body/world projection. Если coupling повторяется, следующий шаг — source-verified frame mapping и только затем quantitative gravity/bias projection.
 
 2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
 

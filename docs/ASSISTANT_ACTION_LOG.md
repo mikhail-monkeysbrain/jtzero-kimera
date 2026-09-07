@@ -980,3 +980,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Коммиты:** `325267e` calibration, `a9158dd` logger, `f6a4eb1` runner, `98e00bc` build hardening.
 
 **Самокритика:** logger пока только собирает synchronized static stereo data. Он не доказывает качество depth/plane fit. Следующий analyzer должен сначала пройти stereo observability/plane-fit gate отдельно для A и B и только потом сравнивать normals.
+
+
+## 2026-09-07 — stereo A/B run 185426 завершён; добавлен observability/plane-fit gate
+
+**Факт:** run `/home/vio/jtzero_runs/20260907_185426_P11_STEREO_AB_GUI` завершён штатно. Stereo sync: accepted=1568, rejected=0. Сохранены 7 stage по протоколу A1→B1→A2→B2→A3→B3→A4.
+
+**Pre-check на повтор:** отдельного stereo observability analyzer в ветке не было. Новый `tools/analyze_p11_stereo_observability.py` не сравнивает A/B normals; он только проверяет, что stereo-геометрия вообще пригодна для такого сравнения.
+
+**Метод:** rectification по финальной stereo calibration; sparse SIFT/ORB correspondences между rectified OV9281/OV5647; epipolar filter |dy|<=2.5 px; triangulation через P1/P2; RANSAC plane fit по 3-D points. Для каждого stage печатаются usable pairs, stereo matches, epipolar residual, median depth, plane inlier ratio и plane residual.
+
+**Gate:** каждый из 7 stages обязан иметь >=15 usable pairs, median >=20 matches, p10 plane-inlier ratio >=0.45, median plane residual <=6 mm и median epipolar residual <=1.5 px. Это диагностические консервативные пороги, а не P11 acceptance criteria.
+
+**Самокритика:** sparse feature matching может выбирать текстуру не только рулетки, но и окружающей поверхности. Plane RANSAC специально проверяет наличие доминирующей 3-D плоскости, но даже PASS ещё не доказывает, что это именно направляющая. Поэтому A/B normal comparison запрещён до observability PASS и последующей проверки repeatability normals внутри позиции.
+
+**Commit:** `24605fa` — stereo observability/plane-fit gate.

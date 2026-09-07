@@ -816,3 +816,39 @@ New test:
 - no backend velocity is used.
 
 Status: **ОТКАТИЛИСЬ partially on the claim that B→A was physically faster based on VIO speed.** The observed scale asymmetry itself remains valid, as does the frontend-quality difference on LEG4.
+
+
+### 2026-09-07 — raw FC motion profile confirms B→A was physically more excited
+
+Dataset:
+- `/home/vio/jtzero_runs/20260907_122838_v25_MANUAL_PROFILE_01_CLEAN`
+
+Independent raw-input comparison (no VIO velocity used):
+
+Direction means:
+- A→B: scale=1.0196, duration=9.36 s, horizontal-acc RMS=0.3222 m/s², p90=0.4783 m/s², dynamic RMS=0.3332 m/s², yaw span=0.321°.
+- B→A: scale=1.0963, duration=7.69 s, horizontal-acc RMS=0.4331 m/s², p90=0.6661 m/s², dynamic RMS=0.4549 m/s², yaw span=1.140°.
+
+Pair 1→2:
+- scale delta +0.0996;
+- horizontal-acc RMS +0.1538 m/s²;
+- p90 +0.1785 m/s²;
+- yaw span +0.924°.
+
+Pair 3→4:
+- scale delta +0.0539;
+- horizontal-acc RMS +0.0680 m/s²;
+- p90 +0.1971 m/s²;
+- yaw span +0.714°.
+
+Conclusion:
+- **H6A (manual motion profile is a major confounder) is strongly supported by independent raw FC sensors.**
+- In this run B→A was not merely *estimated* faster by VIO; it was physically more dynamically excited and had substantially larger yaw excursion.
+- Therefore this dataset cannot isolate a pure direction-dependent VIO scale defect from motion-profile dependence.
+- The directional scale excess remains real as an observation, but its cause is not identifiable from this run alone.
+
+Methodological consequence:
+- do not tune Kimera from this run;
+- collect additional baseline runs with the same software and untimed Space/Enter workflow;
+- archive every run immediately;
+- compare runs by raw FC excitation and attitude, then only use matched A→B/B→A legs for causal claims.

@@ -389,3 +389,26 @@ Conclusion: **the current simple Hypothesis 3 (LOW_DISPARITY/ZUPT freezes real s
 Priority remains Hypothesis 1B.2/1B.3:
 - B→A independently repeats BA_along ≈ +0.18 m/s² and scale ≈ 1.06;
 - next discriminator is raw FC acceleration projected along each leg versus backend-estimated BA projection.
+
+
+### 2026-09-07 — Test 1B.3: raw FC acceleration versus backend-estimated BA
+
+Command: `python3 tools/analyze_v25_raw_vs_backend_bias.py`
+
+Result:
+- A→B direction mean: scale 0.9930, RAW_along -0.00653 m/s², backend BA_along -0.09713 m/s².
+- B→A direction mean: scale 1.0602, RAW_along -0.00024 m/s², backend BA_along +0.18265 m/s².
+- Individual raw along-leg means remain close to zero: LEG1 -0.00650, LEG2 -0.00121, LEG3 -0.00655, LEG4 +0.00073 m/s².
+- Backend BA, in contrast, has a large repeatable directional split.
+
+Conclusion: **raw FC acceleration does not reproduce the backend BA directional asymmetry.** This substantially weakens the sensor/calibration/mechanical-asymmetry branch as the direct source of the ~6% B→A scale error. The asymmetry appears after the raw IMU enters the VIO estimation pipeline.
+
+#### Подгипотеза 1B.4 — backend bias-state / visual-inertial coupling creates a direction-dependent BA estimate
+Priority: HIGH.
+
+Next discriminator should determine *when* BA separates from the raw-IMU-consistent value relative to visual motion:
+- trace BA_along versus keyframe/time for each leg;
+- align it with frontend status/disparity/inlier changes and motion onset/stop;
+- determine whether BA moves mainly during visual VALID motion, during LOW_DISPARITY intervals, or during endpoint settling.
+
+This is now a deeper internal VIO branch, not a broad hardware/FC branch.

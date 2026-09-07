@@ -1410,3 +1410,12 @@ The A plateaus behave essentially like identity/closure, while B is grossly inco
 **Conclusion:** ordinary perspective caused by translating a fixed-orientation marker across the image is insufficient to explain the B deformation. The externally tracked rigid 2-D marker itself changes 3-D orientation between A and B (subject to the standard planar/pinhole/model assumptions and marker rigidity). Together with raw gyro closure (~2.3°) and A→B→A reversibility, this substantially strengthens the whole-body/mechanical-rotation branch and weakens the local-FC-only interpretation if the marker is rigidly attached to the same body structure as FC.
 
 **Remaining task:** estimate the actual external 3-D rotation magnitude/axis. That requires camera intrinsics or another metric geometric constraint; however, the binary question “perspective-only or actual marker rotation?” is now resolved in favor of actual marker rotation.
+
+
+## 2026-09-07 — next causal test: gyro rotation timing vs VIO trajectory evolution
+
+Preflight found `analyze_v23_along_leg_evolution.py` for VIO state evolution but no existing tool that puts cumulative raw-gyro rotation on the same timeline. Added `tools/analyze_v23_rotation_vio_timeline.py`.
+
+The analyzer uses the same source-verified raw FRD gyro path and endpoint bias convention as the validated gyro-closure test, then samples cumulative rotation every 10% of each leg alongside VIO relative tilt, along-leg displacement/velocity, Z and Vz. It also reports 20/50/80% gyro-rotation onset and a rotation exposure integral (deg*s).
+
+Methodological limit is explicit: old V23 runs do not contain independent true translation-versus-time, only 500-mm endpoint truth. Therefore this tool cannot honestly label a time-resolved VIO displacement as “scale error”. It can test temporal plausibility: whether rotation begins before/with VIO attitude/Z/velocity changes, and whether differing rotation exposure may explain why nearly equal endpoint tilt coexists with very different endpoint scale.

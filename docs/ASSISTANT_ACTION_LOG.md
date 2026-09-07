@@ -1156,3 +1156,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Вывод:** из `0/20` НЕЛЬЗЯ делать вывод ни о стабильности, ни о нестабильности stereo extrinsics. Этот diagnostic для текущего dataset закрыт. Не менять dictionary/board параметры наугад и не пытаться получить PASS подбором.
 
 **Следующий корректный шаг:** вернуться к наблюдаемым данным. Saved calibration имеет rectified median 0.649 px / p95 1.850 px, а current scene guided matches дают ~3–5 px signed x residual и same-position drift. Для прямой проверки extrinsics нужен отдельный calibration-target run, где одна и та же известная ChArUco/checkerboard мишень одновременно видна обеим камерам, без перемещения rig. Это отделит calibration/rig stability от P11 A/B движения.
+
+
+## 2026-09-07 — реализован fixed-target stereo calibration stability GUI
+
+**Pre-check:** прямого fixed-target stability logger в ветке не было. Это новый тест, отличающийся от P11 A/B: БПЛА и мишень после старта вообще не перемещаются; цель — проверить переносимость/временную стабильность stereo extrinsics и rectification отдельно от P11 движения.
+
+**Важная корректировка:** конфигурация ChArUco не выдумана заново. Она взята из существующего `tools/stereo_view_test.cpp` в main: 7x5 squares, square 27.324 mm, marker 20.043 mm, DICT_4X4_50. Предыдущий `0/20` в P11 run не опровергает эту конфигурацию — в том run мишень просто не была гарантированно одновременно видна обеим камерам.
+
+**Добавлено:** `tools/p11_stereo_calibration_stability_gui.cpp` и `tools/run_p11_stereo_calibration_stability_gui.sh`.
+
+**Протокол GUI:** сначала пользователь располагает известную ChArUco так, чтобы обе камеры одновременно видели >=8 общих ChArUco corners. GUI показывает live preview обеих камер и `общих углов`. ПРОБЕЛ активен только при достаточной видимости. После старта нельзя трогать ни БПЛА, ни мишень. Автоматически записываются 4 серии S1..S4 по 20 stereo-пар с паузами 20 с между сериями. Запись пары разрешена только при |dt|<=7 ms и >=8 shared corners.
+
+**Почему этот тест методологически полезнее:** он отделяет временной drift stereo rig/pipeline от A/B-позиционного эффекта. Если при полностью неподвижной геометрии current extrinsics/rectification гуляют, P11 stereo-normal route блокируется. Если стабильны, можно строить session-specific rectification.
+
+**Коммиты:** `7c9d018` logger, `e0e3cb3` runner.
+
+**Самокритика:** source пока не компилировался на RPi в этом цикле, поэтому первый запуск рассматривается как build/runtime validation. Если будет compile error, исправляется код, но физический протокол не меняется.

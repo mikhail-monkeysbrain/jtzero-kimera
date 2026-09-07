@@ -1061,3 +1061,16 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** предыдущий observability analyzer сначала делал global descriptor KNN, а уже потом epipolar filter. Для сильно различающихся камер OV9281/OV5647 это неудачная последовательность: ложные descriptor matches доминируют и убивают истинные correspondence до геометрического отбора.
 
 **Следующий шаг:** не новый физический run. Нужен epipolar-guided matcher: для каждого left feature искать right candidates только в узком rectified x-коридоре и в физически допустимом vertical disparity диапазоне (~250–340 px для текущей высоты), затем descriptor ratio/uniqueness test и triangulation. Только после этого повторить plane observability gate.
+
+
+## 2026-09-07 — добавлен epipolar-guided vertical stereo gate
+
+**Почему это не повтор:** предыдущие analyzers сначала делали global descriptor matching и только затем epipolar filter. Forensic v3 показал, что реальная vertical disparity ~300 px и positive-depth geometry корректна, но global matching засорён ложными cross-camera correspondences.
+
+**Добавлен:** `tools/analyze_p11_guided_vertical_stereo.py`.
+
+**Метод:** rectified vertical stereo; для каждого left SIFT feature поиск right candidates только в узком x-коридоре `|dx|<=6 px` и physically plausible vertical disparity `220..380 px`; descriptor ratio + mutual uniqueness; затем triangulation и RANSAC plane fit. Это использует геометрию до descriptor decision, а не после неё.
+
+**Самокритика:** disparity corridor 220..380 px выбран по текущему физическому setup и forensic depth ~0.18 m; это diagnostic prior, не универсальный stereo matcher. Если gate PASS, следующий normal analysis должен отдельно проверить устойчивость к разумному изменению corridor/thresholds.
+
+**Commit:** `a8f285f`.

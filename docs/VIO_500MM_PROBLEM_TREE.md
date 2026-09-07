@@ -314,3 +314,29 @@ Implication for the hypothesis tree:
 - The physical stand/manipulation may really be changing roll/pitch during translation, and VIO appears to follow those changes closely.
 - Hypothesis 1B remains relevant because accelerometer bias grows substantially again during measured legs even after a near-zero gravity-aligned initialization.
 - The remaining directional scale bias (A→B ≈ correct, B→A ≈ +6%) must now be analyzed with corrected attitude comparison before prioritizing camera extrinsics.
+
+
+### 2026-09-07 — corrected post-gravity-init forensic result
+
+After correcting FC attitude signs into FLU, VIO and FC attitude changes agree closely on all four measured legs:
+- LEG1 residual tilt 0.072°;
+- LEG2 residual tilt 0.195°;
+- LEG3 residual tilt 0.144°;
+- LEG4 residual tilt 0.112°.
+
+Therefore the previously suspected "VIO tilts internally while FC stays fixed" branch is not supported. The observed roll/pitch changes are largely physical and confirmed by FC.
+
+At the same time, accelerometer bias becomes substantial again after the exact-gravity startup:
+- LEG1 |ΔBA| = 0.22055 m/s²;
+- LEG2 |ΔBA| = 0.04401 m/s²;
+- LEG3 |ΔBA| = 0.01559 m/s²;
+- LEG4 |ΔBA| = 0.08945 m/s².
+
+But raw |ΔBA| alone does not explain scale: LEG1 has the largest bias change while its distance is close to correct, whereas B→A legs have smaller |ΔBA| yet systematic +5.7…+6.3% scale.
+
+This creates a narrower child hypothesis:
+
+#### Подгипотеза 1B.2 — direction-dependent projection of estimated accelerometer bias
+The relevant quantity may be not total |BA| but its projection in world coordinates along the measured leg. Test with `tools/analyze_v25_bias_projection.py`.
+
+In parallel, Hypothesis 3 remains open: if bias projection does not track the directional scale error, run the existing LOW_DISPARITY/ZUPT guard on this exact dataset.

@@ -1191,3 +1191,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Methodological note:** units of `exposure_time_absolute` are not inferred here. We only use relative changes within the driver-reported range. First diagnostic change is 50 -> 10 with gain remaining 0; no other controls are changed.
 
 **Next action:** while keeping rig and target geometry unchanged, set manual exposure to 10 and visually re-check ChArUco shared-corner count. Do not start the 4-series test until both cameras see >=8 shared corners. If 10 is still overexposed, step to 5; if too dark, step to 20. This is an exposure setup step, not a new physical P11 experiment.
+
+
+## 2026-09-07 — fixed-target stereo stability test закрыт из-за физического ограничения стенда
+
+**Корректировка пользователя:** конструкция физически не позволяет одновременно жёстко зафиксировать БПЛА и расположить ChArUco так, чтобы её видели обе onboard-камеры. Предыдущий fixed-target protocol в реальном стенде невыполним без удержания БПЛА руками.
+
+**Следствие:** S1..S4 fixed-target stereo stability route закрыт. Данные с БПЛА, удерживаемым руками, нельзя использовать для проверки временной стабильности stereo extrinsics, потому что движение рук смешивается с измеряемой геометрией.
+
+**Что сохраняем из теста:** после снижения OV9281 exposure 50->10 ChArUco стала существенно лучше наблюдаема; общий FOV между камерами существует (до 7 shared corners). Это setup-факт, но не extrinsics stability result.
+
+**Новый принцип:** не пытаться дальше адаптировать onboard stereo к ограничению стенда. Для независимой проверки физического наклона A/B нужен reference, который не движется вместе с БПЛА. Наиболее прямой вариант — внешняя неподвижная камера сбоку/спереди, наблюдающая жёстко закреплённую на БПЛА метку/прямую грань при A↔B. Альтернатива — внешний механический/цифровой инклинометр на корпусе. Оба маршрута принципиально отделяют физический наклон от onboard-camera translation.

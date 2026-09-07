@@ -806,3 +806,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Commit:** `b1ca862` — calibrated ruler plane-normal gate.
 
 **Статус:** observability достаточна для более сильной геометрической оценки; причинный вывод P11 всё ещё не сделан.
+
+
+## 2026-09-07 — plane-normal gate НЕ ПРОШЁЛ на POST_STILL_B
+
+**Результат:** PRE_STILL_A дал valid 21/21, mean normal tilt 5.54°, spread median/p90 4.03/5.68°, orthogonality error 0.86°. POST_STILL_B дал valid 22/23, но spread median/p90 36.49/54.96° и orthogonality error 5.24°. Формально mean-normal A→B change получился 25.97°.
+
+**Критический вывод:** значение 25.97° НЕЛЬЗЯ использовать. POST_STILL_B не имеет стабильной нормали: frame-to-frame solution разваливается/перескакивает между разными line-family pairs. Высокий valid-frame count здесь вводит в заблуждение: gate проверял наличие пары, но недостаточно жёстко проверял идентичность одной и той же физической пары во времени.
+
+**Самокритика:** предыдущая формулировка «если spread будет мал, то несколько градусов будут серьёзным свидетельством» была корректна как условие, но текущий analyzer слишком легко принимал разные line-pair hypotheses как валидные. Поэтому нельзя интерпретировать mean normal при огромном spread.
+
+**Что остаётся валидным:** сырые image-space families A≈59.97/149.08° и B≈54.60/144.94° были устойчиво обнаружены на state-level observability gate. Это указывает, что перспективная геометрия меняется, но не даёт надёжного 3-D normal без стабильной family identity.
+
+**Следующий шаг:** не новый физический прогон. Нужен temporal family tracker, который один раз фиксирует две line families в PRE_STILL_A и затем непрерывно сопоставляет их через MOVE_A_TO_B до POST_STILL_B по углу/поддержке, запрещая frame-wise перескакивание на другие пары. Только затем повторить calibrated plane-normal estimate.
+
+**Статус:** текущий plane-normal result rejected; P11 cause still unresolved.

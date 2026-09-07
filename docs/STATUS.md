@@ -59,7 +59,7 @@
 
 ## Следующие наиболее ценные действия
 
-1. **Проверить временную причинность rotation→VIO на старых V23.** Добавлен `tools/analyze_v23_rotation_vio_timeline.py`: cumulative raw-gyro rotation каждые 10% leg сопоставляется с VIO tilt, along velocity/displacement, Z/Vz; также считаются onset 20/50/80% и rotation exposure. Важно: true translation-vs-time не логировалась, поэтому time-resolved scale error не заявляется. Это тест временной совместимости механизма, а не финальная причинность.
+1. **Разделить Z-drift и horizontal scale mechanism.** V23 timeline показал, что real gyro rotation и VIO tilt практически синхронны и возникают вместе с основным горизонтальным движением (обычно 60–80% нормализованного leg), поэтому механическая rotation→VIO coupling временно правдоподобна. Но Z уже заметно дрейфует на ранней неподвижной части при gyro≈0 и VIO tilt≈0 (например A->B run 170418: Z -15.2 mm к 50%; A->B run 170636: -19.9 mm; B->A 170524: +6.4 mm). Значит реальный поворот не является единственной причиной vertical error. Следующий диагностический шаг должен отдельно проверить pre-motion stationary Z/Vz drift против bias/PIM и затем horizontal scale против motion/rotation timing.
 
 2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
 

@@ -713,3 +713,30 @@ Next action before changing any parameter:
 1. archive this exact dataset;
 2. on this same dataset run raw-FC-vs-backend-BA, post-gravity-init attitude comparison, and BA-vs-frontend timeline;
 3. compare A→B versus B→A within this one run. No new physical run until that analysis is complete.
+
+
+### 2026-09-07 — MANUAL_PROFILE_01_CLEAN forensic: backend BA is not present in raw FC acceleration
+
+Dataset archive:
+- `/home/vio/jtzero_runs/20260907_122838_v25_MANUAL_PROFILE_01_CLEAN`
+
+Same-run forensic results:
+- A→B mean scale = 1.0196; RAW_along = -0.01472 m/s²; backend BA_along = -0.18708 m/s².
+- B→A mean scale = 1.0963; RAW_along = -0.00988 m/s²; backend BA_along = +0.31039 m/s².
+- Raw FC along-axis acceleration is therefore near-zero and nearly direction-symmetric, while backend BA is large and changes sign with direction.
+- VIO attitude agrees very closely with FC after FRD→FLU conversion: mean residual tilt A→B 0.071°, B→A 0.035°.
+- Therefore the residual scale/dz error is not explained by an internal VIO-vs-FC roll/pitch disagreement.
+- BA evolution is concentrated primarily around visual-motion/transition updates; LOW_DISPARITY also contributes on later legs, so it remains a secondary coupling path rather than a clean standalone cause.
+
+Tree update:
+- **H1B.4 — backend visual-inertial optimization creates direction-dependent accelerometer-bias state: strongly supported.**
+  - **T1B.4a — same-run raw FC vs backend BA:** PASS for optimizer-origin interpretation.
+  - **T1B.4b — same-run VIO vs FC attitude:** PASS; attitude mismatch rejected as explanation of this residual.
+  - **T1B.4c — BA timeline vs frontend:** mixed but informative; visual-motion updates dominate LEG1/2/3, while LEG4 has substantial LOW_DISPARITY contribution.
+  - New child hypothesis:
+    - **H1B.4.1 — monocular visual scale/translation constraints are being traded against BA during translation.**
+      - Next test must inspect visual translation/parallax/feature geometry versus backend BA and scale on this archived dataset before changing Kimera parameters.
+    - **H1B.4.2 — motion→stationary transition factors can amplify an already-created BA error.**
+      - Secondary; test only after H1B.4.1 because it cannot explain the raw-vs-backend directional BA by itself.
+
+Status: **ПРИБЛИЗИЛИСЬ.** A clean same-run comparison removed two broad explanations: physical FC acceleration asymmetry and VIO attitude mismatch. The investigation is now narrower: the large directional BA is generated inside the visual-inertial estimation/coupling path.

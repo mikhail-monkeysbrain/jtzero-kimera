@@ -1128,3 +1128,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Метод:** 8x6 grid, stage-level median dx по bins, используются только bins с достаточной поддержкой одновременно в >=3 A stages и >=2 B stages; затем считаются balanced stage medians, per-bin B-A effect и same-position bin drift.
 
 **Commit:** `ac87c25`.
+
+
+## 2026-09-07 — spatially balanced dx подтверждает: стабильного A/B rectification bias нет; выбран current-session extrinsics check
+
+**Результат balanced-spatial test:** shared bins=12. Adjacent B-A после spatial balancing: -1.712, +0.539, +0.324 px — эффект не повторяется по величине и первый цикл остаётся аномальным. Per-bin B-A median всего +0.120 px, p10/p90 -0.394/+1.668 px, одинаковый знак лишь в 2/3 bins. Same-position drift существенно больше: A bin span median 1.303 px, B 0.645 px.
+
+**Вывод:** residual dx не демонстрирует устойчивой position-specific A/B структуры. Пространственный bias matcher не объясняет всё; same-position drift остаётся доминирующим ограничением.
+
+**Самокритика:** продолжать статистически 'дотягивать' dx до PASS бессмысленно. Более прямой вопрос теперь — меняются ли сами stereo extrinsics между возвратами в одну и ту же точку A.
+
+**Новый шаг без физического прогона:** поскольку ChArUco видна в A, можно независимо оценить pose доски в OV9281 и OV5647 для A1/A2/A3/A4 и из двух PnP получить текущий relative camera transform. Это позволяет проверить current-session stereo extrinsics и их drift напрямую, не через sparse scene matching.
+
+**Добавлен:** `tools/analyze_p11_current_session_stereo_extrinsics.py`.
+
+**Метод:** Charuco 7x5, square 27.324 mm, marker 20.043 mm, DICT_4X4_50; solvePnP отдельно для каждой камеры; затем Rrel=R_right*R_left^T и Trel=t_right-Rrel*t_left. Печатаются reprojection error, rotation/translation error относительно saved calibration и drift A1→A2→A3→A4.
+
+**Commit:** `10c8f10`.

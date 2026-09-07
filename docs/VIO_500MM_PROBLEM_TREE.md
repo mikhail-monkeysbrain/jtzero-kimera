@@ -740,3 +740,28 @@ Tree update:
       - Secondary; test only after H1B.4.1 because it cannot explain the raw-vs-backend directional BA by itself.
 
 Status: **ПРИБЛИЗИЛИСЬ.** A clean same-run comparison removed two broad explanations: physical FC acceleration asymmetry and VIO attitude mismatch. The investigation is now narrower: the large directional BA is generated inside the visual-inertial estimation/coupling path.
+
+
+### 2026-09-07 — methodological correction: along-leg BA sign flip may be a projection artifact
+
+Important correction to H1B.2/H1B.3 interpretation:
+
+Previous analyzers projected backend BA onto **each leg's own motion direction**. Because B→A reverses the unit direction vector, a persistent world-frame BA automatically changes the sign of its along-leg projection even if the BA vector itself does not reverse.
+
+Therefore:
+- `BA_along < 0` on A→B and `BA_along > 0` on B→A is **not by itself evidence of direction-dependent bias generation**;
+- the same persistent BA vector can produce exactly that sign pattern under opposite projection axes;
+- conclusions that relied on the sign flip alone must be downgraded pending a fixed-axis analysis.
+
+What remains valid:
+- raw FC acceleration stays near zero while backend BA becomes large;
+- VIO attitude agrees closely with FC after FRD→FLU mapping;
+- backend BA evolves during the run and participates in the residual scale problem.
+
+New discriminator:
+- `tools/analyze_v25_bias_common_axis.py`
+- use one fixed world-horizontal A→B axis for all four legs;
+- if BA on that common axis keeps one sign across reversals, the earlier "directional BA" interpretation was a coordinate/projection artifact;
+- if common-axis BA itself reverses with motion direction, true direction-dependent estimator behavior remains supported.
+
+Status: **ОТКАТИЛИСЬ** on the narrow claim "BA itself flips with direction" because the prior metric was not frame-invariant. The broader finding "backend BA is large while raw FC acceleration is near zero" remains supported.

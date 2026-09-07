@@ -916,3 +916,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** предыдущая формулировка «если зелёные точки ... лежат на одной и той же плоскости поверхности/рулетки» была слишком простой: по monocular contact sheet нельзя надёжно доказать равенство глубин/плоскостей. Поэтому переход непосредственно к физическому tilt из global homography пока преждевременен.
 
 **Следующий шаг:** использовать уже имеющуюся камеру calibration и локальные incremental homographies, но сначала сделать model-consistency diagnostic: сравнить calibrated pure-rotation fit против general homography / translation-induced component по каждой соседней паре и проверить, возникает ли повторяемый orientation increment именно во время MOVE и возвращается ли к ~0 на STILL. Это отличается от rejected plane-normal estimator: не требуется выбирать line families или считать ruler plane normal. Накопленный физический угол выдавать только если decomposition/rotation estimates устойчивы к выбору пространственных subsets и direction reversal/checks.
+
+
+## 2026-09-07 — добавлен calibrated rotation-consistency gate
+
+**Почему это не повтор предыдущих шагов:** incremental planar chain уже доказал сильные конкретные frame-to-frame correspondences, но не отделял rotation-like component от general homography. Новый analyzer использует калибровку OV9281 и для каждой локальной homography вычисляет ближайшую SO(3) rotation-like составляющую, residual относительно pure-rotation model и устойчивость по четырём spatial subsets.
+
+**Добавлен:** `tools/analyze_p11_calibrated_rotation_consistency.py`.
+
+**Контроль методологии:** PRE_STILL_A и POST_STILL_B должны давать почти нулевые межкадровые rotation-like increments. Во время MOVE должен появляться сигнал. Дополнительно rotation estimate должен быть устойчив к пространственным subsets; иначе general planar translation/depth structure загрязняет результат и накопленный угол запрещено интерпретировать физически.
+
+**Важно:** cumulative nearest-rotation candidate печатается диагностически, но сравнивать его с IMU или называть физическим углом разрешено только при `CONSISTENCY GATE=PASS`.
+
+**Самокритика:** nearest-rotation projection homography не является строгой unique decomposition planar motion; translation relative to plane может попадать в rotation-like term. Поэтому gate специально включает residual и subset robustness и остаётся discriminator, а не final pose estimator.
+
+**Commit:** `78f6ecb`.

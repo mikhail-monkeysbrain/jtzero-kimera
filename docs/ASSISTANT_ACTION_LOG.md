@@ -233,3 +233,18 @@
 - отличие `SCALED_IMU` от `SCALED_IMU2` может указать на IMU-instance-specific эффект.
 
 **Статус после действия:** ПРОДВИНУЛИСЬ — новый тест не дублирует прежний gyro/YAW path test; он локализует уже воспроизведённый acceleration A/B split по уровням FC IMU pipeline.
+
+
+### 2026-09-07 — GUI correction after visual inspection
+User screenshot showed three layout defects in the new P11 multi-stream GUI:
+1. stage buttons A1..A4 overlapped the header/subtitle;
+2. the `Последний |a|` line overflowed the right IMU panel;
+3. explanatory text at the bottom of the IMU panel approached/crossed the panel boundary.
+
+**Repeat check:** this is related to the earlier GUI readability correction, but it is not the same layout: the defects are in the newly added multi-stream P11 GUI. No experimental method or logger semantics changed.
+
+**Change:** shortened header/subtitle, shifted/compacted stage buttons, shortened `|a|` and temperature labels, reduced right-panel font sizes and shortened the ADC/MAVLink explanation.
+
+Commit: `acd1c62` — `fix: prevent P11 GUI text overlap`.
+
+Status: UI-only correction; collected IMU data and A/B methodology are unchanged.

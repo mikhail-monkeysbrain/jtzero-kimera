@@ -1392,3 +1392,21 @@ Derived changes:
 Interpretation: the new two-direction marker has excellent A→B→A closure and shows a repeatable position-dependent projective change at B. The fact that the two arms change by different amounts and their projected orthogonality shifts by ~0.72° means the observation is not merely a single-line slope artifact. However, because the marker translates by ~750 px across the image, pinhole perspective alone can also change local slopes relative to fixed vanishing points. Therefore these ~2.3°/~1.6° image-angle changes must NOT yet be called physical body roll/pitch.
 
 Important consequence: unlike the earlier single-edge video, this dataset is good enough for a calibrated/projective 2-D-plane pose test. It also has a strong closure control (A_end≈A_start), so no new recording is required before attempting camera/projective calibration from static scene references and/or known marker geometry.
+
+
+## 2026-09-07 — external cross-marker projective invariant rejects perspective-only translation
+
+Using the user video `video_2026-09-07_21-51-03.mp4`, the rigid cross-marker patch was template-tracked and homography-registered back to the A_start reference. A camera-calibration-free projective invariant was then tested.
+
+For a planar object that undergoes **pure translation with fixed 3-D orientation** under a fixed pinhole camera, the inter-image plane homography has the form `H ~ K(I + t n^T/d)K^-1`. Up to projective scale this matrix has two equal eigenvalues. Therefore the normalized separation of the closest eigenvalue pair should be near zero if perspective from translation alone explains the marker change.
+
+Measured closest-eigenvalue relative mismatch over stable plateaus:
+- A_start (0.5–2.5 s): median ≈ 0.00034, p10/p90 ≈ 0.00005/0.00090.
+- B (12.7–17.0 s): median ≈ 0.2568, p10/p90 ≈ 0.2486/0.2714.
+- A_end (27.5–30.3 s): median ≈ 0.00354, p10/p90 ≈ 0.00181/0.00542.
+
+The A plateaus behave essentially like identity/closure, while B is grossly incompatible with a pure-translation homography. This conclusion does **not** require focal length, phone calibration, orange-box geometry, or a direct conversion of 2-D line slope to physical angle.
+
+**Conclusion:** ordinary perspective caused by translating a fixed-orientation marker across the image is insufficient to explain the B deformation. The externally tracked rigid 2-D marker itself changes 3-D orientation between A and B (subject to the standard planar/pinhole/model assumptions and marker rigidity). Together with raw gyro closure (~2.3°) and A→B→A reversibility, this substantially strengthens the whole-body/mechanical-rotation branch and weakens the local-FC-only interpretation if the marker is rigidly attached to the same body structure as FC.
+
+**Remaining task:** estimate the actual external 3-D rotation magnitude/axis. That requires camera intrinsics or another metric geometric constraint; however, the binary question “perspective-only or actual marker rotation?” is now resolved in favor of actual marker rotation.

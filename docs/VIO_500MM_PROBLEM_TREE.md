@@ -238,3 +238,22 @@
 
 ### 2026-09-07 — локализован механизм нулевого initial tilt
 Проверка исходника `UtilsOpenCV::AlignGravityVectors()` показала deadband `|1-dot| < 1e-3`, который эквивалентен примерно 2.56°. Наблюдаемый stationary tilt JT-Zero (~2.4° по полному вектору gravity) попадал внутрь этого deadband, поэтому initialization возвращала identity rotation и записывала горизонтальную gravity-компоненту в accelerometer bias. В Kimera-VIO подготовлен opt-in exact-gravity patch. Следующий шаг — stationary проверка `initRPY/initBA`.
+
+
+### 2026-09-07 — Test 1A.2 PASS: exact gravity initialization fixes startup seed
+
+Stationary test with `JTZERO_GRAVITY_ALIGNED_IMU_INIT=1` confirmed the causal prediction.
+
+Observed:
+- `initMode=jtzero_exact_gravity`;
+- `meanAcc=[-0.277451,+0.188860,+9.79085]`;
+- `initRPYdeg=[1.10507,1.62290,0.015652]` instead of identity;
+- `initBA=[+0.000379,-0.000258,-0.013391]`, so the former large horizontal startup bias is essentially removed;
+- first VIO state preserves the gravity-derived attitude;
+- mandatory 12 s stationary warmup PASS with drift from first `[5.669,-3.149,+2.630] mm` and stable=8.
+
+Conclusion: Hypothesis 1A is causally confirmed. Kimera's default gravity-alignment deadband was a real initialization defect for the JT-Zero startup geometry.
+
+Important: this does NOT yet prove the 500 mm measurement problem is solved. No A→B→A motion was executed in this run; the harness therefore ends with `PIPELINE RESULT: FAIL / MEASUREMENT RESULT: FAIL` because the requested closure sequence was incomplete, not because the stationary initialization test failed.
+
+New observation for the next branch: during stationary backend optimization, accelerometer bias continues to move after initialization (especially Z, and smaller XY changes), while RPY remains close to the gravity-derived attitude. Next causal test must separate the now-fixed initialization error from subsequent backend bias evolution and then run the same 500 mm A→B→A test with exact-gravity initialization enabled.

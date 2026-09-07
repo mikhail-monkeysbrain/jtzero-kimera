@@ -1358,3 +1358,15 @@ User ran `analyze_v23_gyro_vs_gravity_rotation.py` on the three canonical V23 ru
 ## 2026-09-07 — fix escaped-newline regression in gyro analyzer
 
 The rotvec print-line edit accidentally inserted a literal `\\n` into Python source, causing `SyntaxError: unexpected character after line continuation character`. Fixed the source to use two real Python lines. This is an analyzer-edit regression only; no data/run issue and no physical rerun is needed. This repeats the escaped-newline failure mode already identified in the process log and reinforces the rule to avoid textual escape injection in source edits.
+
+
+## 2026-09-07 — V23 rotation axis resolved from raw gyro
+
+All six V23 legs show a reproducible signed net gyro rotation vector. Direction medians in FC FRD:
+- A->B: rotvec ≈ [-1.782, +1.651, -0.654] deg; horizontal magnitude ≈2.429 deg.
+- B->A: rotvec ≈ [+1.555, -1.590, +0.658] deg; horizontal magnitude ≈2.248 deg.
+The vectors are approximately sign-reversed between directions and are stable across A_FIRST/B_FIRST runs. The dominant rotation is not pure roll or pure pitch: it is about a diagonal horizontal axis, with a smaller yaw component (~0.6 deg).
+
+**Implication for external-video contradiction:** the single tracked platform edge cannot observe all rotational DOF. A rotation component about (or near) that edge direction can be nearly invisible in the edge's image slope, while the orthogonal component changes it. Therefore the previous single-line projective video test cannot by itself exclude the ~2.3 deg 3-D IMU/body rotation. The contradiction is weakened: the video constrained one projected line direction, whereas gyro resolves a 3-D rotation vector.
+
+**Next physically decisive test:** use an external world-fixed camera with a rigid 2-D marker/plate attached to the same mechanical body as the FC (or directly above the FC mount), so two non-parallel directions are visible. A planar ChArUco/ArUco target or simply two perpendicular high-contrast lines is sufficient. Record A->B->A while the phone remains fixed. This can recover full plane orientation change and distinguish whole-rig rotation from local FC/IMU flex. A single line is no longer considered sufficient for final exclusion.

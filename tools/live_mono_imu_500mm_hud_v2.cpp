@@ -109,6 +109,12 @@ struct FrontendDebugState {
   double feature_tracking_time_s = 0.0;
   double mono_ransac_time_s = 0.0;
   std::string mono_status = "NO_STATUS";
+  bool mono_pose_valid = false;
+  double mono_tx = 0, mono_ty = 0, mono_tz = 0;
+  double mono_t_norm = 0;
+  double mono_body_tx = 0, mono_body_ty = 0, mono_body_tz = 0;
+  double mono_body_t_norm = 0;
+  double mono_roll_deg = 0, mono_pitch_deg = 0, mono_yaw_deg = 0;
 };
 struct MeanState {
   bool valid = false; size_t count = 0;
@@ -267,6 +273,24 @@ class HudPipeline final : public VIO::MonoImuPipeline {
       d.mono_ransac_time_s = info.monoRansacTime_;
       if (const auto* status = out->getTrackerStatus()) {
         d.mono_status = VIO::TrackerStatusSummary::asString(status->kfTrackingStatus_mono_);
+        // lkf_T_k_mono_ is only copied by Kimera when mono tracking status is VALID.
+        // Its monocular translation has arbitrary scale; use direction/ratios only.
+        if (status->kfTrackingStatus_mono_ == VIO::TrackingStatus::VALID) {
+          const auto& pose = status->lkf_T_k_mono_;
+          const auto t = pose.translation();
+          const auto rpy = pose.rotation().rpy();
+          d.mono_tx = t.x(); d.mono_ty = t.y(); d.mono_tz = t.z();
+          d.mono_t_norm = t.norm();
+          d.mono_roll_deg = rpy.x()*180.0/kPi;
+          d.mono_pitch_deg = rpy.y()*180.0/kPi;
+          d.mono_yaw_deg = rpy.z()*180.0/kPi;
+          if (const auto* b_Pose_cam = out->getBodyPoseCam()) {
+            const auto tb = b_Pose_cam->rotation().rotate(t);
+            d.mono_body_tx = tb.x(); d.mono_body_ty = tb.y(); d.mono_body_tz = tb.z();
+            d.mono_body_t_norm = tb.norm();
+          }
+          d.mono_pose_valid = true;
+        }
       }
       std::lock_guard<std::mutex> lock(mutex_);
       frontend_states_.push_back(std::move(d));

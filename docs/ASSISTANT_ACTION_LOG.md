@@ -1145,3 +1145,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Метод:** Charuco 7x5, square 27.324 mm, marker 20.043 mm, DICT_4X4_50; solvePnP отдельно для каждой камеры; затем Rrel=R_right*R_left^T и Trel=t_right-Rrel*t_left. Печатаются reprojection error, rotation/translation error относительно saved calibration и drift A1→A2→A3→A4.
 
 **Commit:** `10c8f10`.
+
+
+## 2026-09-07 — current-session ChArUco extrinsics route INVALID для этого run
+
+**Результат:** `analyze_p11_current_session_stereo_extrinsics.py` дал `usable=0/20` для A1/A2/A3/A4.
+
+**Причина методологическая, не результат о rig:** я ошибочно предположил, что мишень, визуально похожая на калибровочную/контрастную, является ChArUco с известной конфигурацией `7x5 / DICT_4X4_50`. В текущем P11 stereo run это предположение не подтверждено. Скрипт не обнаружил ни одной пригодной ChArUco pose одновременно в обеих камерах.
+
+**Вывод:** из `0/20` НЕЛЬЗЯ делать вывод ни о стабильности, ни о нестабильности stereo extrinsics. Этот diagnostic для текущего dataset закрыт. Не менять dictionary/board параметры наугад и не пытаться получить PASS подбором.
+
+**Следующий корректный шаг:** вернуться к наблюдаемым данным. Saved calibration имеет rectified median 0.649 px / p95 1.850 px, а current scene guided matches дают ~3–5 px signed x residual и same-position drift. Для прямой проверки extrinsics нужен отдельный calibration-target run, где одна и та же известная ChArUco/checkerboard мишень одновременно видна обеим камерам, без перемещения rig. Это отделит calibration/rig stability от P11 A/B движения.

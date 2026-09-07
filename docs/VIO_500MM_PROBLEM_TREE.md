@@ -69,9 +69,18 @@
 
 ##### Тест 1A.2 — gravity-aligned initialization
 
-**Статус: СЛЕДУЮЩИЙ ТЕСТ.**
+**Статус: ПАТЧ ГОТОВ, ожидается stationary A/B инициализации.**
 
-План: добавить отдельный opt-in режим, который на подтверждённом stationary startup использует направление gravity для начального roll/pitch, а bias получает только остаточную составляющую.
+Новый факт из исходного кода Kimera: `UtilsOpenCV::AlignGravityVectors()` считает векторы уже совмещёнными при `|1-dot| < 1e-3`. Это соответствует угловому deadband примерно 2.56°. В нашем диагностическом startup реальный наклон gravity был около 2.4°, поэтому функция возвращала identity rotation. После этого почти вся горизонтальная компонента mean acceleration попадала в `initBA`.
+
+Это напрямую объясняет наблюдение:
+- `meanAcc≈[-0.344,+0.234,+9.818]`;
+- `initRPY=[0,0,0]`;
+- `initBA≈[-0.344,+0.234,+0.008]`.
+
+В Kimera-VIO добавлен отдельный opt-in режим `JTZERO_GRAVITY_ALIGNED_IMU_INIT=1`, который использует точное gravity alignment с существенно меньшим epsilon и не меняет стандартное поведение Kimera без переменной окружения.
+
+План теста: на подтверждённом stationary startup включить этот режим и проверить initial roll/pitch и bias.
 
 Не менять одновременно:
 - camera T_BS;
@@ -226,3 +235,6 @@
 
 ### 2026-09-07 — создано дерево расследования
 Зафиксирована текущая причинная структура после обнаружения `JT-IMU-INIT`. Ведущая ветка — Hypothesis 1A. Следующий причинный эксперимент — gravity-aligned initialization.
+
+### 2026-09-07 — локализован механизм нулевого initial tilt
+Проверка исходника `UtilsOpenCV::AlignGravityVectors()` показала deadband `|1-dot| < 1e-3`, который эквивалентен примерно 2.56°. Наблюдаемый stationary tilt JT-Zero (~2.4° по полному вектору gravity) попадал внутрь этого deadband, поэтому initialization возвращала identity rotation и записывала горизонтальную gravity-компоненту в accelerometer bias. В Kimera-VIO подготовлен opt-in exact-gravity patch. Следующий шаг — stationary проверка `initRPY/initBA`.

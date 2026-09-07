@@ -59,7 +59,7 @@
 
 ## Следующие наиболее ценные действия
 
-1. **Проверить физический gravity-vector tilt на stationary endpoint windows.** V23 VIO-vs-FC discriminator уже разрешён: FC ATTITUDE повторяет VIO tilt почти 1:1 (A->B FC 2.631±0.067° vs VIO 2.488±0.025°; B->A FC 2.403±0.085° vs VIO 2.292±0.024°). Следующий шаг — raw HIGHRES_IMU gravity-vector tilt на спокойных окнах у начала/конца leg после source-verified FRD→FLU. Это отделит реальный наклон стенда/IMU от FC estimator attitude response.
+1. **Проверить rigid rotation по raw gyro.** Raw stationary gravity-vector tilt уже совпал с FC tilt на всех 6 legs: A->B RAW median 2.3329° vs FC 2.4188°; B->A RAW 2.3103° vs FC 2.2162°. Следующий discriminator — `tools/analyze_v23_gyro_vs_gravity_rotation.py`: интегрировать raw HIGHRES_IMU gyro между endpoint plateaus и проверить, предсказывает ли он тот же ~2.3° gravity-vector rotation. Это отделит реальное вращение IMU/body от accel bias/misalignment-like vector shift.
 
 2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
 

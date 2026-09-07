@@ -890,3 +890,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Commit:** `77be87d`.
 
 **Статус:** новый физический прогон не нужен; следующий шаг — запустить gate на run 181857.
+
+
+## 2026-09-07 — incremental planar chain gate PASS на run 181857
+
+**Результат:** 501/501 соседних пар успешно связаны KLT+RANSAC homography, fail=0. Median inliers=695, p10=556; median inlier ratio=0.993, p10=0.913; median reprojection error=0.118 px, p90=0.343 px. Отдельно: PRE_STILL_A 65/65 valid, MOVE 361/361, POST_STILL_B 75/75. GATE=PASS.
+
+**Что это подтверждает:** видеопоследовательность имеет очень сильную локальную frame-to-frame геометрическую связность. Это существенно сильнее предыдущего tracking угловых мод и показывает, что конкретные image correspondences между соседними кадрами доступны на всём A→B проходе.
+
+**Критическое ограничение:** analyzer строит homography по всему кадру, а не только по полотну рулетки. Поэтому высокая inlier ratio ещё не доказывает, что доминирующая плоскость — именно рулетка/направляющая. В A в кадре есть маркеры и другие плоские структуры; в B состав сцены меняется. Перед calibrated decomposition нужно визуально проверить `incremental_planar_chain/contact_sheet.png`, где находятся KLT/RANSAC inliers в A/MOVE/B.
+
+**Дополнительное ограничение:** накопленная homography может дрейфовать даже при идеальных локальных pairwise fits; текущий final perspective term 3.39e-4 сам по себе не переводится в физический tilt.
+
+**Следующий шаг:** не писать motion-decomposition estimator до visual validation contact sheet. Если inliers преимущественно лежат на общей физической плоскости поверхности/рулетки в A, MOVE и B, тогда разрешён calibrated incremental decomposition с consistency checks. Если inliers прыгают между разными глубинами/объектами, global homography route закрывается.
+
+**Статус:** local correspondence gate PASS; dominant-plane identity pending visual confirmation.

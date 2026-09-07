@@ -469,3 +469,19 @@ This is a causal result:
 - Do not tune ARW further as the next step. Restore baseline 0.003 for subsequent tests.
 
 Next branch: quantify whether the remaining error follows visual motion geometry/mono scale evidence within each VALID segment, rather than changing another optimizer prior.
+
+
+### 2026-09-07 — visual-quality analysis after ARW=0.0003 run: dataset provenance correction
+
+The command `tools/analyze_v25_bias_vs_visual_quality.py` was run after the controlled ARW=0.0003 experiment. Therefore it analyzed the **degraded ARW=0.0003 dataset**, because V25 CSV files in `/home/vio/jtzero_500mm_v25_*.csv` are overwritten by each new run.
+
+Observed on the ARW=0.0003 dataset:
+- LEG1 BA change is concentrated in weak VALID visual updates, especially inlier ratio 0.20–0.40 and <0.20.
+- LEG2 shows a very large LOW_DISPARITY contribution (`sum|dBA|=0.52840`) that was not present in the earlier baseline dataset.
+- Global VALID bins still show the largest signed BA changes in weak bins (<0.40), but this cannot be used as evidence for the baseline remaining +6% B→A error because the optimizer prior was intentionally changed and the trajectory degraded strongly.
+
+Conclusion: this result is valid **only for the ARW=0.0003 failure mode**. It must not be merged with the baseline causal tree as if it were the same dataset.
+
+Methodological action:
+- preserve every future V25 dataset under a run-specific tag before starting another run;
+- re-run the visual-quality analysis on a baseline ARW=0.003 exact-gravity dataset before deciding whether weak visual geometry is causal for the original residual error.

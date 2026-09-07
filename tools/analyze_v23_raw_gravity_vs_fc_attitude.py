@@ -19,6 +19,22 @@ def central(rr,key,w):
  rr=sorted([r for r in rr if w[0]<=int(r[key])<=w[1]],key=lambda r:int(r[key]))
  k=len(rr)//4
  return rr[k:len(rr)-k] if len(rr)-2*k>=3 else rr
+def nearest(rows,ts,key):
+ return min(rows,key=lambda r:abs(int(r[key])-ts)) if rows else None
+def fc_for_backend_window(fc, back, leg, phase):
+ br=[r for r in back if int(r["leg"])==leg and r["phase"]==phase]
+ if not br: return []
+ # FC attitude CSV is timestamped by recv_ns (not mapped_ns).
+ # Map each backend sample's callback_wall_ns to nearest FC receive timestamp.
+ out=[]
+ for b in br:
+  f=nearest(fc,int(b["callback_wall_ns"]),"recv_ns")
+  if f is not None: out.append(f)
+ # deduplicate repeated nearest rows, then retain central half.
+ uniq={int(r["recv_ns"]):r for r in out}
+ rr=sorted(uniq.values(),key=lambda r:int(r["recv_ns"]))
+ k=len(rr)//4
+ return rr[k:len(rr)-k] if len(rr)-2*k>=3 else rr
 allr=[]
 print("================ V23 RAW GRAVITY vs FC ATTITUDE ================")
 print("Central 50% of stationary SETTLE_START/SETTLE_END windows.")
@@ -28,13 +44,13 @@ for a in sys.argv[1:]:
  def rd(n):
   with (run/n).open() as f:return list(csv.DictReader(f))
  imu=rd("jtzero_500mm_v23.csv"); back=rd("jtzero_500mm_v23_backend.csv")
- fc=rd("jtzero_500mm_v23_attitude.csv"); legs=rd("jtzero_500mm_v23_legs.csv")
+ fc=rd("jtzero_500mm_v23_attitude.csv"); fc.sort(key=lambda r:int(r["recv_ns"])); legs=rd("jtzero_500mm_v23_legs.csv")
  print("\nRUN:",run)
  for lr in legs:
   l=int(lr["leg"]); d=lr["direction"]; w0=phase_window(back,l,"SETTLE_START"); w1=phase_window(back,l,"SETTLE_END")
   if not w0 or not w1: continue
   i0=central(imu,"mapped_ns",w0); i1=central(imu,"mapped_ns",w1)
-  f0=central(fc,"mapped_ns",w0); f1=central(fc,"mapped_ns",w1)
+  f0=fc_for_backend_window(fc,back,l,"SETTLE_START"); f1=fc_for_backend_window(fc,back,l,"SETTLE_END")
   if not i0 or not i1 or not f0 or not f1:
    print(f"LEG {l} {d}: insufficient samples"); continue
   a0=vm(i0,("ax","ay","az")); a1=vm(i1,("ax","ay","az")); gt=angle(a0,a1)

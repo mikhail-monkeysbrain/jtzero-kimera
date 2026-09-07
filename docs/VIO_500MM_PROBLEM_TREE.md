@@ -439,3 +439,33 @@ Decision:
 - if BA_along directional split and B→A +6% scale error both shrink, bias-state freedom is causal;
 - if BA is constrained but scale error remains, BA is mainly a symptom and visual scale/geometry becomes primary;
 - if the run degrades globally, 0.0003 is too restrictive and the result still informs the model.
+
+
+### 2026-09-07 — Test 1B.5 FAIL: 10× tighter accelerometer random walk degrades V25
+
+Controlled change:
+- baseline `accelerometer_random_walk = 0.003`;
+- test `accelerometer_random_walk = 0.0003`;
+- exact-gravity init, staged ZUPT and the remaining V25 configuration unchanged;
+- pipeline valid, LOOP STALLS >100 ms = 0.
+
+Result:
+- LEG1 A→B = 535.92 mm, error +35.92 mm, dz -47.93 mm;
+- LEG2 B→A = 536.83 mm, error +36.83 mm, dz +199.53 mm;
+- LEG3 A→B = 611.68 mm, error +111.68 mm, dz -51.97 mm;
+- LEG4 B→A = 597.54 mm, error +97.54 mm, dz +240.17 mm;
+- A→B mean = 573.80 mm;
+- B→A mean = 567.19 mm;
+- overall mean = 570.49 mm, scale = 1.140985;
+- reversal angles remain near opposite: 178.14° / 176.49°;
+- pipeline PASS, measurement FAIL.
+
+Interpretation: **simply preventing accelerometer bias from adapting is not a fix.** The trajectory becomes substantially worse, especially scale and vertical displacement. Therefore the backend needs appreciable BA freedom to reconcile the current visual/inertial observations.
+
+This is a causal result:
+- Hypothesis 1B.5 in its simple form ("BA is too free; tighten ARW and distance improves") is rejected.
+- The observed BA evolution is not safely removable as an independent nuisance state; it is participating in compensation of another inconsistency/weakly-observable mode.
+- Because BA changes were already shown to occur mainly during VALID visual motion, priority shifts further toward the source that forces this compensation: visual/IMU scale observability, motion excitation, or visual geometry/model consistency.
+- Do not tune ARW further as the next step. Restore baseline 0.003 for subsequent tests.
+
+Next branch: quantify whether the remaining error follows visual motion geometry/mono scale evidence within each VALID segment, rather than changing another optimizer prior.

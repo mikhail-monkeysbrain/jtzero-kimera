@@ -92,7 +92,7 @@
             - Статус: **поддержана как экспериментальный confounder, но не доказана как первопричина VIO.**
           - **Следующий тест**
             - Механический линейный стенд **исключён как невозможный по условиям проекта**.
-            - Использовать повторяемый ручной протокол с метрономом/таймингом и заранее заданными фазами: покой → разгон → движение → торможение → покой.
+            - Использовать untimed ручной протокол: START/END по Space/Enter; физическая метка 500 мм; сопоставимость оценивать постфактум по записанному профилю движения.
             - Делать несколько повторов CONTROL и TEST, а не сравнивать по одному run.
             - До сравнения параметров автоматически проверять сопоставимость runs по duration, mean/max speed, FC attitude excursion, VALID/LOW_DISPARITY fraction и inlier statistics.
             - Если runs несопоставимы — результат **INCONCLUSIVE**, а не PASS/FAIL параметра.
@@ -680,3 +680,36 @@ Action:
 - Q/ESC exits.
 
 This run produced no VIO measurement data and must not be counted as an experiment result.
+
+
+### 2026-09-07 — CLEAN MANUAL PROFILE 01: directional error reproduced without stalls
+
+Current run:
+- exact-gravity initialization enabled;
+- baseline ARW=0.003;
+- untimed START/END by Space/Enter;
+- pipeline PASS;
+- LOOP STALLS >100 ms = 0.
+
+Results:
+- LEG1 A→B = 504.88 mm, dz -14.77 mm;
+- LEG2 B→A = 554.67 mm, dz +36.40 mm;
+- LEG3 A→B = 514.68 mm, dz -4.29 mm;
+- LEG4 B→A = 541.65 mm, dz +104.50 mm;
+- A→B mean = 509.78 mm;
+- B→A mean = 548.16 mm;
+- overall mean = 528.97 mm, scale = 1.057941;
+- pair reversal angles = 179.27° / 179.42°.
+
+Interpretation:
+- the cleaner manual run is substantially better than the immediately preceding baseline, especially A→B;
+- nevertheless, the B→A overestimation repeats on both return legs;
+- the same return direction also shows positive dz, strongest on LEG4;
+- because there are no loop stalls, timing/pipeline stalls do not explain this run.
+
+Status for the problem tree: **PРИБЛИЗИЛИСЬ** — the directional residual survives in a cleaner, stall-free run, so it is less likely to be only a run-quality artifact.
+
+Next action before changing any parameter:
+1. archive this exact dataset;
+2. on this same dataset run raw-FC-vs-backend-BA, post-gravity-init attitude comparison, and BA-vs-frontend timeline;
+3. compare A→B versus B→A within this one run. No new physical run until that analysis is complete.

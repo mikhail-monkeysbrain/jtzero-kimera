@@ -905,3 +905,14 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Следующий шаг:** не писать motion-decomposition estimator до visual validation contact sheet. Если inliers преимущественно лежат на общей физической плоскости поверхности/рулетки в A, MOVE и B, тогда разрешён calibrated incremental decomposition с consistency checks. Если inliers прыгают между разными глубинами/объектами, global homography route закрывается.
 
 **Статус:** local correspondence gate PASS; dominant-plane identity pending visual confirmation.
+
+
+## 2026-09-07 — visual validation incremental planar-chain contact sheet
+
+Пользователь предоставил contact sheet для run 181857. Визуально KLT/RANSAC inliers распределены широко по общей видимой сцене/поверхности, а не локализованы только на рулетке. В PRE_STILL_A заметная часть inliers также лежит на квадратных маркерах; в MOVE и POST_STILL_B маркеров уже нет, а поддержка идёт по текстуре поверхности и рулетке.
+
+**Вывод:** pairwise correspondence quality действительно очень высокая, но идентичность одной фиксированной физической плоскости A→B не доказана. Нельзя утверждать, что global homography описывает именно плоскость рулетки. Одновременно изображение не показывает очевидного разделения на сильно разные глубины: большая часть полезной текстуры визуально относится к столу/направляющей, однако это только визуальная гипотеза, а не метрическое подтверждение coplanarity.
+
+**Самокритика:** предыдущая формулировка «если зелёные точки ... лежат на одной и той же плоскости поверхности/рулетки» была слишком простой: по monocular contact sheet нельзя надёжно доказать равенство глубин/плоскостей. Поэтому переход непосредственно к физическому tilt из global homography пока преждевременен.
+
+**Следующий шаг:** использовать уже имеющуюся камеру calibration и локальные incremental homographies, но сначала сделать model-consistency diagnostic: сравнить calibrated pure-rotation fit против general homography / translation-induced component по каждой соседней паре и проверить, возникает ли повторяемый orientation increment именно во время MOVE и возвращается ли к ~0 на STILL. Это отличается от rejected plane-normal estimator: не требуется выбирать line families или считать ruler plane normal. Накопленный физический угол выдавать только если decomposition/rotation estimates устойчивы к выбору пространственных subsets и direction reversal/checks.

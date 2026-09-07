@@ -189,3 +189,47 @@
 - Указано, что предыдущий GUI слипается и строки не помещаются — исправлена компоновка.
 - Пользователь напомнил, что поверхность имеет наклон и это уже сообщалось раньше — закреплено как известное условие, не новая гипотеза.
 - Пользователь указал, что похожий тест наклона уже выполнялся — введено обязательное правило проверки на повтор перед любым новым действием.
+
+
+## 2026-09-07 — P11 multi-stream IMU A/B path test
+
+**Pre-check на повтор выполнен.**
+
+Перед добавлением нового теста проверены:
+- `docs/ASSISTANT_ACTION_LOG.md`;
+- `docs/VIO_500MM_PROBLEM_TREE.md`;
+- дерево ветки `test/fc-imu-ab`;
+- существующий `hardware_tests/fc_imu_ab/ardupilot_imu_path_test.py`;
+- архивный результат `matek_h743_ardupilot_imu_path_20260903_204308.txt`.
+
+**Что уже делалось раньше:**
+- существующий ArduPilot IMU path test уже одновременно запрашивал `RAW_IMU`, `SCALED_IMU`, `SCALED_IMU2`, `SCALED_IMU3`, `HIGHRES_IMU`;
+- но его физический протокол был `STILL -> YAW -> STILL`;
+- его анализ был ориентирован на **gyro**;
+- ускорения `xacc/yacc/zacc` в том logger не сохранялись, поэтому он не может ответить на текущий вопрос о stationary A/B split по `|a|`.
+
+**Чем новый тест отличается:**
+- физический протокол теперь A1→B1→A2→B2→A3→B3→A4, как в уже подтверждённом position test;
+- одновременно пишутся acceleration-поля нескольких MAVLink IMU streams;
+- значения приводятся к SI для сравнения `|a|` и Z;
+- отдельно сравниваются `RAW_IMU`, `SCALED_IMU`, `SCALED_IMU2`, `SCALED_IMU3`, `HIGHRES_IMU`;
+- цель — не повторно доказать A/B split, а **локализовать, на каком доступном уровне FC/MAVLink pipeline этот split уже присутствует**;
+- это не объявляется direct ADC test: одинаковый эффект в RAW/SCALED/HIGHRES сужает источник до FC IMU measurement path, но сам по себе не доказывает причинность физического sensor ADC.
+
+**Добавлены файлы:**
+- `tools/p11_imu_path_ab_position_gui.cpp` — русский полноэкранный GUI и multi-stream logger;
+- `tools/run_p11_imu_path_ab_position_gui.sh` — launcher;
+- `tools/analyze_p11_imu_path_ab.py` — A/B analyzer по каждому потоку.
+
+**Commits:**
+- `2778191` — GUI/logger;
+- `f9d13a4` — launcher;
+- `333bcba` — analyzer.
+
+**Методологический смысл результата:**
+- HIGHRES split есть, RAW/SCALED нет → split появляется позднее в FC output path;
+- одинаковый split в SCALED и HIGHRES → причина находится до финального HIGHRES representation;
+- одинаковый split в RAW/SCALED/HIGHRES → split уже присутствует в доступном FC IMU measurement path;
+- отличие `SCALED_IMU` от `SCALED_IMU2` может указать на IMU-instance-specific эффект.
+
+**Статус после действия:** ПРОДВИНУЛИСЬ — новый тест не дублирует прежний gyro/YAW path test; он локализует уже воспроизведённый acceleration A/B split по уровням FC IMU pipeline.

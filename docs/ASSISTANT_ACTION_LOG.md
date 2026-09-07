@@ -995,3 +995,12 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** sparse feature matching может выбирать текстуру не только рулетки, но и окружающей поверхности. Plane RANSAC специально проверяет наличие доминирующей 3-D плоскости, но даже PASS ещё не доказывает, что это именно направляющая. Поэтому A/B normal comparison запрещён до observability PASS и последующей проверки repeatability normals внутри позиции.
 
 **Commit:** `24605fa` — stereo observability/plane-fit gate.
+
+
+## 2026-09-07 — stereo observability v1 дал 0/140 usable: трактовать как systematic analyzer failure, не как плохой dataset
+
+**Результат:** все 7 stages дали usable=0/20. При этом logger получил 1568 accepted synchronized pairs и 0 rejected по |dt|<=7 ms. Одновременный полный провал 140/140 пар гораздо больше похож на систематическую ошибку/слишком жёсткое предположение analyzer, чем на внезапное отсутствие stereo-информации во всех положениях.
+
+**Самокритика:** v1 скрывал причину отбраковки каждой пары и сразу применял несколько жёстких фильтров (ratio-test, rectified |dy|, знак/диапазон disparity, triangulation depth, plane fit). Поэтому `usable=0` сейчас НЕ означает «stereo не работает» и НЕ является основанием повторять физический тест.
+
+**Следующий шаг:** forensic v2 на том же run 185426. Он должен посчитать отдельно: keypoints left/right, raw KNN matches, ratio-test matches, распределение rectified dy, signed disparity, количество пар после каждого фильтра, причины FAIL, а также сохранить representative rectified/match overlays. До этого plane-fit и normal analysis приостановлены.

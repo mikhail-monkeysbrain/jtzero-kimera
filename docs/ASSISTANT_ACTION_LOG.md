@@ -1747,3 +1747,20 @@ Do not interpret the mild B->A frontend quality degradation as causal proof; the
 **Next action:** inspect whether the A-first vs B-first scale shift appears in backend/PIM state before or at the first accepted visual updates, reusing existing V25 state-chain / prediction-optimizer diagnostics before adding new code.
 
 **Статус:** ПРОДВИНУЛИСЬ — simple frontend-direction/quality failure is weakened; focus moves to visual-inertial/backend state coupling.
+
+
+## 2026-09-07 — next downstream discriminator: archived first-bad-state analysis on -90° runs
+
+**Preflight:** downstream tools were reviewed before requesting another test.
+
+- `analyze_v25_state_chain_events.py` and `analyze_v25_prediction_optimizer_balance.py` require the non-archived live file `~/jtzero_kimera_chain.csv`; they cannot be honestly replayed on the already archived -90° runs unless a matching chain file was archived, which it was not.
+- `analyze_v25_bias_timeline_vs_frontend.py` is also hard-coded to live `/home/vio` files and uses backend speed; it is not the preferred next archived discriminator.
+- `analyze_v25_first_bad_state.py` accepts archived run directories directly and correlates backend dV/dBA/state motion with nearest frontend status/inlier quality using source timestamps.
+
+**Action:** use `analyze_v25_first_bad_state.py` on the two fixed-yaw ≈ -90° runs. The purpose is to see whether the largest backend velocity/bias/state changes coincide with frontend status degradation or occur while frontend remains nominal.
+
+**Physical test yaw:** none — analysis only. Recorded datasets are at stand/drone yaw ≈ -90°.
+
+**Next command:** run `analyze_v25_first_bad_state.py` on 224347 and 224543.
+
+**Статус:** ПРОДВИНУЛИСЬ — selected an archive-compatible downstream discriminator; no new physical test.

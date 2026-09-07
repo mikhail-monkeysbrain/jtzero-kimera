@@ -338,3 +338,16 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Коммиты:** `0b56354`, `f8aa003`.
 
 **Статус:** ПРОДВИНУЛИСЬ — следующий шаг проверяет transport/service boundary без нового физического P11-прогона.
+
+
+## 2026-09-07 — результат одиночного PARAM_REQUEST_READ probe
+
+**Фактический результат:** FC найден как sysid=1/compid=1. На первый запрос `AHRS_ORIENTATION` ответ не попал в его 3-секундное окно, но во время следующего запроса пришли сразу `AHRS_ORIENTATION=0` и `INS_ACC_ID=3408138`; оба сообщения имеют `param_index=65535`, `param_count=1261`. На `INS_ACC2_ID` в отведённом окне ответа не было. Итог probe: 1/3 по текущей логике сопоставления, однако фактически подтверждены ответы как минимум на два имени.
+
+**Методологическая поправка:** вывод probe «проблема специфична для PARAM_REQUEST_LIST» слишком сильный. Наличие задержанного ответа на `AHRS_ORIENTATION` показывает, что parameter service работает, но ответы могут приходить с задержкой/очередью. Поэтому нулевой результат прежнего `PARAM_REQUEST_LIST` пока нельзя интерпретировать как доказанный отказ именно LIST: возможны timing/rate/stream-contention причины.
+
+**Что подтверждено:** serial transport и MAVLink parameter service на /dev/ttyAMA0 работают; FC отвечает `PARAM_VALUE`; `AHRS_ORIENTATION=0`; `INS_ACC_ID=3408138`; reported parameter count = 1261. FC не изменён.
+
+**Повтор не требуется:** физический P11 A/B прогон и повтор одиночного probe сейчас не нужны. Следующий шаг должен исправить read-only parameter collector: учитывать delayed/out-of-order replies и получать только необходимые calibration/ID/orientation параметры адресными запросами, а не полагаться на полный LIST.
+
+**Статус:** ПРОДВИНУЛИСЬ — проблема локализована до поведения parameter retrieval/timing; доступ к параметрам FC подтверждён.

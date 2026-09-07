@@ -1233,3 +1233,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Methodological consequence:** the orange toolbox is the primary table-plane/world-direction reference; the black vertical edge is a secondary orthogonal/camera-roll reference. The unknown 3–5° platform-edge offset is acceptable for relative A/B testing if rigidly constant, but direct subtraction of 2-D image line angles is still not sufficient because perspective changes with object position.
 
 **Next analysis on existing external video:** treat the phone as a fixed projective camera. Track the same platform edge over many frames and test whether its projected lines are consistent with one fixed 3-D direction (common vanishing point) during translation. Use static orange-box/table directions to constrain the table-plane vanishing geometry and the black vertical line to verify camera-frame stability. Only after projective consistency passes should any physical angle in degrees be estimated.
+
+
+## 2026-09-07 — external video projective test: A→B image-angle change explained by perspective, not observed physical tilt
+
+**Dataset:** user external phone video `video_2026-09-07_20-05-21.mp4`, fixed phone, stand translated A→B. User identified the long rigid upper-platform edge as the tracked line; orange toolbox/table and black central appliance provide static world/camera references.
+
+**Analysis performed outside repo on the uploaded video:** 329 frames, 30.012 fps, duration 10.962 s. The platform edge was fit from the bright rigid strip in the early A plateau, intermediate visible frames, and late B plateau. Early stable image-line angle is about -1.12°, late B about -2.46°: raw 2-D change ≈ -1.33°. This raw difference is NOT interpreted as physical tilt.
+
+**Projective consistency test:** for a rigid 3-D line translated without changing direction, all image projections should pass through one fixed vanishing point. A robust common-vanishing-point model was fit using A plus intermediate frames only (B excluded), yielding approximately VP=(1458,294) px, outside the right image boundary. Occluded/misdetected movement frames were rejected by RANSAC. Late B lines, which were not used in the fit, pass the predicted VP with median line residual about -1.17 px and p90 absolute residual about 1.50 px. Converted to line-direction deviation at B, median ≈ -0.18°, p90 |deviation| ≈0.24°.
+
+**Interpretation:** the observed raw image-angle shift ~1.33° is very well explained by perspective from translating the same fixed-direction edge across the frame. This external video therefore does NOT support a real ~2.3° body tilt A→B. More strongly: any additional orientation change visible in this edge is constrained to roughly a few tenths of a degree by this projective model, subject to edge-detection/model assumptions.
+
+**Self-critique / limits:** this is a single external-camera pass and the edge extractor is not a calibrated 3-D pose estimator. The ~0.2° residual is an image/projective consistency bound, not a metrologically calibrated physical pitch angle. Nevertheless, it directly falsifies the simplistic reading of the ~1.3° 2-D slope change as physical tilt, and it provides no evidence for the ~2.3° tilt needed to explain the P11 IMU vector rotation.
+
+**Consequence for P11:** mechanical tilt remains possible only below the external-video sensitivity/axis ambiguity, but the hypothesis that the full ~2.3° IMU A/B vector rotation is caused by a real stand tilt is substantially weakened by an independent world-fixed camera.

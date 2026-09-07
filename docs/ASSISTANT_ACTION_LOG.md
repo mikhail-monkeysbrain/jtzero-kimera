@@ -1818,3 +1818,46 @@ The reported Pearson coefficients are diagnostic only (n=6 transitions, non-inde
 **Mandatory physical-test yaw:** target yaw must be stated explicitly before execution. For this discriminator use stand/drone yaw ≈ -90° to remain in the same geometry stratum as 224347/224543.
 
 **Статус:** ПРОДВИНУЛИСЬ — inter-leg state inheritance is real and common enough to test causally.
+
+
+## 2026-09-07 — isolated reset-between-legs causal test infrastructure added
+
+Following the confirmed inter-leg inheritance result, a dedicated causal test infrastructure was added without changing Kimera estimator parameters.
+
+**Purpose:** determine whether the large run/order scale shifts require estimator state inheritance between legs.
+
+**Mandatory physical-test yaw:** **DRONE/STAND YAW ≈ -90°**.
+This test must remain in the same physical/visual geometry stratum as runs 224347 and 224543. Do not rotate the stand toward -45° for this discriminator.
+
+**Test design:**
+- four 500-mm legs: A->B, B->A, A->B, B->A;
+- every leg is a completely fresh VIO process;
+- every fresh process repeats the existing startup static gate and 12-s warm-up;
+- parameters remain the baseline ARW=0.003 exact-gravity set;
+- A/B marks, height, scene, yaw and operator protocol remain unchanged;
+- each leg is archived immediately before the next process starts.
+
+This turns leg state inheritance from an observational association into an intervention: previous backend BA/velocity/attitude cannot be carried into the next leg process.
+
+**Implementation:**
+- made V25 leg count overrideable while preserving the default 4-leg behavior;
+- added single-leg result gate under `JTZERO_SINGLE_LEG_MODE`;
+- `build_v25.sh` now accepts an alternate source through `JTZERO_V25_SOURCE`, with the original source still the default;
+- archive metadata can now record an explicit mode description;
+- added `tools/live_mono_imu_500mm_single_hud_v25.cpp`;
+- added `tools/run_v25_isolated_state_reset_test.sh`.
+
+**Relevant commits:**
+- `ace8cf2` — allow V25 leg-count override;
+- `70bc958` — support single-leg result gate;
+- `823455d` — alternate V25 build source;
+- `21b4800` — explicit archive mode description;
+- `ce6b7a9` — isolated single-leg V25 source;
+- `6c4f40e` — isolated state-reset causal runner.
+
+**Decision rule:**
+- If isolated fresh-process A->B/B->A scales cluster much more tightly and the strong A-first/B-first run-order shift disappears, state inheritance is causally important.
+- If the same direction-dependent or run-level scale errors persist despite fresh initialization before every leg, state inheritance is not the primary cause; focus returns to per-leg visual-inertial observability/coupling.
+- One physical session is sufficient for the first intervention. A reverse-order confirmation is only needed if the result is ambiguous.
+
+**Статус:** ГОТОВ К CAUSAL TEST — observational archive analysis is exhausted enough to justify one controlled physical intervention.

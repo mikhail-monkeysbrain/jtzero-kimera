@@ -59,7 +59,7 @@
 
 ## Следующие наиболее ценные действия
 
-1. **Оценить метрический внешний 3-D rotation.** Camera-calibration-free homography invariant уже отверг perspective-only translation: closest-eigenvalue mismatch A_start median ~0.00034, B ~0.2568, A_end ~0.00354. Значит rigid 2-D marker реально меняет 3-D orientation в B; простая перспектива от переноса не объясняет наблюдение. Следующий шаг — получить actual external rotation magnitude/axis через intrinsics/metric marker geometry и сравнить с gyro rotvec ~[-1.78,+1.65,-0.65]°.
+1. **Проверить временную причинность rotation→VIO на старых V23.** Добавлен `tools/analyze_v23_rotation_vio_timeline.py`: cumulative raw-gyro rotation каждые 10% leg сопоставляется с VIO tilt, along velocity/displacement, Z/Vz; также считаются onset 20/50/80% и rotation exposure. Важно: true translation-vs-time не логировалась, поэтому time-resolved scale error не заявляется. Это тест временной совместимости механизма, а не финальная причинность.
 
 2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
 

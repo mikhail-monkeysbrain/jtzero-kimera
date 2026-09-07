@@ -146,7 +146,8 @@ for d in ("A->B","B->A"):
               f"GYRO-pred={med([x[2] for x in rr]):.4f}deg "
               f"end-error={med([x[3] for x in rr]):.4f}deg "
               f"horiz-rot={med([x[4] for x in rr]):.4f}deg "
-              f"GYRO/RAW={med([x[6] for x in rr]):.3f} " +\n              f"rotvecFRD_med=[{med([x[7] for x in rr]):+.3f},{med([x[8] for x in rr]):+.3f},{med([x[9] for x in rr]):+.3f}]deg")
+              f"GYRO/RAW={med([x[6] for x in rr]):.3f} " +
+              f"rotvecFRD_med=[{med([x[7] for x in rr]):+.3f},{med([x[8] for x in rr]):+.3f},{med([x[9] for x in rr]):+.3f}]deg")
 
 print("\n================ DECISION ================")
 print("- GYRO-predicted gravity change ~= RAW gravity change, with small end error: supports a real rotation of the IMU/body between A and B.")

@@ -774,3 +774,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Самокритика:** этот тест проверяет геометрию стенда относительно механической направляющей, а не независимую абсолютную ориентацию. Даже обнаруженное изменение не докажет, что причина именно рулетка; возможны поверхность, опоры и деформация стенда.
 
 **Статус:** logger готов к одному пробному проходу A→B; анализатор временной геометрии будет писаться только после получения raw-video run и проверки наблюдаемости.
+
+
+## 2026-09-07 — ruler-pass run 181857 получен; добавлен temporal geometry gate
+
+**Факт:** run `/home/vio/jtzero_runs/20260907_181857_P11_RULER_PASS_GUI` завершён штатно. Сохранены raw-video OV9281, frame CSV и events CSV. Qt/GLib предупреждения не сорвали запись.
+
+**Pre-check на повтор:** отдельного temporal ruler-pass analyzer в репозитории не было. Новый анализ отличается от stationary ruler V1/V2 тем, что использует непрерывный A→B raw-video и реальные capture timestamps/state labels из frame CSV.
+
+**Добавлен:** `tools/analyze_p11_ruler_pass_geometry.py`.
+
+**Что он проверяет:** фактический frame timing/FPS, полноту PRE_STILL_A/MOVE_A_TO_B/POST_STILL_B, несколько устойчивых семейств линий по CLAHE+LSD, наличие примерно ортогональной пары line families в A и B и candidate image-space deltas между A и B. Также сохраняется annotated `ruler_pass_diag/contact_sheet.png` для обязательной визуальной проверки.
+
+**Самокритика:** даже при хорошей двухсемейной наблюдаемости line-family deltas не являются напрямую roll/pitch. Поскольку рулетка — механическая направляющая, это diagnostic guide/stand/surface geometry, а не независимый внешний reference.
+
+**Commit:** `e545636` — temporal geometry observability analyzer.
+
+**Статус:** новый физический прогон не нужен; следующий шаг — запустить analyzer на run 181857 и проверить overlay до любого causal interpretation.

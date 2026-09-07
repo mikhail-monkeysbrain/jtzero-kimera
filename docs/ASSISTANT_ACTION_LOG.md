@@ -1294,3 +1294,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Следующий шаг:** запустить на трёх V23 runs A_FIRST_1, B_FIRST_1, A_FIRST_2. Если coupling повторяется по знаку/порядку, только тогда читать source frame mapping и делать количественную gravity/bias projection.
 
 **Commit:** `8a37833`.
+
+
+## 2026-09-07 — V23 source mapping verified; existing VIO-vs-FC attitude analyzer is the next discriminator
+
+**Source preflight completed before any projection code.** `live_mono_imu_500mm_repeat_hud_v23.cpp` composes V23 from v23/v18 parts. In `v18_part07b`, HIGHRES_IMU is decoded in native FC FRD, then `accelFrdToFlu(h.xacc,h.yacc,h.zacc)` and `gyroFrdToFlu(...)` are applied before feeding Kimera. `jtzero_imu_correction.h` defines FRD→FLU exactly as `[x,-y,-z]` for both accel and gyro.
+
+**Critical V23 detail:** V23 calls `imu_correction.correctGyro(..., false, false)`. Therefore during this mode both custom accelerometer gravity feedback and custom Z→XY gyro correction are disabled. Fed gyro is pure FRD→FLU; fed accelerometer is pure FRD→FLU. Raw combined CSV logs original `h.xacc/h.yacc/h.zacc` in FRD, not the transformed FLU vector.
+
+**Implication:** the ~1.6–1.8° backend attitude change cannot be attributed to the custom `ImuCorrection` gravity-feedback path, because that path is OFF in V23. Any VIO attitude change comes from Kimera's own visual-inertial optimization / gyro propagation, not this custom feedback hook.
+
+**Important existing tool found:** `tools/analyze_v23_vio_vs_fc_attitude.py` already directly compares time-aligned VIO attitude against MAVLink FC ATTITUDE along each leg. This is a better next discriminator than writing a new gravity-projection script. FC ATTITUDE is not an independent physical reference, but it tells us whether the A/B attitude swing already exists upstream in the FC estimator or is introduced inside Kimera.
+
+**Next step:** run that existing analyzer on the same three V23 runs. Interpret only relative changes from each leg start. If FC attitude tracks the ~1.6–1.8° VIO swing, the attitude effect is already present in FC-side estimation/common IMU physics. If FC attitude remains nearly fixed while VIO swings, the effect is Kimera-side. No new physical run needed.
+
+**Status:** ПРОДВИНУЛИСЬ — source-verified frame mapping removed a major ambiguity and identified an already-existing stronger discriminator.

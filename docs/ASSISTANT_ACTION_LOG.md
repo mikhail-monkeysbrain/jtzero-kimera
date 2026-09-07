@@ -1578,3 +1578,16 @@ Therefore the late two runs are **not direct same-geometry repeats** of the firs
 **Correction to previous plan:** do not use the five-run aggregate BA-AB statistic as evidence. Treat the early -45° and late -90° datasets as two geometry strata. The late pair itself becomes a useful orientation-change discriminator, but only after comparing A-first vs B-first within the same -90° geometry and checking raw gyro/FC yaw consistency.
 
 **Статус:** ПРОДВИНУЛИСЬ — a major confounder was identified from user-provided stand geometry; previous five-run pooled matching is downgraded.
+
+
+## 2026-09-07 — mandatory protocol rule: always state stand/drone yaw before every physical test
+
+**User correction / new mandatory constraint:** before every physical test, the assistant must explicitly state the required yaw orientation of the drone/stand in degrees.
+
+**Operational rule:** every future physical-test instruction must contain a separate explicit field such as:
+`DRONE/STAND YAW: -45°` or `DRONE/STAND YAW: -90°`.
+Do not assume yaw from prior context, video, bench layout, or test name. If yaw is intentionally free/uncontrolled, state that explicitly instead of omitting it.
+
+**Current step:** no physical test is requested; analysis continues on already archived -90° runs.
+
+**Статус:** НА МЕСТЕ — protocol constraint added; no new data.

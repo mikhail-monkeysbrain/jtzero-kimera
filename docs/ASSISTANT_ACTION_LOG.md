@@ -1277,3 +1277,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **6. Правило сводки каждые 10 сообщений фактически не соблюдалось.** Поиск по полному journal нашёл только само правило, но не регулярные записи сводок. Это нарушение собственного процесса. Дальше STATUS будет использоваться как компактная operational memory; 10-message summaries остаются обязательными, но не должны заменять обновление STATUS.
 
 **Статус:** ПРОДВИНУЛИСЬ — исправлена структура доказательств и интеграция расследований; новых физических данных этим действием не получено.
+
+
+## 2026-09-07 — добавлен coordinate-safe V23 raw→backend→scale coupling analyzer
+
+**Preflight:** STATUS и журнал перечитаны. Поиск по репозиторию не нашёл существующего анализатора, который на V23 одновременно связывает raw IMU, backend attitude/Ba/Bg/V и scale по leg. Новый физический run не требуется.
+
+**Важное ограничение:** в V23 CSV нет отдельного PIM-state. Поэтому первый шаг намеренно не делает body→world projection и не реконструирует PIM. Это защищает от очередной ошибки frame convention. Анализатор использует только безопасные величины в их собственных координатах и timestamp alignment `mapped_ns`↔`backend timestamp_ns`.
+
+**Добавлен:** `tools/analyze_v23_raw_backend_scale_coupling.py`.
+
+**Что считает по каждому leg:** raw accel/gyro на SETTLE_START и SETTLE_END; Δa и Δ|a|; backend ΔRPY, ΔBa, ΔBg, ΔV; фактический VIO displacement и `scale_horizontal`; затем same-direction cross-run summary и scale<1 vs scale>1 sign comparison.
+
+**Что сознательно НЕ делает:** не проецирует raw acceleration на VIO world direction до проверки реального frame mapping в source; не называет корреляции причинными; не выдаёт n_legs за независимые физические runs.
+
+**Следующий шаг:** запустить на трёх V23 runs A_FIRST_1, B_FIRST_1, A_FIRST_2. Если coupling повторяется по знаку/порядку, только тогда читать source frame mapping и делать количественную gravity/bias projection.
+
+**Commit:** `8a37833`.

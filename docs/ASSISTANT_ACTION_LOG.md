@@ -584,3 +584,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Вывод:** ruler route пока не годится как A/B discriminator. Нельзя сравнивать A/B line-angle, потому что B estimate отсутствует. Следующий шаг — не новый физический прогон, а проверка/улучшение B observability на уже записанных изображениях, с обязательной визуальной верификацией overlay.
 
 **Статус:** причина P11 не установлена; ruler auxiliary route остаётся открытым, но текущий detector недостаточен для B.
+
+
+## 2026-09-07 — ruler observability v2 для слабой B-текстуры
+
+**Pre-check на повтор:** это не повтор первого ruler analyzer. Первый использовал CLAHE/Canny/HoughLinesP и выдавал единственный доминирующий orientation cluster; он провалился на всех B (0/20 usable). Новый шаг специально меняет детектор и выводит несколько конкурирующих кандидатов вместо автоматического выбора «рулетки».
+
+**Самокритика:** нельзя автоматически считать самый сильный line cluster рулеткой. На кадрах есть другие длинные границы. Поэтому v2 сохраняет overlay с C1/C2/C3/C4 и требует визуально проверить, что выбранный cluster действительно лежит на рулетке.
+
+**Новый метод:** CLAHE + OpenCV LineSegmentDetector (LSD), широкая ROI, stage-level temporal voting по top-3 orientation candidates и статистика hits/std. Для B дополнительно показывается кандидат, ближайший к устойчивому A-reference, но он явно НЕ объявляется рулеткой автоматически.
+
+**Добавлен:** `tools/analyze_p11_ruler_observability_v2.py`.
+
+**Commit:** `c1808ab` — `diag: add robust P11 ruler candidate observability v2`.
+
+**Что это НЕ доказывает:** даже если визуально подтверждённая линия рулетки стабильна в A и B, её image-space angle остаётся 1-D projective measurement и не является полным независимым roll/pitch.
+
+**Статус:** новый физический прогон не требуется; повторно используем run 172536 и проверяем только B observability.

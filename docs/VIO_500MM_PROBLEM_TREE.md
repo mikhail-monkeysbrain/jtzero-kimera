@@ -502,3 +502,30 @@ It:
 - automatically archives all V25 CSV outputs with the actual parameter directory immediately after the run.
 
 Next action: obtain a fresh archived baseline dataset and only then re-run the visual-quality/BA correlation on that baseline.
+
+
+### 2026-09-07 — fresh baseline ARW=0.003 exact-gravity run shows large run-to-run variability
+
+Archived run:
+`/home/vio/jtzero_runs/20260907_114328_v25_BASELINE_ARW_003_EXACT`
+
+Result:
+- LEG1 A→B = 520.44 mm, error +20.44 mm, dz -2.12 mm;
+- LEG2 B→A = 590.95 mm, error +90.95 mm, dz +100.63 mm;
+- LEG3 A→B = 523.47 mm, error +23.47 mm, dz -17.22 mm;
+- LEG4 B→A = 580.58 mm, error +80.58 mm, dz +58.96 mm;
+- A→B mean = 521.95 mm;
+- B→A mean = 585.76 mm;
+- overall scale = 1.10772;
+- reversal angles remain close to 180°;
+- pipeline PASS;
+- one loop stall 354.857 ms and one VIO jump at KF118 (`dP=116.59 mm`, `dt=464.02 ms`).
+
+This baseline is much worse than the earlier exact-gravity baseline (A→B ≈496.5 mm, B→A ≈530.1 mm). Therefore the remaining error is not yet reproducible as a fixed +6% directional scale bias. Manual motion profile / excitation and/or transient visual-inertial conditions have substantial influence.
+
+Methodological consequence:
+- do not interpret the ARW=0.0003 vs 0.003 pair as a clean parameter A/B test yet, because the two manual motion profiles may differ strongly;
+- first compare archived runs for duration, speed, frontend quality and motion excitation;
+- future causal parameter tests should use more controlled motion or at least matched speed/duration windows.
+
+New tool: `tools/compare_v25_archived_runs.py`.

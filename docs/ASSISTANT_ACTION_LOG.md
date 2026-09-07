@@ -1674,3 +1674,25 @@ No immediate physical test. Before designing another run, analyze scale against 
 **Physical test yaw:** none — analysis only.
 
 **Статус:** ПРОДВИНУЛИСЬ — residual directional tendency survives in both geometry strata, but same-direction controls rule out a simple direction-only defect.
+
+
+## 2026-09-07 — next discriminator selected: frontend quality/pose on fixed -90° geometry
+
+**Preflight / repeat check:** existing tools already cover the required next question:
+- `analyze_v25_frontend_quality_crossrun.py` compares per-leg VALID fraction, inlier ratio, tracked features, weak/strong frontend fractions across runs;
+- `analyze_v25_frontend_pose_normalized.py` checks normalized monocular translation direction/elevation within a run;
+- `analyze_v25_same_run_motion_visual.py` exists but uses backend speed and naive FC yaw span, so it is not the preferred causal discriminator here.
+
+No new analyzer is required yet.
+
+**Target datasets:** the two runs at fixed stand/drone yaw ≈ -90°:
+- 20260907_224347_v25_BASELINE_ARW_003_EXACT (A-first);
+- 20260907_224543_v25_BASELINE_ARW_003_EXACT_B_FIRST (B-first).
+
+**Question:** the same-direction control shows a large run-level scale shift between these two runs. Determine whether that shift is accompanied by frontend quality or normalized mono-pose differences. If frontend metrics/pose shift with scale, visual geometry/front-end state becomes stronger. If frontend remains comparable while backend scale shifts strongly, visual-inertial/backend initialization/state coupling becomes stronger.
+
+**Physical test yaw:** none — analysis only. Recorded geometry for these datasets is ≈ -90°.
+
+**Next commands:** run frontend-quality crossrun on both directories, then normalized frontend pose separately on each directory.
+
+**Статус:** ПРОДВИНУЛИСЬ — reused existing non-circular frontend diagnostics instead of adding redundant code or collecting new physical data.

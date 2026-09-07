@@ -629,3 +629,25 @@ Methodological consequence:
 - future causal parameter tests should use more controlled motion or at least matched speed/duration windows.
 
 New tool: `tools/compare_v25_archived_runs.py`.
+
+
+### 2026-09-07 — manual protocol corrected: no timers, GUI-only operator control
+
+Constraint clarified:
+- a fixed movement timer is not acceptable because the operator may need more or less time for a valid 500 mm pass;
+- CLI/metronome control is not used for the physical movement protocol;
+- mechanical linear stand remains unavailable.
+
+Action:
+- removed `tools/v25_manual_motion_metronome.py`;
+- V25 HUD now exposes a clickable GUI action button in the existing OpenCV window;
+- the operator clicks **START** only when the vehicle is physically ready and stationary;
+- after start stabilization the operator moves 500 mm at a comfortable, smooth speed;
+- the operator clicks **END** only after reaching the physical 500 mm mark and stopping;
+- no movement-duration target is imposed;
+- keyboard remains only for emergency/normal quit (Q/ESC), not for START/END.
+
+Methodological implication:
+- reproducibility will be judged *after the run* from recorded motion profile (duration, velocity, FC attitude, frontend quality), not forced by a timer;
+- multiple runs are accepted for A/B comparison only when their measured input profiles are sufficiently similar;
+- otherwise the comparison is INCONCLUSIVE.

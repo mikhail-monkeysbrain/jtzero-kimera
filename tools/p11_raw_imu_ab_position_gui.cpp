@@ -39,83 +39,82 @@ int main(){const char* L[]={"A1","B1","A2","B2","A3","B3","A4"};const char* P[]=
 cv::setWindowProperty("P11: проверка IMU в точках A/B",cv::WND_PROP_FULLSCREEN,cv::WINDOW_FULLSCREEN);int s=0;bool rec=false,finished=false;int64_t t0=0;double ax=0,ay=0,az=0,gx=0,gy=0,gz=0,tp=0;uint64_t tu=0;long count=0;
  while(!finished){pollfd q{f,POLLIN,0};poll(&q,1,5);uint8_t b[4096];int n=read(f,b,sizeof(b));for(int j=0;j<n;j++)if(mavlink_parse_char(MAVLINK_COMM_0,b[j],&m,&st)&&m.msgid==MAVLINK_MSG_ID_HIGHRES_IMU){mavlink_highres_imu_t x{};mavlink_msg_highres_imu_decode(&m,&x);ax=x.xacc;ay=x.yacc;az=x.zacc;gx=x.xgyro;gy=x.ygyro;gz=x.zgyro;tp=x.temperature;tu=x.time_usec;count++;double an=sqrt(ax*ax+ay*ay+az*az);o<<ns()<<','<<tu<<','<<L[s]<<','<<P[s]<<','<<(rec?1:0)<<','<<std::setprecision(9)<<ax<<','<<ay<<','<<az<<','<<ax<<','<<-ay<<','<<-az<<','<<an<<','<<gx<<','<<gy<<','<<gz<<','<<gx<<','<<-gy<<','<<-gz<<','<<tp<<"\n";}
   double el=rec?(ns()-t0)/1e9:0;if(rec&&el>=SEC){rec=false;e<<ns()<<",PLATEAU_END,"<<L[s]<<','<<P[s]<<"\n";e.flush();o.flush();if(s==6)finished=true;else{s++;t0=0;}}
-  const int SW=1600, SH=900;
+  const int SW=1280, SH=720;
   cv::Mat im(SH,SW,CV_8UC3,cv::Scalar(20,22,26));
 
-  // Верхняя панель: название + прогресс.
-  panel(im,20,18,SW-40,95,cv::Scalar(31,35,42),cv::Scalar(65,70,80));
-  txt(im,"P11 — контроль сырого IMU в точках A/B",45,58,34);
-  txt(im,"Цель: проверить, зависит ли базовый уровень IMU от физической точки A или B",45,94,22,cv::Scalar(185,190,200));
+  // Верхняя панель.
+  panel(im,16,14,SW-32,82,cv::Scalar(31,35,42),cv::Scalar(65,70,80));
+  txt(im,"P11 — проверка IMU в точках A/B",34,50,28);
+  txt(im,"Этап "+std::to_string(s+1)+" из 7",34,78,18,cv::Scalar(180,185,195));
   for(int k=0;k<STAGES;k++){
-    int x=760+k*108;
-    cv::Scalar fill = (k<s)?cv::Scalar(55,115,70):(k==s?cv::Scalar(60,95,170):cv::Scalar(48,52,60));
-    panel(im,x,42,86,44,fill,cv::Scalar(90,100,115));
-    centerTxt(im,L[k],x+43,72,24);
+    int x=610+k*86;
+    cv::Scalar fill=(k<s)?cv::Scalar(55,115,70):(k==s?cv::Scalar(60,95,170):cv::Scalar(48,52,60));
+    panel(im,x,31,68,38,fill,cv::Scalar(90,100,115));
+    txt(im,L[k],x+18,58,21);
   }
 
-  // Главная карточка действия.
-  panel(im,30,135,1010,430,cv::Scalar(27,30,36),cv::Scalar(75,82,95));
-  txt(im,"СЕЙЧАС НУЖНО",65,180,22,cv::Scalar(160,170,185));
-  centerTxt(im,std::string("ТОЧКА ")+P[s],535,255,58,cv::Scalar(250,250,250),2);
+  // Главная инструкция.
+  panel(im,24,116,800,392,cv::Scalar(27,30,36),cv::Scalar(75,82,95));
+  txt(im,"СЕЙЧАС",48,154,20,cv::Scalar(160,170,185));
+  txt(im,std::string("ТОЧКА ")+P[s],48,214,52,cv::Scalar(250,250,250),2);
 
   if(rec){
-    centerTxt(im,"НЕ ТРОГАЙТЕ БПЛА",535,335,42,cv::Scalar(80,80,255),2);
+    txt(im,"ИДЁТ ЗАПИСЬ",48,270,26,cv::Scalar(100,215,255),2);
+    txt(im,"НЕ ТРОГАЙТЕ БПЛА",48,316,34,cv::Scalar(90,90,255),2);
     int remain=std::max(0,(int)ceil(SEC-el));
-    centerTxt(im,std::to_string(remain),535,440,96,cv::Scalar(80,220,255),2);
-    centerTxt(im,"секунд до конца записи",535,488,28,cv::Scalar(205,210,220));
-  } else {
+    txt(im,"Осталось: "+std::to_string(remain)+" с",48,382,46,cv::Scalar(100,225,255),2);
+    txt(im,"После записи переместите систему в следующую точку.",48,442,22,cv::Scalar(190,195,205));
+  }else{
     if(s==0){
-      centerTxt(im,"Установите БПЛА в точку A",535,320,38,cv::Scalar(245,245,245),2);
-      centerTxt(im,"После установки уберите руки и дождитесь полной остановки",535,375,27,cv::Scalar(205,210,220));
-    } else {
-      centerTxt(im,std::string("ПЕРЕМЕСТИТЕ БПЛА В ТОЧКУ ")+P[s],535,320,38,cv::Scalar(245,245,245),2);
-      centerTxt(im,"Сейчас БПЛА можно и нужно перемещать",535,375,28,cv::Scalar(120,220,250),2);
-      centerTxt(im,"После установки в точку уберите руки и дождитесь полной остановки",535,415,24,cv::Scalar(205,210,220));
+      txt(im,"1. Установите БПЛА в точку A.",48,276,29);
+    }else{
+      txt(im,std::string("1. Переместите систему в точку ")+P[s]+".",48,276,29);
     }
-    panel(im,210,450,650,72,cv::Scalar(45,105,70),cv::Scalar(75,145,95));
-    centerTxt(im,"Когда всё неподвижно — нажмите ПРОБЕЛ",535,496,29,cv::Scalar(245,245,245),2);
+    txt(im,"2. Уберите руки.",48,326,29);
+    txt(im,"3. Дождитесь полной неподвижности.",48,376,29);
+    panel(im,48,410,700,64,cv::Scalar(45,105,70),cv::Scalar(75,145,95));
+    txt(im,"4. Нажмите ПРОБЕЛ — начнётся запись 10 с.",70,451,25,cv::Scalar(245,245,245),2);
   }
 
-  // Следующий шаг.
-  panel(im,30,585,1010,120,cv::Scalar(31,35,42),cv::Scalar(65,70,80));
-  txt(im,rec?"ПОСЛЕ ЗАВЕРШЕНИЯ ЗАПИСИ":"ТЕКУЩИЙ ШАГ",60,625,21,cv::Scalar(160,170,185));
-  if(rec && s<STAGES-1){
-    txt(im,std::string("Переместите БПЛА: ")+P[s]+"  →  "+P[s+1],60,670,30,cv::Scalar(240,240,240),2);
-    txt(im,"После перемещения дождитесь полной остановки и запускайте следующую запись.",520,670,21,cv::Scalar(185,190,200));
-  } else if(rec) {
-    txt(im,"Это последняя запись. После неё тест завершится автоматически.",60,670,26,cv::Scalar(240,240,240),2);
-  } else if(s==0) {
-    txt(im,"Установите БПЛА в A → дождитесь покоя → ПРОБЕЛ.",60,670,27,cv::Scalar(240,240,240),2);
-  } else {
-    txt(im,std::string("Переместите БПЛА в ")+P[s]+" → дождитесь покоя → ПРОБЕЛ.",60,670,27,cv::Scalar(240,240,240),2);
+  // Что будет дальше.
+  panel(im,24,528,800,104,cv::Scalar(31,35,42),cv::Scalar(65,70,80));
+  txt(im,"ДАЛЬШЕ",48,560,18,cv::Scalar(160,170,185));
+  if(s<STAGES-1){
+    txt(im,std::string("После этой записи: ")+P[s]+" → "+P[s+1],48,598,26,cv::Scalar(235,235,240),2);
+  }else{
+    txt(im,"После этой записи тест завершится.",48,598,26,cv::Scalar(235,235,240),2);
   }
 
   // Правая диагностическая панель.
-  panel(im,1070,135,500,570,cv::Scalar(27,30,36),cv::Scalar(75,82,95));
-  txt(im,"ТЕКУЩИЕ ДАННЫЕ IMU",1100,180,24,cv::Scalar(190,200,215));
-  std::ostringstream a1,a2,a3,a4;
-  a1<<std::fixed<<std::setprecision(4)<<"ax = "<<ax<<" м/с²";
-  a2<<std::fixed<<std::setprecision(4)<<"ay = "<<ay<<" м/с²";
-  a3<<std::fixed<<std::setprecision(4)<<"az = "<<az<<" м/с²";
-  a4<<std::fixed<<std::setprecision(4)<<"|a| = "<<sqrt(ax*ax+ay*ay+az*az)<<" м/с²";
-  txt(im,a1.str(),1110,245,26);
-  txt(im,a2.str(),1110,290,26);
-  txt(im,a3.str(),1110,335,26);
-  txt(im,a4.str(),1110,395,30,cv::Scalar(120,220,250),2);
-  std::ostringstream gt;gt<<std::fixed<<std::setprecision(2)<<"Температура IMU: "<<tp<<" °C";
-  txt(im,gt.str(),1110,455,24,cv::Scalar(195,200,210));
-  txt(im,"Записываем только raw HIGHRES_IMU.",1110,525,21,cv::Scalar(165,170,180));
-  txt(im,"Kimera, камера и backend не используются.",1110,558,21,cv::Scalar(165,170,180));
-  txt(im,"Во время 10-секундной записи",1110,620,22,cv::Scalar(210,210,215));
-  txt(im,"не касайтесь стола и БПЛА.",1110,653,22,cv::Scalar(210,210,215),2);
+  panel(im,846,116,410,516,cv::Scalar(27,30,36),cv::Scalar(75,82,95));
+  txt(im,"ДАННЫЕ IMU",870,154,22,cv::Scalar(190,200,215));
+  std::ostringstream a1,a2,a3,a4,gt;
+  a1<<std::fixed<<std::setprecision(4)<<"ax  "<<ax<<" м/с²";
+  a2<<std::fixed<<std::setprecision(4)<<"ay  "<<ay<<" м/с²";
+  a3<<std::fixed<<std::setprecision(4)<<"az  "<<az<<" м/с²";
+  a4<<std::fixed<<std::setprecision(4)<<"|a| "<<sqrt(ax*ax+ay*ay+az*az)<<" м/с²";
+  gt<<std::fixed<<std::setprecision(2)<<"Температура  "<<tp<<" °C";
+  txt(im,a1.str(),870,214,24);
+  txt(im,a2.str(),870,258,24);
+  txt(im,a3.str(),870,302,24);
+  txt(im,a4.str(),870,356,27,cv::Scalar(120,220,250),2);
+  txt(im,gt.str(),870,410,22,cv::Scalar(195,200,210));
+  cv::line(im,{870,442},{1230,442},cv::Scalar(70,75,85),1);
+  txt(im,"Источник: FC HIGHRES_IMU",870,480,19,cv::Scalar(165,170,180));
+  txt(im,"Kimera и камера выключены",870,512,19,cv::Scalar(165,170,180));
+  if(rec){
+    txt(im,"Во время записи:",870,558,20,cv::Scalar(205,210,220));
+    txt(im,"не касайтесь системы.",870,590,22,cv::Scalar(225,225,230),2);
+  }else{
+    txt(im,"Сейчас систему можно",870,558,20,cv::Scalar(205,210,220));
+    txt(im,"перемещать.",870,590,22,cv::Scalar(120,220,250),2);
+  }
 
   // Нижняя строка управления.
-  panel(im,30,730,1540,130,cv::Scalar(31,35,42),cv::Scalar(65,70,80));
-  txt(im,"ПРОБЕЛ",65,785,27,cv::Scalar(120,235,160),2);
-  txt(im,"начать запись 10 с покоя",195,785,25);
-  txt(im,"ESC",750,785,27,cv::Scalar(120,160,245),2);
-  txt(im,"прервать тест",825,785,25);
-  txt(im,"Протокол: A1 → B1 → A2 → B2 → A3 → B3 → A4",65,835,22,cv::Scalar(175,180,190));
+  panel(im,24,650,1232,52,cv::Scalar(31,35,42),cv::Scalar(65,70,80));
+  txt(im,"ПРОБЕЛ — запись",48,684,20,cv::Scalar(120,235,160),2);
+  txt(im,"ESC — выход",340,684,20,cv::Scalar(120,160,245),2);
+  txt(im,"A1 → B1 → A2 → B2 → A3 → B3 → A4",620,684,18,cv::Scalar(175,180,190));
 
   cv::imshow("P11: проверка IMU в точках A/B",im);int k=cv::waitKey(1)&255;if(k==27){e<<ns()<<",ABORT,"<<L[s]<<','<<P[s]<<"\n";break;}if(k==' '&&!rec){rec=true;t0=ns();e<<t0<<",PLATEAU_START,"<<L[s]<<','<<P[s]<<"\n";e.flush();}}
  o.flush();e.flush();close(f);cv::destroyAllWindows();std::ofstream l("/home/vio/jtzero_p11_latest_run.txt");l<<dir<<"\n";std::cout<<"[ГОТОВО] "<<dir<<"\n[ГОТОВО] сэмплов="<<count<<"\n";}

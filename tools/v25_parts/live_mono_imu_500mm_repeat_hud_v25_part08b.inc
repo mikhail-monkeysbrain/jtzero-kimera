@@ -33,8 +33,7 @@
         v25_events_header=true;
       }
       const int key=cv::waitKey(1)&0xff;if(key==27||key=='q'||key=='Q'){aborted=true;break;}
-      const bool gui_action_requested=gui_action.requested.exchange(false);
-      if(gui_action_requested||key==32||key==13||key==10){VioState s;if(!pipeline->latest(&s)){notice="КООРДИНАТ ПОКА НЕТ";notice_until=monotonicNs()+1500000000LL;}
+      if(key==32||key==13||key==10){VioState s;if(!pipeline->latest(&s)){notice="КООРДИНАТ ПОКА НЕТ";notice_until=monotonicNs()+1500000000LL;}
         else if(!warmup_gate.passed){notice="VIO WARM-UP НЕ ЗАВЕРШЕН — НЕ ДВИГАТЬ";notice_until=monotonicNs()+1500000000LL;std::cout<<"[WARMUP] START key ignored: t="<<std::fixed<<std::setprecision(2)<<warmup_gate.elapsedSec(monotonicNs())<<"s stable="<<warmup_gate.stableCount()<<"/"<<kWarmupStableStatesNeeded<<"\n";}
         else if(phase==CapturePhase::WAIT_START){
           const int64_t event_wall_ns=monotonicNs();

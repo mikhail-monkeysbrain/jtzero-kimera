@@ -54,11 +54,17 @@ for L in legs:
     vio_dr=wrap(F(e,"roll_deg")-F(s,"roll_deg"))
     vio_dp=wrap(F(e,"pitch_deg")-F(s,"pitch_deg"))
     vio_dy=wrap(F(e,"yaw_deg")-F(s,"yaw_deg"))
-    fc_dr=wrap(F(a1,"roll_deg")-F(a0,"roll_deg"))
-    fc_dp=wrap(F(a1,"pitch_deg")-F(a0,"pitch_deg"))
-    fc_dy=wrap(F(a1,"yaw_deg")-F(a0,"yaw_deg"))
-    er=vio_dr-fc_dr
-    ep=vio_dp-fc_dp
+    # FC ATTITUDE is reported in ArduPilot FRD/NED-style signs, while the V25
+    # backend state is interpreted in JT-Zero FLU. For relative small-angle
+    # changes under FRD->FLU = Rx(pi): roll keeps its sign, pitch and yaw flip.
+    fc_dr_raw=wrap(F(a1,"roll_deg")-F(a0,"roll_deg"))
+    fc_dp_raw=wrap(F(a1,"pitch_deg")-F(a0,"pitch_deg"))
+    fc_dy_raw=wrap(F(a1,"yaw_deg")-F(a0,"yaw_deg"))
+    fc_dr=fc_dr_raw
+    fc_dp=-fc_dp_raw
+    fc_dy=-fc_dy_raw
+    er=wrap(vio_dr-fc_dr)
+    ep=wrap(vio_dp-fc_dp)
     ey=wrap(vio_dy-fc_dy)
     tilt_err=math.hypot(er,ep)
     grav_leak=G*math.sin(math.radians(tilt_err))
@@ -76,7 +82,8 @@ for L in legs:
     row=dict(
         leg=leg,direction=L["direction"],xy_mm=xy,dz_mm=dz,scale=scale,
         vio_droll_deg=vio_dr,vio_dpitch_deg=vio_dp,vio_dyaw_deg=vio_dy,
-        fc_droll_deg=fc_dr,fc_dpitch_deg=fc_dp,fc_dyaw_deg=fc_dy,
+        fc_droll_raw_deg=fc_dr_raw,fc_dpitch_raw_deg=fc_dp_raw,fc_dyaw_raw_deg=fc_dy_raw,
+        fc_flu_droll_deg=fc_dr,fc_flu_dpitch_deg=fc_dp,fc_flu_dyaw_deg=fc_dy,
         residual_droll_deg=er,residual_dpitch_deg=ep,residual_dyaw_deg=ey,
         residual_tilt_deg=tilt_err,equiv_gravity_leak_m_s2=grav_leak,
         start_bax=ba0[0],start_bay=ba0[1],start_baz=ba0[2],
@@ -90,7 +97,8 @@ for L in legs:
 
     print(f"LEG {leg} {L['direction']}: XY={xy:.2f} mm scale={scale:.4f} dz={dz:+.2f} mm")
     print(f"  VIO dRPY=[{vio_dr:+.3f},{vio_dp:+.3f},{vio_dy:+.3f}] deg")
-    print(f"  FC  dRPY=[{fc_dr:+.3f},{fc_dp:+.3f},{fc_dy:+.3f}] deg")
+    print(f"  FC raw dRPY=[{fc_dr_raw:+.3f},{fc_dp_raw:+.3f},{fc_dy_raw:+.3f}] deg")
+    print(f"  FC FLU dRPY=[{fc_dr:+.3f},{fc_dp:+.3f},{fc_dy:+.3f}] deg")
     print(f"  residual dRP=[{er:+.3f},{ep:+.3f}] tilt={tilt_err:.3f} deg "
           f"gravity_leak≈{grav_leak:.4f} m/s^2")
     print(f"  BA start=[{ba0[0]:+.5f},{ba0[1]:+.5f},{ba0[2]:+.5f}] "
@@ -116,8 +124,8 @@ with OUT.open("w",newline="") as f:
     w.writeheader(); w.writerows(rows)
 
 print("\nINTERPRETATION:")
-print("- FC nearly stationary while VIO R/P changes => remaining attitude error is internal to VIO, not physical stand tilt.")
-print("- Large residual tilt correlated with dz/scale => prioritize attitude/bias coupling or camera-body geometry.")
-print("- BA returning to large XY values after exact init => Hypothesis 1B gains support.")
-print("- BA remains small but VIO attitude still moves => Hypothesis 2/visual geometry gains priority.")
+print("- Compare VIO against FC FLU, not raw FC signs. Raw pitch/yaw have opposite sign under FRD->FLU.")
+print("- Small VIO-vs-FC-FLU residual => observed attitude change is physical/FC-confirmed, not an internal VIO tilt error.")
+print("- BA returning to large XY values after exact init => Hypothesis 1B gains support independently of attitude agreement.")
+print("- Large directional scale bias with good attitude agreement shifts priority toward motion excitation/mono scale/endpoint dynamics rather than camera-attitude geometry.")
 print("Saved:",OUT)

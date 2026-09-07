@@ -1046,3 +1046,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Что пока НЕ подтверждено:** плохая stereo calibration, плохой physical dataset, неверный знак vertical disparity, недостаточный overlap, photometric mismatch, camera-order mismatch. Текущий analyzer снова скрывает, где именно пары отбрасываются после перехода на vertical geometry.
 
 **Следующий шаг:** forensic v3 должен использовать правильную vertical epipolar geometry и показать распределения |dx|, yL-yR, counts после ratio/epipolar/disparity gates и triangulated positive-depth counts. Никакого нового физического прогона и никакого normal estimator до этого.
+
+
+## 2026-09-07 — forensic v3: sign disparity подтверждён; главная проблема — global descriptor matching, не геометрия глубины
+
+**Результат v3:** для всех stages после правильной vertical rectification наблюдается `yL-yR` около +300…306 px. Triangulation этих совпадений даёт положительную глубину ~0.182–0.185 m, что практически совпадает с реальной рабочей дистанцией стенда. Это сильное подтверждение корректного знака vertical disparity и общей stereo scale/geometry.
+
+**Важно:** проблема НЕ в знаке disparity. Positive-depth counts совпадают с положительным `yL-yR`; negative-depth практически нет.
+
+**Наблюдаемая проблема:** global SIFT ratio-test до epipolar filtering даёт много ложных cross-camera matches. Поэтому raw |dx| имеет median ~5–8 px и огромный p90, а строгий `|dx|<=2.5 px` оставляет обычно лишь 1–7 точек на пару. При ослаблении до `|dx|<=5/10 px` число кандидатов резко растёт (например A4 median 44/68, A1 22/66). Это больше похоже на проблему способа matching, чем на отсутствие stereo overlap.
+
+**Физическая sanity-check:** ожидаемый vertical disparity из rectified f≈1151.86 px, baseline≈0.04833 m и Z≈0.184 m составляет около 303 px. Наблюдаемые ~300–306 px полностью согласуются с этим порядком. Следовательно текущие sparse matches с малым |dx| геометрически правдоподобны.
+
+**Самокритика:** предыдущий observability analyzer сначала делал global descriptor KNN, а уже потом epipolar filter. Для сильно различающихся камер OV9281/OV5647 это неудачная последовательность: ложные descriptor matches доминируют и убивают истинные correspondence до геометрического отбора.
+
+**Следующий шаг:** не новый физический run. Нужен epipolar-guided matcher: для каждого left feature искать right candidates только в узком rectified x-коридоре и в физически допустимом vertical disparity диапазоне (~250–340 px для текущей высоты), затем descriptor ratio/uniqueness test и triangulation. Только после этого повторить plane observability gate.

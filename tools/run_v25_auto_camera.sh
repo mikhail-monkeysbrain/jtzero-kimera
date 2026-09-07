@@ -16,7 +16,7 @@ find_camera() {
       [ -e "$d" ] || continue
       real="$(readlink -f "$d")"
       if v4l2-ctl -d "$real" --list-formats-ext 2>/dev/null | grep -q "'MJPG'"; then
-        printf '%s\n' "$real"
+        printf '%s\n' "$d"
         return 0
       fi
     done
@@ -48,7 +48,9 @@ if [ -z "$CAMERA" ]; then
 fi
 
 echo "[AUTO-CAM] selected $CAMERA"
-v4l2-ctl -d "$CAMERA" --all 2>/dev/null |   grep -E 'Driver name|Card type|Video input' | head -3 || true
+echo "[AUTO-CAM] resolved $(readlink -f "$CAMERA" 2>/dev/null || printf '%s' "$CAMERA")"
+v4l2-ctl -d "$CAMERA" --all 2>/dev/null | \
+  grep -E 'Driver name|Card type|Video input' | head -3 || true
 
 if [ ! -x "$BIN" ]; then
   echo "[AUTO-CAM] V25 binary missing, rebuilding..."

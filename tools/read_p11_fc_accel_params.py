@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import time
-from pymavlink import mavutil
+try:\n    from pymavlink import mavutil\nexcept ModuleNotFoundError as exc:\n    raise SystemExit(\n        "ОШИБКА: модуль pymavlink не установлен для этого Python.\\n"\n        "Этот диагностический скрипт не должен добавлять новую Python-зависимость в рабочее окружение.\\n"\n        "Используйте существующий C++/MAVLink путь проекта; установка pymavlink не требуется."\n    ) from exc
 
 WANTED_PREFIXES = (
     "INS_ACC",

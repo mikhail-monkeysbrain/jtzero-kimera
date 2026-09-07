@@ -22,7 +22,7 @@ for f in \
   cd "$ROOT"
   echo "jtzero_branch=$(git branch --show-current)"
   echo "jtzero_head=$(git rev-parse HEAD)"
-  echo "mode=V25 A->B->A x2 closure; strict START; stall >500ms invalid; FRD->FLU only; ZXY OFF; gravity feedback OFF"
+  echo "mode=${JTZERO_V25_MODE_DESC:-V25 A->B->A x2 closure; strict START; stall >500ms invalid; FRD->FLU only; ZXY OFF; gravity feedback OFF}"
   echo "params_dir=$PARAMS_DIR"
   echo "jtzero_status_begin"; git status --short; echo "jtzero_status_end"
 } > "$OUT/METADATA.txt"

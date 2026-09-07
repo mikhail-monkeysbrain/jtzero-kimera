@@ -1430,3 +1430,43 @@ However, vertical drift is already present before meaningful gyro rotation or VI
 Endpoint gyro magnitude is nearly constant within direction (~2.3–2.6°), while horizontal scale varies strongly (A->B 0.796/0.974/0.817; B->A 0.996/1.196/1.108). Rotation exposure does not monotonically track scale either: B->A exposure 7.065→scale 0.996 versus exposure 2.926→scale 1.196. Thus simple endpoint-angle or scalar exposure alone is insufficient as a complete horizontal-scale explanation. Do not fit a causal correlation on n=6 dependent legs.
 
 Current decomposition: (1) a real reversible mechanical rotation of the rig/body is established and is reflected by raw gyro, raw gravity, FC attitude, VIO attitude and external 2-D marker; (2) early vertical drift exists independently of that rotation; (3) horizontal scale asymmetry remains coupled to direction but is not explained by endpoint rotation magnitude alone.
+
+
+## 2026-09-07 — V25 raw-profile cross-run matcher added; canonical STATUS synchronized
+
+**Preflight / repeat check:** `ASSISTANT_ACTION_LOG.md`, `STATUS.md`, `VIO_500MM_PROBLEM_TREE.md` and the current V25 tools were reviewed. Existing `compare_v25_archived_runs.py` is not suitable for causal physical-motion matching because it uses backend/VIO speed; the journal already forbids backend speed as evidence of physical input. Existing `analyze_v25_raw_motion_profile.py` is same-run descriptive only and does not rank legs across independent archived runs.
+
+**New discriminator:** added `tools/analyze_v25_raw_profile_crossrun_match.py`.
+
+It:
+- accepts 2+ archived V25 run directories;
+- builds each leg profile from operator START/END duration, raw FC HIGHRES_IMU acceleration/gyro and FC ATTITUDE spans;
+- does **not** use backend velocity, backend bias or VIO scale in the matching score;
+- ranks opposite-direction cross-run leg pairs by raw-input similarity;
+- reports same-direction nearest pairs as run-to-run repeatability control;
+- reports scale only after matching as the output under investigation;
+- explicitly treats the score as a ranking metric, not statistical proof of identical trajectories, and does not count legs as independent physical runs.
+
+**Why this is new:** previous raw-motion analysis established that B->A was more excited within `MANUAL_PROFILE_01_CLEAN`, but it did not answer whether the existing archive already contains A->B and B->A legs with comparable independent physical excitation. This tool asks that cross-run discriminator before requesting any new physical run.
+
+**STATUS correction:** `docs/STATUS.md` was updated because it lagged behind later journal evidence. It now records:
+- V23 raw gyro / raw gravity / FC attitude / VIO attitude / external cross-marker support for real reversible mechanical rotation;
+- the separate early pre-motion Z drift;
+- failure of endpoint rotation magnitude/exposure to explain horizontal scale variance;
+- the V25 raw-motion confounder;
+- common-axis BA projection correction;
+- ARW=0.0003 causal failure;
+- the new archive-first raw-profile matching step.
+
+**Commits:**
+- `d62751f` — add raw-profile cross-run matcher for V25;
+- `36a04ab` — update P11/V25 canonical STATUS and next discriminator.
+
+**Next action:** run the new matcher on the already archived V25 baseline/manual runs before collecting more physical data. Candidate directories already used in the current investigation include:
+- `20260907_122838_v25_MANUAL_PROFILE_01_CLEAN`;
+- `20260907_124712_v25_BASELINE_ARW_003_EXACT`;
+- `20260907_132115_v25_BASELINE_ARW_003_EXACT_B_FIRST`.
+
+Interpretation must be based on the nearest raw-matched cross-run pairs, not on direction means alone.
+
+**Статус:** ПРОДВИНУЛИСЬ — новый physical run не потребовался; следующий discriminator теперь использует существующий архив и independent raw-input matching вместо circular backend speed.

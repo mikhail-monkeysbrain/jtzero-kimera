@@ -31,7 +31,7 @@ static void centerTxt(cv::Mat& i, const std::string& s, int cx, int y, int px, c
   int approx=static_cast<int>(s.size()*px*0.54);
   txt(i,s,std::max(20,cx-approx/2),y,px,col,th);
 }
-int main(){const char* L[]={"A1","B1","A2","B2","A3","B3","A4"};const char* P[]={"A","B","A","B","A","B","A"};const double SEC=10;
+int main(){const char* L[]={"A1","B1","A2","B2","A3","B3","A4"};const char* P[]={"A","B","A","B","A","B","A"};constexpr int STAGES=7;const double SEC=10;
  std::string dir="/home/vio/jtzero_runs/"+stamp()+"_P11_RAW_IMU_AB_POSITION_GUI";fs::create_directories(dir);std::ofstream o(dir+"/p11_raw_imu.csv"),e(dir+"/p11_events.csv");
  o<<"recv_ns,time_usec,stage,position,recording,ax_frd,ay_frd,az_frd,ax_flu,ay_flu,az_flu,acc_norm,gx_frd,gy_frd,gz_frd,gx_flu,gy_flu,gz_flu,temperature\n";e<<"event_ns,event,stage,position\n";
  int f=serial();mavlink_message_t m{};mavlink_status_t st{};uint8_t sy=0,co=0;std::cout<<"[MAV] ожидание HEARTBEAT...\n";while(!sy){uint8_t b[1024];int n=read(f,b,sizeof(b));for(int j=0;j<n;j++)if(mavlink_parse_char(MAVLINK_COMM_0,b[j],&m,&st)&&m.msgid==MAVLINK_MSG_ID_HEARTBEAT){sy=m.sysid;co=m.compid;break;}usleep(10000);}rate(f,sy,co);

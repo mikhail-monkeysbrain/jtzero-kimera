@@ -29,11 +29,19 @@ root=Path(sys.argv[1])
 legs=load(root/"jtzero_500mm_v25_legs.csv")
 backend=load(root/"jtzero_500mm_v25_backend.csv")
 
-# Fixed common horizontal axis from LEG1 A->B measured horizontal vector.
-l1=next(r for r in legs if I(r,"leg")==1)
-dx1=F(l1,"dx_m"); dy1=F(l1,"dy_m")
-nn=math.hypot(dx1,dy1)
-ux,uy=dx1/nn,dy1/nn
+# Fixed physical A->B axis. Do not assume LEG1 is A->B: B-first runs reverse the order.
+ab=[r for r in legs if r["direction"]=="A->B"]
+if not ab:
+    raise SystemExit("no A->B leg found")
+# Average unit direction across all A->B legs to reduce dependence on one endpoint.
+uv=[]
+for q in ab:
+    dx,dy=F(q,"dx_m"),F(q,"dy_m")
+    n=math.hypot(dx,dy)
+    if n>1e-9:
+        uv.append((dx/n,dy/n))
+ux=sum(v[0] for v in uv)/len(uv); uy=sum(v[1] for v in uv)/len(uv)
+nn=math.hypot(ux,uy); ux,uy=ux/nn,uy/nn
 
 print("================ V25 Z-COUPLING SHAPE ================")
 print("run:",root)

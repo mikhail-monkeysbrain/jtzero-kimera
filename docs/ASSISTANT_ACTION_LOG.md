@@ -484,3 +484,20 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Коммиты:** `c575329` — auto-detect в C++; `3f250a1` — runner default=auto.
 
 **Статус:** причинных данных P11 не добавлено; исправлена ещё одна ошибка logger boundary. Физический A/B test всё ещё не начат.
+
+
+## 2026-09-07 — повторный compile regression из-за escaped newlines
+
+**Наблюдение пользователя:** после auto-detect правки visual logger снова не собрался. Ошибки компилятора показали literal `\\n` внутри `#include` и после `namespace fs = std::filesystem;`.
+
+**Корень ошибки:** моя предыдущая автоматическая текстовая вставка повторно сериализовала переводы строк как буквальные escape-последовательности. Это повтор уже зафиксированного класса ошибки и, следовательно, нарушение введённого правила «перед действием проверять, не повторяется ли ошибка».
+
+**Исправление процесса:** файл `tools/p11_visual_orientation_ab_gui.cpp` переписан целиком, без replace-патчей с escaped newline. После commit файл был повторно прочитан из GitHub и отдельно проверен на наличие literal `\\n#include` и `std::filesystem;\\n`; проверка отрицательная.
+
+**Исправление кода:** сохранены auto-detect OV9281 через V4L2 QUERYCAP, явные 640x480 MJPG/FPS=100, диагностика первого кадра и полностью русский GUI.
+
+**Commit:** `83b01e0` — `fix: rewrite P11 visual logger cleanly without escaped newlines`.
+
+**Самокритика:** это была повторная ошибка реализации, не новый P11 результат. Причинных данных по P11 не добавлено. В дальнейшем для C++ source после автоматических изменений обязательна read-back verification итогового файла до сообщения пользователю.
+
+**Статус:** compile source исправлен и read-back проверен; физический A/B visual test всё ещё не начат.

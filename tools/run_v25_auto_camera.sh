@@ -54,7 +54,7 @@ v4l2-ctl -d "$CAMERA" --all 2>/dev/null | \
 
 if [ ! -x "$BIN" ]; then
   echo "[AUTO-CAM] V25 binary missing, rebuilding..."
-  "$ROOT/tools/build_v25.sh" "$BIN"
+  bash "$ROOT/tools/build_v25.sh" "$BIN"
 fi
 
 export JTZERO_STAGED_ZUPT="${JTZERO_STAGED_ZUPT:-1}"

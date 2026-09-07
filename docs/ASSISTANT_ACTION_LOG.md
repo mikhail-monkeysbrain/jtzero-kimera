@@ -1470,3 +1470,25 @@ It:
 Interpretation must be based on the nearest raw-matched cross-run pairs, not on direction means alone.
 
 **Статус:** ПРОДВИНУЛИСЬ — новый physical run не потребовался; следующий discriminator теперь использует существующий архив и independent raw-input matching вместо circular backend speed.
+
+
+## 2026-09-07 — raw-profile matcher result: residual direction effect survives, but pair reuse required correction
+
+User ran `analyze_v25_raw_profile_crossrun_match.py` on three archived V25 runs (12 legs).
+
+**Observed nearest opposite-direction pairs:** the best raw-input match had score 0.096 and compared CLEAN L3 A->B scale 1.0294 with BASELINE L2 B->A scale 1.1155, giving canonical B->A minus A->B = +0.0861. Among the first six ranked pairs (score <=0.140), canonical B->A minus A->B deltas were approximately +0.086, -0.046, +0.063, +0.022, +0.089, +0.107.
+
+**Interpretation:** raw matching does not make the scale asymmetry disappear. Most of the very best matches retain a higher B->A scale, so pure aggregate motion-profile confounding is weakened. However, the effect is not a constant direction-only bias: at least one good matched pair has the opposite sign, and the magnitude varies widely.
+
+**Methodological correction:** the first version printed `scale_delta = second-first`, so its sign depended on display order. More importantly, the ranked list reused the same physical legs in multiple pairs, so counts such as “5 of 6” are not independent evidence and must not be treated statistically.
+
+**Action:** updated `tools/analyze_v25_raw_profile_crossrun_match.py` to:
+- print canonical `BA-AB` for opposite-direction pairs;
+- add a global minimum-cost one-to-one cross-run matching section, forbidding same-run pairs and leg reuse;
+- explicitly state that one-to-one matching removes leg reuse but does not make legs from one physical run statistically independent.
+
+**Commit:** `c74af5a` — direction-safe one-to-one V25 raw-profile matching.
+
+**Next action:** rerun the same command and use the new `GLOBAL ONE-TO-ONE OPPOSITE-DIRECTION MATCH` section. No new physical run and no parameter change.
+
+**Статус:** ПРОДВИНУЛИСЬ — current archive already weakens a pure motion-profile-only explanation, but the first ranking had pseudoreplication; the corrected discriminator is required before increasing confidence in a residual direction-dependent estimator/visual effect.

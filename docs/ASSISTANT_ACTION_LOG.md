@@ -1696,3 +1696,54 @@ No new analyzer is required yet.
 **Next commands:** run frontend-quality crossrun on both directories, then normalized frontend pose separately on each directory.
 
 **Статус:** ПРОДВИНУЛИСЬ — reused existing non-circular frontend diagnostics instead of adding redundant code or collecting new physical data.
+
+
+## 2026-09-07 — fixed -90° frontend diagnostics weaken simple visual-front-end explanation
+
+User ran the existing frontend diagnostics on the two runs recorded at stand/drone yaw ≈ -90°:
+- 20260907_224347_v25_BASELINE_ARW_003_EXACT (A-first)
+- 20260907_224543_v25_BASELINE_ARW_003_EXACT_B_FIRST (B-first)
+
+### Frontend quality
+A->B across both runs:
+- mean scale ≈ 0.9914
+- VALID ≈ 53.2%
+- inlier ≈ 0.418
+- tracked ≈ 240.1
+- weak<0.40 ≈ 55.4%
+- strong>=0.70 ≈ 25.4%
+
+B->A across both runs:
+- mean scale ≈ 1.0658
+- VALID ≈ 47.7%
+- inlier ≈ 0.405
+- tracked ≈ 249.1
+- weak<0.40 ≈ 56.3%
+- strong>=0.70 ≈ 20.6%
+
+Interpretation: B->A is somewhat worse in VALID/inlier/strong fraction, but tracking is not systematically degraded and the differences are modest relative to the large run/order scale changes. This does not support a simple “frontend quality is much worse in the bad direction” explanation.
+
+### Normalized monocular frontend direction
+A-first run:
+- all four legs have forward/norm median ≈ +0.998..+1.000;
+- vertical/norm median ≈ +0.003..+0.014;
+- visual elevation ≈ +0.15..+0.78°.
+
+B-first run:
+- forward/norm median ≈ +0.996..+0.999;
+- vertical/norm median ≈ -0.004..+0.029;
+- visual elevation ≈ -0.22..+1.67°;
+- usable counts remain nonzero in all legs, though lower on some legs.
+
+The normalized mono translation direction remains overwhelmingly along the commanded horizontal axis in both physical directions and does not reproduce the backend Z sign flip or the full horizontal scale run-order shift.
+
+### Consequence
+The current evidence weakens a pure 5-point frontend geometry/quality cause for the large scale asymmetry. The next suspect moves downstream: visual-inertial/backend initialization/state coupling, including how monocular directional measurements are fused with PIM/attitude/bias state.
+
+Do not interpret the mild B->A frontend quality degradation as causal proof; the same-direction run-to-run scale shifts are much larger than the frontend-quality shifts.
+
+**Physical test yaw:** none — analysis only on already recorded -90° datasets.
+
+**Next action:** inspect whether the A-first vs B-first scale shift appears in backend/PIM state before or at the first accepted visual updates, reusing existing V25 state-chain / prediction-optimizer diagnostics before adding new code.
+
+**Статус:** ПРОДВИНУЛИСЬ — simple frontend-direction/quality failure is weakened; focus moves to visual-inertial/backend state coupling.

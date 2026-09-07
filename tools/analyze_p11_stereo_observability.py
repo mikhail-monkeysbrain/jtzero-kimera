@@ -130,10 +130,14 @@ def analyze_pair(left_path,right_path,seed):
         if m.distance < 0.72*n.distance:
             p = k1[m.queryIdx].pt
             q = k2[m.trainIdx].pt
-            dy = abs(p[1]-q[1])
-            disp = p[0]-q[0]
-            if dy <= EPI_Y_MAX_PX and MIN_DISP_PX <= disp <= MAX_DISP_PX:
-                good.append((m,p,q,dy,disp))
+            if horizontal_baseline:
+                epi = abs(p[1]-q[1])
+                disp = p[0]-q[0]
+            else:
+                epi = abs(p[0]-q[0])
+                disp = p[1]-q[1]
+            if epi <= EPI_MAX_PX and MIN_DISP_PX <= disp <= MAX_DISP_PX:
+                good.append((m,p,q,epi,disp))
 
     if len(good)<6:
         return {
@@ -226,7 +230,7 @@ for st in ["A1","B1","A2","B2","A3","B3","A4"]:
     p90=[x["res"]["plane"]["res_p90"] for x in ok]
 
     print(f"  matches median/p10={statistics.median(matches):.0f}/{np.percentile(matches,10):.0f}")
-    print(f"  epipolar |dy| median-of-pairs={statistics.median(epi):.3f} px")
+    print(f"  epipolar residual median-of-pairs={statistics.median(epi):.3f} px")
     print(f"  depth median-of-pairs={statistics.median(depth):.3f} m")
     print(f"  plane inliers median={statistics.median(pin):.0f}")
     print(f"  plane inlier ratio median/p10={statistics.median(pratio):.3f}/{np.percentile(pratio,10):.3f}")

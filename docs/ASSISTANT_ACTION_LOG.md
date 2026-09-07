@@ -847,3 +847,16 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Следующий шаг:** НЕ новый физический прогон и НЕ ещё один estimator. Сначала visual overlay validation. Только если F1/F2 действительно лежат на двух нужных семействах рулетки в A/MOVE/B, разрешён следующий calibrated tracked-plane-normal analyzer.
 
 **Статус:** temporal continuity PASS; physical line identity pending visual confirmation.
+
+
+## 2026-09-07 — visual validation temporal ruler tracker: НЕ подтверждена physical identity
+
+Пользователь предоставил `ruler_temporal_track/contact_sheet.png`. Визуальная проверка показывает, что angular-family continuity PASS нельзя трактовать как tracking одних и тех же физических линий рулетки.
+
+- PRE_STILL_A/MOVE: F1 (жёлтый) включает множество границ сцены/маркеров и не является однозначно одной физической линией рулетки; F2 (зелёный) также захватывает границы квадратных маркеров и отдельные сегменты рулетки.
+- POST_STILL_B: состав поддерживающих сегментов заметно другой; видны сегменты рулетки/фона, но нет доказательства correspondence тех же конкретных физических линий из A.
+- Следовательно значения tracked image delta -5.411°/-4.610° остаются изменением устойчивых orientation families изображения, но НЕ подтверждённым displacement одной и той же физической ruler edge/tick family.
+
+**Самокритика:** название/сообщение analyzer `Tracks the SAME two image-line families` слишком сильное. Фактически он ведёт angular modes, а не feature/segment identity. GATE=PASS означает continuity ориентационных мод, не physical line identity. До причинного/3-D вывода этот PASS недостаточен.
+
+**Следующий методологически корректный шаг:** не использовать текущий angular-family PASS для plane-normal. Нужен feature/patch correspondence по конкретной текстуре/делениям рулетки либо специально размеченная геометрическая мишень. Не повторять rejected plane-normal estimator на этих angular modes.

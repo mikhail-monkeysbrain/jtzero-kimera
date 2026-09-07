@@ -115,6 +115,11 @@ struct FrontendDebugState {
   double mono_body_tx = 0, mono_body_ty = 0, mono_body_tz = 0;
   double mono_body_t_norm = 0;
   double mono_roll_deg = 0, mono_pitch_deg = 0, mono_yaw_deg = 0;
+  bool pim_valid = false;
+  double pim_dt_s = 0;
+  double pim_dpx = 0, pim_dpy = 0, pim_dpz = 0;
+  double pim_dvx = 0, pim_dvy = 0, pim_dvz = 0;
+  double pim_droll_deg = 0, pim_dpitch_deg = 0, pim_dyaw_deg = 0;
 };
 struct MeanState {
   bool valid = false; size_t count = 0;
@@ -291,6 +296,19 @@ class HudPipeline final : public VIO::MonoImuPipeline {
           }
           d.mono_pose_valid = true;
         }
+      }
+      if (out->pim_) {
+        const auto& pim = *out->pim_;
+        const auto dp = pim.deltaPij();
+        const auto dv = pim.deltaVij();
+        const auto drpy = pim.deltaRij().rpy();
+        d.pim_dt_s = pim.deltaTij();
+        d.pim_dpx = dp.x(); d.pim_dpy = dp.y(); d.pim_dpz = dp.z();
+        d.pim_dvx = dv.x(); d.pim_dvy = dv.y(); d.pim_dvz = dv.z();
+        d.pim_droll_deg = drpy.x()*180.0/kPi;
+        d.pim_dpitch_deg = drpy.y()*180.0/kPi;
+        d.pim_dyaw_deg = drpy.z()*180.0/kPi;
+        d.pim_valid = true;
       }
       std::lock_guard<std::mutex> lock(mutex_);
       frontend_states_.push_back(std::move(d));

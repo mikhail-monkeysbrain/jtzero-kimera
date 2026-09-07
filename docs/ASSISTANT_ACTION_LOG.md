@@ -1591,3 +1591,30 @@ Do not assume yaw from prior context, video, bench layout, or test name. If yaw 
 **Current step:** no physical test is requested; analysis continues on already archived -90° runs.
 
 **Статус:** НА МЕСТЕ — protocol constraint added; no new data.
+
+
+## 2026-09-07 — added V25 FC-yaw vs raw-gyro discriminator for -90° runs
+
+**Preflight / repeat check:** existing `analyze_v25_direction_yaw_summary.py` only reports signed FC yaw change/span and gz RMS. It does not integrate raw gyro or test FC yaw continuity, so it cannot classify whether the 34–55° yaw excursions in the late -90° runs represent real rigid angular motion or FC/reference behavior.
+
+**Added:** `tools/analyze_v25_fc_yaw_vs_raw_gyro.py`.
+
+For each leg it reports:
+- unwrapped FC yaw start/end, signed delta, span and path;
+- maximum per-sample FC yaw step and its time interval;
+- raw HIGHRES_IMU gyro bias estimated from endpoint slices;
+- quaternion-integrated net raw gyro rotation vector in FC FRD;
+- signed integrated z gyro, |z| path and total angular path;
+- ratio of |FC dYaw| to net raw gyro rotation.
+
+**Interpretation rule:** tens of degrees of FC yaw without comparable raw gyro angular motion are not compatible with a real rigid yaw of the same magnitude and point toward FC attitude/reference behavior. Comparable, continuous FC yaw and raw gyro support real angular motion.
+
+**Physical test yaw:** none — this is analysis only on already recorded runs. The relevant archived runs were physically recorded at stand/drone yaw ≈ -90°.
+
+**Commit:** `f4176ba` — add V25 FC yaw vs raw gyro diagnostic.
+
+**Next action:** run on:
+- `20260907_224347_v25_BASELINE_ARW_003_EXACT`;
+- `20260907_224543_v25_BASELINE_ARW_003_EXACT_B_FIRST`.
+
+**Статус:** ПРОДВИНУЛИСЬ — new no-rerun discriminator isolates whether the late-run FC yaw excursion is physical or estimator/reference-side.

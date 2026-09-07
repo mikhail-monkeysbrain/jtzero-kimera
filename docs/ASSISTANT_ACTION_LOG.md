@@ -1561,3 +1561,20 @@ User reran the five-run matcher after commit `464ffde`.
 **Next action:** add/run a diagnostic that compares unwrapped FC yaw delta/path/range with integrated raw gyro rotation for the late runs. No new physical run and no Kimera parameter change.
 
 **Статус:** ПРОДВИНУЛИСЬ — wrap bug is fixed; the remaining large yaw is in the recorded data and must be classified before cross-run matching can be trusted.
+
+
+## 2026-09-07 — user correction: late control runs used a different stand yaw geometry
+
+**User correction:** all tests before the external video were performed with the stand/drone at approximately yaw = -45°. In the external side-view video and in the subsequent V25 control runs, the drone/stand was rotated to approximately yaw = -90°.
+
+**Methodological consequence:** the five-run matcher mixed two different physical/visual geometries:
+- early group (122838, 124712, 132115): stand yaw ≈ -45°;
+- late group (224347, 224543): stand yaw ≈ -90°.
+
+Therefore the late two runs are **not direct same-geometry repeats** of the first three. A global cross-run direction/motion match across all five cannot isolate direction bias because camera/body orientation relative to the scene and A<->B path changed by ~45°.
+
+**Important distinction:** a constant ~45° difference in starting yaw does not by itself create a 34–55° within-leg `yaw_span`, because span is invariant to a constant offset. Thus the large late-run yaw excursion remains a separate observed feature that may reflect real yaw motion, FC attitude/reference behavior, or geometry-dependent coupling; it must not be dismissed as merely the initial orientation change.
+
+**Correction to previous plan:** do not use the five-run aggregate BA-AB statistic as evidence. Treat the early -45° and late -90° datasets as two geometry strata. The late pair itself becomes a useful orientation-change discriminator, but only after comparing A-first vs B-first within the same -90° geometry and checking raw gyro/FC yaw consistency.
+
+**Статус:** ПРОДВИНУЛИСЬ — a major confounder was identified from user-provided stand geometry; previous five-run pooled matching is downgraded.

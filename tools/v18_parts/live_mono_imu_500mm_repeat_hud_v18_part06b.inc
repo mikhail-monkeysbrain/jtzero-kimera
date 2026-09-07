@@ -33,9 +33,9 @@
   std::string status,action;
   cv::Scalar status_color(220,220,220);
   if(!warmup.passed){status="VIO WARM-UP — НЕ ДВИГАТЬ";action="СТАРТ ПОКА ЗАБЛОКИРОВАН";status_color=cv::Scalar(0,210,255);}
-  else if(phase==CapturePhase::WAIT_START){status="ГОТОВО К СТАРТУ";action="ПРОБЕЛ / ENTER: СТАРТ";status_color=cv::Scalar(90,220,90);}
+  else if(phase==CapturePhase::WAIT_START){status="ГОТОВО К СТАРТУ";action="НАЖМИТЕ: СТАРТ";status_color=cv::Scalar(90,220,90);}
   else if(phase==CapturePhase::SETTLE_START){status="СТАБИЛИЗАЦИЯ СТАРТА";action="НЕ ДВИГАТЬ";status_color=cv::Scalar(0,210,255);}
-  else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ — ACC GRAVITY OFF";action="ПРОБЕЛ / ENTER: КОНЕЦ";status_color=cv::Scalar(0,210,255);}
+  else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ — ACC GRAVITY OFF";action="НАЖМИТЕ: КОНЕЦ";status_color=cv::Scalar(0,210,255);}
   else {status="СТАБИЛИЗАЦИЯ КОНЦА";action="НЕ ДВИГАТЬ";status_color=cv::Scalar(0,210,255);}
   ru(panel,status,{18,320},15,status_color,cv::QT_FONT_BOLD);
   if(!warmup.passed){

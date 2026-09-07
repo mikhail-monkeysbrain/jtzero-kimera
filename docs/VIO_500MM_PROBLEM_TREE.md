@@ -294,3 +294,23 @@ New observation for the next branch: during stationary backend optimization, acc
 Сопоставить изменение VIO R/P с FC ATTITUDE на каждом leg. Если FC остаётся почти неподвижным, а VIO меняет R/P, ошибка внутренняя для VIO/visual geometry.
 
 Следующий тест — offline forensic без нового физического прогона: `tools/analyze_v25_post_gravity_init.py`.
+
+
+### 2026-09-07 — correction: VIO vs FC attitude comparison needed FRD→FLU sign mapping
+
+The first post-gravity-init forensic analyzer compared VIO FLU Euler deltas directly with raw FC ATTITUDE deltas. That is not a valid like-for-like comparison: under the project's FRD→FLU convention, relative roll keeps its sign while pitch and yaw invert.
+
+Example from the full run:
+- LEG1 VIO dRPY = [-2.034,-1.834,-0.056] deg;
+- FC raw dRPY = [-2.035,+1.762,+0.041] deg;
+- after FRD→FLU sign mapping FC ≈ [-2.035,-1.762,-0.041] deg.
+
+Thus the apparent ~3.6° residual tilt reported by the old analyzer is largely a convention artifact, not evidence that FC stayed fixed while VIO tilted internally.
+
+The analyzer `tools/analyze_v25_post_gravity_init.py` has been corrected to print both raw FC and FC-mapped-to-FLU deltas.
+
+Implication for the hypothesis tree:
+- Hypothesis 2A ("VIO attitude changes while FC is stationary") is NOT supported by the uncorrected output and must not be treated as established.
+- The physical stand/manipulation may really be changing roll/pitch during translation, and VIO appears to follow those changes closely.
+- Hypothesis 1B remains relevant because accelerometer bias grows substantially again during measured legs even after a near-zero gravity-aligned initialization.
+- The remaining directional scale bias (A→B ≈ correct, B→A ≈ +6%) must now be analyzed with corrected attitude comparison before prioritizing camera extrinsics.

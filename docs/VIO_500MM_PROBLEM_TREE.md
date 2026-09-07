@@ -257,3 +257,40 @@ Conclusion: Hypothesis 1A is causally confirmed. Kimera's default gravity-alignm
 Important: this does NOT yet prove the 500 mm measurement problem is solved. No A→B→A motion was executed in this run; the harness therefore ends with `PIPELINE RESULT: FAIL / MEASUREMENT RESULT: FAIL` because the requested closure sequence was incomplete, not because the stationary initialization test failed.
 
 New observation for the next branch: during stationary backend optimization, accelerometer bias continues to move after initialization (especially Z, and smaller XY changes), while RPY remains close to the gravity-derived attitude. Next causal test must separate the now-fixed initialization error from subsequent backend bias evolution and then run the same 500 mm A→B→A test with exact-gravity initialization enabled.
+
+
+### 2026-09-07 — полный A→B→A×2 после exact-gravity init
+
+Результат причинного теста после исправления Hypothesis 1A:
+
+- LEG1 A→B = 491.62 мм, ошибка -8.38 мм, dz +18.54 мм;
+- LEG2 B→A = 528.52 мм, ошибка +28.52 мм, dz -35.95 мм;
+- LEG3 A→B = 501.41 мм, ошибка +1.41 мм, dz +27.64 мм;
+- LEG4 B→A = 531.71 мм, ошибка +31.71 мм, dz -6.97 мм;
+- A→B mean = 496.52 мм;
+- B→A mean = 530.12 мм;
+- overall mean = 513.32 мм;
+- reversal angles = 178.56° и 179.80°;
+- pipeline = PASS;
+- один loop stall 217.915 ms, но run не был помечен pipeline-invalid.
+
+Сравнение с предыдущим характерным V25:
+- раньше A→B мог быть 448.85 мм с сильным развалом B→A;
+- после exact-gravity init оба A→B близки к 500 мм, а B→A больше не разваливается и возвращается почти в противоположном направлении.
+
+**Вывод:** Hypothesis 1A была реальной крупной первопричиной и её исправление резко улучшило метрическую стабильность и устранило катастрофический reversal divergence.
+
+Однако проблема НЕ закрыта:
+- сохраняется устойчивый directional bias: B→A примерно +30 мм (+6%);
+- сохраняется паразитный dz;
+- VIO roll/pitch заметно меняются во время чистой трансляции.
+
+Это создаёт следующую развилку:
+
+#### Подгипотеза 1B.1 — после правильного seed backend снова создаёт значимый accelerometer bias
+Проверить BA start/end по каждому leg после exact-gravity init.
+
+#### Подгипотеза 2A — camera/body или visual geometry создаёт ложное изменение attitude при трансляции
+Сопоставить изменение VIO R/P с FC ATTITUDE на каждом leg. Если FC остаётся почти неподвижным, а VIO меняет R/P, ошибка внутренняя для VIO/visual geometry.
+
+Следующий тест — offline forensic без нового физического прогона: `tools/analyze_v25_post_gravity_init.py`.

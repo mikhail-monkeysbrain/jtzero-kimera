@@ -1327,3 +1327,8 @@ User ran `tools/analyze_v23_vio_vs_fc_attitude.py` on all three canonical V23 ru
 **Important convention note:** component signs are not directly comparable because VIO and FC logged pitch use different conventions; tilt magnitude and temporal/directional reversal are the robust comparison here.
 
 **Next discriminator:** quantify whether the measured raw accelerometer vector during each leg is consistent with the FC-reported roll/pitch change after the already source-verified FRD→FLU mapping. Do not infer physical tilt from FC ATTITUDE alone. Use stationary windows around endpoints where linear acceleration is minimal, then compare gravity-vector tilt from raw HIGHRES_IMU against FC attitude tilt. If gravity vector changes by ~2.3–2.6 deg with matching direction, the stand/body actually tilts (or the IMU package rotates). If raw gravity remains nearly fixed while FC attitude changes, investigate FC estimator attitude response / accelerometer dynamics instead.
+
+
+## 2026-09-07 — stationary raw-gravity vs FC-attitude discriminator
+
+Preflight search found no existing direct endpoint raw-accelerometer-vector vs FC ATTITUDE comparator. Added `tools/analyze_v23_raw_gravity_vs_fc_attitude.py`. It uses the central 50% of backend-labelled SETTLE_START/SETTLE_END, compares 3-D raw accel-vector angular change against FC relative roll/pitch tilt, and avoids component-sign assumptions because the vector angle is invariant under the verified FRD→FLU sign transform. No new run required. This can separate an FC-estimator-only excursion from a real/equivalent static IMU-vector rotation, but cannot distinguish whole-rig tilt from local FC/IMU flex.

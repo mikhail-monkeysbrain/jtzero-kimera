@@ -59,7 +59,7 @@
 
 ## Следующие наиболее ценные действия
 
-1. **Проверить rigid rotation по raw gyro.** Raw stationary gravity-vector tilt уже совпал с FC tilt на всех 6 legs: A->B RAW median 2.3329° vs FC 2.4188°; B->A RAW 2.3103° vs FC 2.2162°. Следующий discriminator — `tools/analyze_v23_gyro_vs_gravity_rotation.py`: интегрировать raw HIGHRES_IMU gyro между endpoint plateaus и проверить, предсказывает ли он тот же ~2.3° gravity-vector rotation. Это отделит реальное вращение IMU/body от accel bias/misalignment-like vector shift.
+1. **Разрешить противоречие IMU rotation ↔ external video.** Gyro уже замкнул raw gravity shift на всех 6 legs: A->B RAW 2.3329° vs gyro-pred 2.4589°, B->A RAW 2.3103° vs gyro-pred 2.2839°, endpoint error ~0.07–0.25°. Значит IMU пакет реально вращается. Но single-run external video не увидел ~2.3° у кромки платформы. Следующий шаг — вывести signed gyro rotation-vector components и проверить, наблюдалась ли соответствующая ось внешней камерой; если да, приоритет получает локальный flex FC/IMU относительно платформы.
 
 2. **Повторить дешёвый raw A/B position test** ещё минимум 1–2 раза без изменения протокола, чтобы поднять независимую выборку выше n=2.
 

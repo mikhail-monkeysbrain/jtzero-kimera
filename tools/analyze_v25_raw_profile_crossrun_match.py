@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import bisect
 import csv
+import itertools
 import math
 import sys
 from pathlib import Path
@@ -188,6 +189,14 @@ def tag(r):
     return f'{r["run"]}:L{r["leg"]}:{r["direction"]}'
 
 
+def canonical_ba_minus_ab(a, b):
+    if a["direction"] == b["direction"]:
+        return float("nan")
+    ba = a if a["direction"] == "B->A" else b
+    ab = a if a["direction"] == "A->B" else b
+    return ba["scale"] - ab["scale"]
+
+
 if len(sys.argv) < 3:
     raise SystemExit(
         "usage: analyze_v25_raw_profile_crossrun_match.py <run_dir1> <run_dir2> [run_dir3 ...]"
@@ -230,9 +239,57 @@ print("\n================ NEAREST OPPOSITE-DIRECTION PAIRS ================")
 for rank, (d, a, b, parts) in enumerate(sorted(opp, key=lambda x: x[0])[:12], 1):
     print(
         f'#{rank:02d} score={d:.3f}  {tag(a)}  <->  {tag(b)}  '
-        f'scale_delta={b["scale"]-a["scale"]:+.4f}'
+        f'BA-AB={canonical_ba_minus_ab(a,b):+.4f}'
     )
     print("     " + " ".join(f"{k}={v:.3f}" for k, v in parts))
+
+print("\n================ GLOBAL ONE-TO-ONE OPPOSITE-DIRECTION MATCH ================")
+ab = [r for r in rows if r["direction"] == "A->B"]
+ba = [r for r in rows if r["direction"] == "B->A"]
+if len(ab) == len(ba) and ab:
+    cost = {}
+    detail = {}
+    for i, a in enumerate(ab):
+        for j, b in enumerate(ba):
+            if a["run"] == b["run"]:
+                cost[(i, j)] = float("inf")
+                detail[(i, j)] = None
+            else:
+                d, parts = pair_distance(a, b)
+                cost[(i, j)] = d
+                detail[(i, j)] = parts
+
+    best = None
+    for perm in itertools.permutations(range(len(ba))):
+        vals = [cost[(i, perm[i])] for i in range(len(ab))]
+        if any(not math.isfinite(v) for v in vals):
+            continue
+        total = sum(vals)
+        if best is None or total < best[0]:
+            best = (total, perm, vals)
+
+    if best is None:
+        print("No complete cross-run one-to-one matching exists.")
+    else:
+        total, perm, vals = best
+        deltas = []
+        for rank, (i, j, d) in enumerate(zip(range(len(ab)), perm, vals), 1):
+            a, b = ab[i], ba[j]
+            delta = b["scale"] - a["scale"]
+            deltas.append(delta)
+            print(
+                f'#{rank:02d} score={d:.3f}  {tag(a)}  <->  {tag(b)}  BA-AB={delta:+.4f}'
+            )
+        sd = sorted(deltas)
+        med = (sd[len(sd)//2] if len(sd)%2 else 0.5*(sd[len(sd)//2-1]+sd[len(sd)//2]))
+        print(
+            f"one-to-one mean score={total/len(ab):.3f} "
+            f"mean BA-AB={mean(deltas):+.4f} median BA-AB={med:+.4f} "
+            f"positive={sum(x>0 for x in deltas)}/{len(deltas)}"
+        )
+        print("NOTE: one-to-one removes leg reuse but does NOT make legs from the same physical run statistically independent.")
+else:
+    print(f"Cannot form balanced one-to-one match: A->B={len(ab)} B->A={len(ba)}")
 
 print("\n================ NEAREST SAME-DIRECTION PAIRS ================")
 for rank, (d, a, b, parts) in enumerate(sorted(same, key=lambda x: x[0])[:8], 1):

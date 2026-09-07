@@ -1182,3 +1182,12 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Следствие:** до любых выводов о stereo overlap/extrinsics нужно сначала привести экспозицию OV9281 в рабочий диапазон. Текущий fixed-target run не запускать и ПРОБЕЛ не нажимать.
 
 **Следующий шаг:** определить реальные V4L2 exposure/gain controls и их текущие значения на `/dev/video8`, затем зафиксировать ручную экспозицию в stability GUI. Не угадывать единицы/диапазоны exposure control.
+
+
+## 2026-09-07 — OV9281 controls confirmed; next step is relative exposure reduction, not guessed units
+
+**V4L2 facts from user:** `/dev/video8` OV9281 is already in `auto_exposure=1 (Manual Mode)`, `exposure_time_absolute=50`, `gain=0`, dynamic framerate disabled. Exposure control range is 1..5000; gain range 0..100. Therefore overexposure is not caused by auto-exposure or gain amplification.
+
+**Methodological note:** units of `exposure_time_absolute` are not inferred here. We only use relative changes within the driver-reported range. First diagnostic change is 50 -> 10 with gain remaining 0; no other controls are changed.
+
+**Next action:** while keeping rig and target geometry unchanged, set manual exposure to 10 and visually re-check ChArUco shared-corner count. Do not start the 4-series test until both cameras see >=8 shared corners. If 10 is still overexposed, step to 5; if too dark, step to 20. This is an exposure setup step, not a new physical P11 experiment.

@@ -1337,3 +1337,10 @@ Preflight search found no existing direct endpoint raw-accelerometer-vector vs F
 ## 2026-09-07 — fix raw-gravity/FC attitude timestamp alignment
 
 First execution failed with `KeyError: mapped_ns` because `jtzero_500mm_v23_attitude.csv` is timestamped by `recv_ns`, not `mapped_ns`. This was an implementation error in the new analyzer. Fixed it by reusing the already validated alignment convention from `analyze_v23_vio_vs_fc_attitude.py`: backend `callback_wall_ns` -> nearest FC `recv_ns`. Raw HIGHRES_IMU remains aligned through `mapped_ns` to backend `timestamp_ns`. No physical data issue and no rerun is needed.
+
+
+## 2026-09-07 — raw gravity≈FC resolved; next discriminator is gyro-integrated rigid rotation
+
+V23 endpoint test result from user: all six legs show raw stationary accelerometer-vector angular change ≈2.20–2.36°, matching FC relative tilt ≈2.18–2.48° with RAW/FC ratios 0.91–1.09. Direction medians: A->B RAW 2.3329° vs FC 2.4188°; B->A RAW 2.3103° vs FC 2.2162°. This rules against an FC-attitude-only hallucination: the static raw acceleration vector itself rotates by the same amount.
+
+Critical remaining ambiguity: a static accelerometer vector rotation can still come from real rigid-body/IMU rotation OR from an accelerometer bias/misalignment/local sensor effect. Added `tools/analyze_v23_gyro_vs_gravity_rotation.py` to integrate raw HIGHRES_IMU gyro between stationary endpoint windows, with bias estimated from both endpoints, and predict how much the gravity vector should rotate if the IMU physically rotated. No new run required.

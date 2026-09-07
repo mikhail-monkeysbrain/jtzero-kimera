@@ -57,9 +57,15 @@ matcher = cv2.BFMatcher(norm_type, crossCheck=False)
 print("feature matcher:", detector_name)
 
 RANSAC_PLANE_THRESH_M = 0.008
-EPI_Y_MAX_PX = 2.5
+EPI_MAX_PX = 2.5
 MIN_DISP_PX = 8.0
 MAX_DISP_PX = 620.0
+
+# Определяем ось rectified baseline непосредственно из P2.
+# Для текущей калибровки baseline вертикальный: P2[1,3] != 0.
+horizontal_baseline = abs(float(P2[0,3])) >= abs(float(P2[1,3]))
+stereo_axis = "HORIZONTAL" if horizontal_baseline else "VERTICAL"
+print("detected rectified stereo axis:", stereo_axis)
 
 def fit_plane_ransac(pts, seed):
     if len(pts) < 6:

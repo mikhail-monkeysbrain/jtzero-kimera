@@ -248,3 +248,18 @@ User screenshot showed three layout defects in the new P11 multi-stream GUI:
 Commit: `acd1c62` — `fix: prevent P11 GUI text overlap`.
 
 Status: UI-only correction; collected IMU data and A/B methodology are unchanged.
+
+
+## 2026-09-07 — офлайн-разложение A/B IMU-вектора
+
+**Pre-check на повтор выполнен.** Проверены этот журнал и существующий `tools/analyze_p11_imu_path_ab.py`.
+
+**Что уже делалось:** `analyze_p11_imu_path_ab.py` сравнивает по каждому MAVLink IMU-потоку средние `|a|` и `Z` на A/B. Multi-stream run `20260907_162057_P11_IMU_PATH_AB_GUI` уже показал A/B split в RAW_IMU, SCALED_IMU, SCALED_IMU2 и HIGHRES_IMU.
+
+**Отличие нового действия:** новый анализ не повторяет доказательство split и не требует нового физического прогона. Он использует тот же архив и раскладывает B-A как полный вектор `[ax,ay,az]`: угол A/B, компоненту вдоль среднего A-вектора (gravity/common-mode) и перпендикулярную компоненту (orientation/projection). Это необходимо из-за известного наклона поверхности: анализ одной Z-компоненты недостаточен.
+
+**Добавлен файл:** `tools/analyze_p11_imu_vector_ab.py`.
+
+**Commit:** `93020f4` — `diag: decompose P11 A/B IMU vector shift`.
+
+**Статус после действия:** ПРОДВИНУЛИСЬ — подготовлена более строгая офлайн-проверка уже записанного dataset; новый физический тест не назначен.

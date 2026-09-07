@@ -67,9 +67,9 @@ int main(){
 
   const int SW=1280,SH=720; cv::Mat im(SH,SW,CV_8UC3,cv::Scalar(20,22,26));
   panel(im,16,14,SW-32,82,cv::Scalar(31,35,42),cv::Scalar(65,70,80));
-  txt(im,"P11 — сравнение MAVLink-потоков IMU",34,50,28);
-  txt(im,"Проверяем, на каком уровне появляется разница A/B",34,78,18,cv::Scalar(180,185,195));
-  for(int k=0;k<STAGES;k++){int x=610+k*86;cv::Scalar fill=(k<s)?cv::Scalar(55,115,70):(k==s?cv::Scalar(60,95,170):cv::Scalar(48,52,60));panel(im,x,31,68,38,fill,cv::Scalar(90,100,115));txt(im,L[k],x+18,58,21);}
+  txt(im,"P11 — IMU A/B: сравнение потоков",34,46,25);
+  txt(im,"Локализация разницы A/B по MAVLink-потокам",34,74,16,cv::Scalar(180,185,195));
+  for(int k=0;k<STAGES;k++){int x=665+k*82;cv::Scalar fill=(k<s)?cv::Scalar(55,115,70):(k==s?cv::Scalar(60,95,170):cv::Scalar(48,52,60));panel(im,x,34,62,34,fill,cv::Scalar(90,100,115));txt(im,L[k],x+15,58,18);}
 
   panel(im,24,116,800,392,cv::Scalar(27,30,36),cv::Scalar(75,82,95));
   txt(im,"СЕЙЧАС",48,154,20,cv::Scalar(160,170,185));txt(im,std::string("ТОЧКА ")+P[s],48,214,52,cv::Scalar(250,250,250),2);
@@ -79,9 +79,9 @@ int main(){
   panel(im,24,528,800,104,cv::Scalar(31,35,42),cv::Scalar(65,70,80));txt(im,"ДАЛЬШЕ",48,560,18,cv::Scalar(160,170,185));if(s<STAGES-1)txt(im,std::string("После записи: ")+P[s]+" → "+P[s+1],48,598,26,cv::Scalar(235,235,240),2);else txt(im,"После этой записи тест завершится.",48,598,26,cv::Scalar(235,235,240),2);
 
   panel(im,846,116,410,516,cv::Scalar(27,30,36),cv::Scalar(75,82,95));txt(im,"ПОТОКИ IMU",870,154,22,cv::Scalar(190,200,215));
-  txt(im,"RAW_IMU:      "+std::to_string(cRaw),870,208,20);txt(im,"SCALED_IMU:   "+std::to_string(cS1),870,246,20);txt(im,"SCALED_IMU2:  "+std::to_string(cS2),870,284,20);txt(im,"SCALED_IMU3:  "+std::to_string(cS3),870,322,20);txt(im,"HIGHRES_IMU:  "+std::to_string(cHi),870,360,20);
-  std::ostringstream nn,tt;nn<<std::fixed<<std::setprecision(4)<<"Последний |a|: "<<lastNorm<<" м/с²";tt<<std::fixed<<std::setprecision(2)<<"Температура: "<<lastTemp<<" °C";txt(im,nn.str(),870,420,22,cv::Scalar(120,220,250),2);txt(im,tt.str(),870,458,20,cv::Scalar(195,200,210));
-  txt(im,"Это НЕ прямой ADC-тест.",870,520,19,cv::Scalar(185,190,200),2);txt(im,"Сравниваются MAVLink-потоки",870,552,19,cv::Scalar(165,170,180));txt(im,"и доступные IMU-инстансы.",870,584,19,cv::Scalar(165,170,180));
+  txt(im,"RAW_IMU:     "+std::to_string(cRaw),870,208,18);txt(im,"SCALED_IMU:  "+std::to_string(cS1),870,246,18);txt(im,"SCALED_IMU2: "+std::to_string(cS2),870,284,18);txt(im,"SCALED_IMU3: "+std::to_string(cS3),870,322,18);txt(im,"HIGHRES_IMU: "+std::to_string(cHi),870,360,18);
+  std::ostringstream nn,tt;nn<<std::fixed<<std::setprecision(4)<<"|a|: "<<lastNorm<<" м/с²";tt<<std::fixed<<std::setprecision(2)<<"T IMU: "<<lastTemp<<" °C";txt(im,nn.str(),870,420,20,cv::Scalar(120,220,250),2);txt(im,tt.str(),870,458,18,cv::Scalar(195,200,210));
+  txt(im,"НЕ прямой ADC-тест.",870,516,17,cv::Scalar(185,190,200),2);txt(im,"Сравниваем MAVLink-потоки",870,548,17,cv::Scalar(165,170,180));txt(im,"и IMU-инстансы.",870,580,17,cv::Scalar(165,170,180));
 
   panel(im,24,650,1232,52,cv::Scalar(31,35,42),cv::Scalar(65,70,80));txt(im,"ПРОБЕЛ — запись",48,684,20,cv::Scalar(120,235,160),2);txt(im,"ESC — выход",340,684,20,cv::Scalar(120,160,245),2);txt(im,"A1 → B1 → A2 → B2 → A3 → B3 → A4",620,684,18,cv::Scalar(175,180,190));
   cv::imshow(win,im); int k=cv::waitKey(1)&255; if(k==27){e<<ns()<<",ABORT,"<<L[s]<<','<<P[s]<<"\n";break;} if(k==' '&&!rec){rec=true;t0=ns();e<<t0<<",PLATEAU_START,"<<L[s]<<','<<P[s]<<"\n";e.flush();}

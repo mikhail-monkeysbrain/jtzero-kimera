@@ -1344,3 +1344,12 @@ First execution failed with `KeyError: mapped_ns` because `jtzero_500mm_v23_atti
 V23 endpoint test result from user: all six legs show raw stationary accelerometer-vector angular change ≈2.20–2.36°, matching FC relative tilt ≈2.18–2.48° with RAW/FC ratios 0.91–1.09. Direction medians: A->B RAW 2.3329° vs FC 2.4188°; B->A RAW 2.3103° vs FC 2.2162°. This rules against an FC-attitude-only hallucination: the static raw acceleration vector itself rotates by the same amount.
 
 Critical remaining ambiguity: a static accelerometer vector rotation can still come from real rigid-body/IMU rotation OR from an accelerometer bias/misalignment/local sensor effect. Added `tools/analyze_v23_gyro_vs_gravity_rotation.py` to integrate raw HIGHRES_IMU gyro between stationary endpoint windows, with bias estimated from both endpoints, and predict how much the gravity vector should rotate if the IMU physically rotated. No new run required.
+
+
+## 2026-09-07 — gyro closes raw gravity rotation on all six V23 legs
+
+User ran `analyze_v23_gyro_vs_gravity_rotation.py` on the three canonical V23 runs. Every leg shows gyro-integrated rigid rotation consistent with the stationary raw accelerometer-vector change. A->B median: RAW 2.3329°, gyro-predicted 2.4589°, endpoint gravity error 0.1848°, gyro/raw 1.079. B->A median: RAW 2.3103°, gyro-predicted 2.2839°, endpoint gravity error 0.1341°, gyro/raw 0.989. Per-leg endpoint prediction error is only 0.0666..0.2504°.
+
+**Consequence:** the A/B vector shift is not well explained by an accelerometer-only bias/misalignment change. A real angular rotation of the IMU package/body occurred during the legs, because the independent gyro history predicts essentially the same endpoint gravity-vector rotation.
+
+**Critical remaining contradiction:** the single external world-fixed video projective test did not show ~2.3° rotation of the tracked upper-platform edge. Therefore we must not jump to “whole drone tilts 2.3°”. The current evidence is compatible with (a) whole-rig rotation about an axis poorly observed by that external edge/camera geometry, or (b) local mechanical rotation/flex of FC/IMU relative to the externally tracked platform. Next step is to expose the signed gyro rotation-vector components and compare them to what the external camera geometry was actually sensitive to.

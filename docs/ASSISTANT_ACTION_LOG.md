@@ -1791,3 +1791,30 @@ For each transition Lk->Lk+1 it reports:
 **Next action:** run on 224347 and 224543. Do not design a reset-between-legs physical test until this result shows whether state inheritance is actually present.
 
 **Статус:** ПРОДВИНУЛИСЬ — archive-compatible inheritance discriminator added; no new physical test.
+
+
+## 2026-09-07 — inter-leg inheritance confirmed enough to justify reset-between-legs causal test
+
+User ran `analyze_v25_interleg_state_inheritance.py` on the two -90° archived runs.
+
+**Observed:** five of six leg transitions preserve settled backend state closely:
+- |dBA| ≈ 0.003..0.013 m/s²;
+- |dBG| ≈ 9e-6..9e-5 rad/s;
+- |dRP| ≈ 0.005..0.135°;
+- residual velocity differences are generally only a few mm/s.
+
+The main exception is 224543 L3->L4:
+- |dBA| = 0.32049 m/s²;
+- |dV| = 15.5 mm/s;
+- |dRP| = 0.005°.
+This shows that stationary settling can occasionally re-estimate BA strongly, but it does not normally reset the state between legs.
+
+**Interpretation:** continuous four-leg V25 sessions normally carry estimator state from one leg into the next. Therefore run/order effects can be caused by inherited bias/velocity/state and cannot be treated as independent legs.
+
+The reported Pearson coefficients are diagnostic only (n=6 transitions, non-independent within-run) and must not be promoted to causal statistics. In particular, the high next_vy correlation is not enough by itself to identify a mechanism.
+
+**Decision:** a reset-between-legs physical discriminator is now justified. The test should restart/reinitialize the estimator between every 500-mm leg while preserving the same physical geometry and operator protocol. This isolates state inheritance from direction and motion profile.
+
+**Mandatory physical-test yaw:** target yaw must be stated explicitly before execution. For this discriminator use stand/drone yaw ≈ -90° to remain in the same geometry stratum as 224347/224543.
+
+**Статус:** ПРОДВИНУЛИСЬ — inter-leg state inheritance is real and common enough to test causally.

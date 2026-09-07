@@ -72,14 +72,17 @@
     {
       std::ofstream ff("/home/vio/jtzero_500mm_v25_frontend.csv",std::ios::trunc);
       if(ff){
-        ff<<"timestamp_ns,callback_wall_ns,frame_id,is_keyframe,detected_features,tracked_features,mono_inliers,mono_putatives,mono_inlier_ratio,mono_ransac_iters,feature_detection_time_s,feature_tracking_time_s,mono_ransac_time_s,mono_status\n";
+        ff<<"timestamp_ns,callback_wall_ns,frame_id,is_keyframe,detected_features,tracked_features,mono_inliers,mono_putatives,mono_inlier_ratio,mono_ransac_iters,feature_detection_time_s,feature_tracking_time_s,mono_ransac_time_s,mono_status,mono_pose_valid,mono_tx,mono_ty,mono_tz,mono_t_norm,mono_body_tx,mono_body_ty,mono_body_tz,mono_body_t_norm,mono_roll_deg,mono_pitch_deg,mono_yaw_deg\n";
         ff<<std::fixed<<std::setprecision(9);
         for(const auto& d:frontend_states){
           const double ratio=d.mono_putatives?static_cast<double>(d.mono_inliers)/static_cast<double>(d.mono_putatives):0.0;
           ff<<d.timestamp_ns<<','<<d.callback_wall_ns<<','<<d.frame_id<<','<<(d.is_keyframe?1:0)<<','
             <<d.detected_features<<','<<d.tracked_features<<','<<d.mono_inliers<<','<<d.mono_putatives<<','
             <<ratio<<','<<d.mono_ransac_iters<<','<<d.feature_detection_time_s<<','
-            <<d.feature_tracking_time_s<<','<<d.mono_ransac_time_s<<','<<d.mono_status<<'\n';
+            <<d.feature_tracking_time_s<<','<<d.mono_ransac_time_s<<','<<d.mono_status<<','
+            <<(d.mono_pose_valid?1:0)<<','<<d.mono_tx<<','<<d.mono_ty<<','<<d.mono_tz<<','<<d.mono_t_norm<<','
+            <<d.mono_body_tx<<','<<d.mono_body_ty<<','<<d.mono_body_tz<<','<<d.mono_body_t_norm<<','
+            <<d.mono_roll_deg<<','<<d.mono_pitch_deg<<','<<d.mono_yaw_deg<<'\n';
         }
       }
     }

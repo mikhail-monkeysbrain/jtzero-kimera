@@ -1224,3 +1224,12 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Что всё ещё допустимо:** если относительный угол `кромка↔направляющая` жёстко постоянен при движении, неизвестный постоянный offset сам по себе вычитается в сравнении A/B. Но перспектива внешней камеры всё равно может менять 2-D slope при переносе объекта по кадру, поэтому одной разности image-line angles недостаточно.
 
 **Статус:** external-video route остаётся возможным только как projective/relative test с дополнительным world reference или метрической меткой; прямое `theta_B-theta_A = physical tilt` запрещено.
+
+
+## 2026-09-07 — external-video projective references identified
+
+**User correction:** the static black central appliance provides a strong approximately vertical image/world reference; the orange toolbox is parallel to the table and therefore to the motion plane. The marked long edge of the upper platform is rigidly attached to the stand, but may differ from the guide direction by a constant ~3–5°.
+
+**Methodological consequence:** the orange toolbox is the primary table-plane/world-direction reference; the black vertical edge is a secondary orthogonal/camera-roll reference. The unknown 3–5° platform-edge offset is acceptable for relative A/B testing if rigidly constant, but direct subtraction of 2-D image line angles is still not sufficient because perspective changes with object position.
+
+**Next analysis on existing external video:** treat the phone as a fixed projective camera. Track the same platform edge over many frames and test whether its projected lines are consistent with one fixed 3-D direction (common vanishing point) during translation. Use static orange-box/table directions to constrain the table-plane vanishing geometry and the black vertical line to verify camera-frame stability. Only after projective consistency passes should any physical angle in degrees be estimated.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 LABEL="${1:-ABA_X2}"
+PARAMS_DIR="${2:-${JTZERO_V25_PARAMS:-${HOME}/jtzero-kimera-sync/params/JTZeroMonoFLU_TBS_Rm1d5_Pm5d5_ARW_003}}"
 ROOT="${HOME}/jtzero-kimera-sync"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 OUT="${HOME}/jtzero_runs/${STAMP}_v25_${LABEL}"
@@ -22,7 +23,12 @@ for f in \
   echo "jtzero_branch=$(git branch --show-current)"
   echo "jtzero_head=$(git rev-parse HEAD)"
   echo "mode=V25 A->B->A x2 closure; strict START; stall >500ms invalid; FRD->FLU only; ZXY OFF; gravity feedback OFF"
+  echo "params_dir=$PARAMS_DIR"
   echo "jtzero_status_begin"; git status --short; echo "jtzero_status_end"
 } > "$OUT/METADATA.txt"
-cp -a "$ROOT/params/JTZeroMonoFLU_TBS_Rm1d5_Pm5d5_ARW_003" "$OUT/params"
+if [[ -d "$PARAMS_DIR" ]]; then
+  cp -a "$PARAMS_DIR" "$OUT/params"
+else
+  echo "WARNING: params dir not found: $PARAMS_DIR" >&2
+fi
 echo "$OUT"

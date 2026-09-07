@@ -485,3 +485,20 @@ Conclusion: this result is valid **only for the ARW=0.0003 failure mode**. It mu
 Methodological action:
 - preserve every future V25 dataset under a run-specific tag before starting another run;
 - re-run the visual-quality analysis on a baseline ARW=0.003 exact-gravity dataset before deciding whether weak visual geometry is causal for the original residual error.
+
+
+### 2026-09-07 — experiment archival safeguard enabled
+
+The degraded `ARW=0.0003` run was archived locally before any new V25 run:
+`/home/vio/jtzero_runs/20260907_114023_v25_ARW_0003_FAIL`.
+
+To prevent future dataset provenance mistakes, a dedicated baseline runner was added:
+`tools/run_v25_baseline_exact_archived.sh`.
+
+It:
+- forces the baseline `ARW=0.003` parameter profile;
+- keeps exact-gravity initialization enabled;
+- runs the same V25 A→B→A×2 test;
+- automatically archives all V25 CSV outputs with the actual parameter directory immediately after the run.
+
+Next action: obtain a fresh archived baseline dataset and only then re-run the visual-quality/BA correlation on that baseline.

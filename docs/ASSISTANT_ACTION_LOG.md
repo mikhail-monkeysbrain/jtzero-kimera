@@ -1098,3 +1098,18 @@ Status: UI-only correction; collected IMU data and A/B methodology are unchanged
 **Методологическая цель:** отличить простой постоянный rectification offset от residual rotation/distortion/geometry mismatch. Если A и B имеют разный systematic dx, будущий normal comparison может быть biased и его нельзя запускать.
 
 **Commit:** `425d937`.
+
+
+## 2026-09-07 — rectified dx: заметен same-position drift; добавлен time-vs-position analyzer
+
+**Результат signed dx forensic:** A median dx по объединённым точкам +3.992 px, B +3.780 px; разница всего -0.212 px на фоне std ~3.4–3.5 px. Но важнее, что same-position A stages меняются сами по себе: A1 median +4.903, A2 +3.888, A3 +3.715, A4 +3.617 px. Это около 1.29 px drift в одной и той же физической точке A. B stages также меняются (+3.576, +4.076, +3.732 px), хотя слабее и немонотонно.
+
+**Критический вывод:** текущий rectification residual нельзя считать стабильным постоянным offset и нельзя безопасно компенсировать одним числом. A/B aggregate difference значительно меньше same-position drift A1→A4. Это ослабляет гипотезу, что residual dx связан именно с позицией A/B; time/pipeline/calibration drift выглядит как минимум сопоставимым кандидатом.
+
+**Самокритика:** предыдущая идея 'если A и B имеют почти одинаковый signed offset, можно компенсировать общий bias' была слишком простой. Данные показывают, что bias меняется во времени даже при возврате в A.
+
+**Добавлен:** `tools/analyze_p11_rectified_dx_time_position.py`.
+
+**Что проверяет:** pair-level median dx, adjacent A1→B1/A2→B2/A3→B3 deltas, same-position A/B drift, глобальный тренд по порядку записи и остаточную B-A разницу после linear detrend. Это отличается от предыдущего spatial residual analyzer: новый вопрос — time drift vs position effect.
+
+**Commit:** `661b5da`.

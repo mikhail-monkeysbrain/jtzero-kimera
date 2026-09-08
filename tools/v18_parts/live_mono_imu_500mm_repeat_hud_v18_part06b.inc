@@ -91,6 +91,13 @@ if(gV26ControlledAb4){
     char tb[256];
     std::snprintf(tb,sizeof(tb),"ВРЕМЯ %.2f с   ЦЕЛЬ 7.50 с   ДОПУСК 6.50..8.50 с",elapsed);
     ru(canvas,tb,{55,642},16,{255,255,255},cv::QT_FONT_BOLD);
+
+    const char* pace_text=nullptr;
+    cv::Scalar pace_color;
+    if(elapsed<lo){ pace_text="РАНО — ПРОДОЛЖАЙТЕ ДВИЖЕНИЕ"; pace_color=cv::Scalar(0,210,255); }
+    else if(elapsed<=hi){ pace_text="МОЖНО ОСТАНАВЛИВАТЬ НА УПОРЕ B"; pace_color=cv::Scalar(80,220,80); }
+    else { pace_text="ПОЗДНО — ЗАВЕРШИТЕ ПРОХОД"; pace_color=cv::Scalar(40,40,245); }
+    ru(canvas,pace_text,{250,615},20,pace_color,cv::QT_FONT_BOLD);
   }
   if(!warmup.passed){
     std::snprintf(b,sizeof(b),"Warm-up %.1f / %.0f с; stable %d / %d",

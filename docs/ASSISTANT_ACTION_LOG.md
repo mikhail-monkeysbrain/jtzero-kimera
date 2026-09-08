@@ -2900,3 +2900,37 @@ Next required discriminator should use true pre-calibration/raw accelerometer sa
 
 **Physical test:** none.
 **Статус:** MAVLINK FRAME/STAGE AMBIGUITY RESOLVED. POST-CALIBRATION AP INS ACCEL ITSELF HAS THE A/B NORM EFFECT. HIGHRES IS NOT INDEPENDENT. DO NOT DOUBLE-SUBTRACT OFFSETS.
+
+
+## 2026-09-08 — exact raw batch logging configuration derived from ArduPilot source
+
+Inspected current upstream ArduPilot batch sampler source:
+- `INS_LOG_BAT_MASK` bitmask: bit0=IMU1, bit1=IMU2, bit2=IMU3; reboot required.
+- `INS_LOG_BAT_OPT` bit0 = sensor-rate logging (full sensor rate seen by AP), bit1=post-filter, bit2=pre+post filter.
+- For sensor-rate accel logging, `_notify_new_accel_sensor_rate_sample()` rotates only by the per-sensor orientation and feeds the sample directly to BatchSampler. It does NOT run `_rotate_and_correct_accel()`, so normal accel offset/scale/board-orientation correction is bypassed.
+- This is exactly the discriminator needed for A/B norm testing. Vector norm is invariant to the remaining sensor-orientation rotation.
+- Existing `LOG_BITMASK=180222` is already nonzero, and BatchSampler only requires logger should_log(any); no LOG_BITMASK edit is needed for this diagnostic.
+- Keep `INS_RAW_LOG_OPT=0`; it is not required for ISBH/ISBD sensor-rate batch logging.
+
+Chosen temporary configuration:
+- `INS_LOG_BAT_MASK=3` (IMU1 + IMU2),
+- `INS_LOG_BAT_OPT=1` (sensor-rate logging),
+- keep `INS_LOG_BAT_CNT=1024`, `LGIN=20`, `LGCT=32`.
+
+Added guarded config tool:
+- `tools/configure_fc_raw_imu_logging_v42.cpp`
+- `tools/run_configure_fc_raw_imu_logging_v42.sh`
+
+Behavior:
+- --enable reads and saves original MASK/OPT to `~/jtzero_rawlog_v42_original.txt`;
+- changes only MASK and OPT;
+- verifies PARAM_VALUE echo;
+- --restore restores exact saved original values;
+- BAT_MASK requires FC reboot after enable and after restore.
+
+Commits:
+- `1b9ccfc`
+- `4a5e8cdf`
+
+**Next physical test requirement:** after enable + FC reboot + verification, perform one short A->B->A capture. Before this test the drone/stand must be set to the specified yaw; use the same geometry as v39, **yaw ≈ -90°**.
+**Статус:** RAW PRE-CALIBRATION DATA PATH IDENTIFIED AND CONFIG PROCEDURE PREPARED.

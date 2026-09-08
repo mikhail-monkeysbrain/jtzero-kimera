@@ -2445,3 +2445,29 @@ This still does not identify where the larger assembly gains ~2.5° relative to 
 **Commit:** `a3b72ff`.
 
 **Статус:** INERTIAL CONSISTENCY CLOSED — real shared-frame rotation relative to gravity is strongly supported; remaining problem is mechanical localization, not estimator origin.
+
+
+## 2026-09-08 — ArduPilot source audit: SCALED_IMU1/2 are processed but per-instance, not AHRS-rotated
+
+Reviewed current ArduPilot source paths:
+- `GCS_MAVLINK::send_scaled_imu(instance,...)` reads `ins.get_accel(instance)` and `ins.get_gyro(instance)` separately for each IMU instance.
+- `HIGHRES_IMU` reads the first usable `ins.get_accel()` / `ins.get_gyro()`.
+- `AP_InertialSensor_Backend::_rotate_and_correct_accel(instance,...)` applies per-instance sensor orientation, temperature correction, accel offsets/scales, then the common fixed board orientation.
+- `_rotate_and_correct_gyro(instance,...)` applies per-instance sensor orientation, temperature correction and gyro offset, then the common fixed board orientation.
+- gyro filters/notches are maintained per instance.
+- no EKF/AHRS attitude rotation is fed back into the SCALED_IMU gyro/accel vectors.
+
+**Methodological correction:** SCALED_IMU1/2 are not untouched raw ADC samples, but they remain independent per-IMU inertial measurements after fixed calibration/orientation/filtering. A common time-varying ~2.5° gyro rotation on both independent MEMS cannot be explained by FC attitude estimator feedback or a shared dynamic body-frame transform in this path.
+
+Therefore the v39 dual-gyro evidence is stronger than the previous caution suggested:
+- both independent gyros register approximately the same reversible angular motion;
+- each gyro integration predicts its own endpoint gravity-vector to ~0.1°;
+- fixed board/sensor rotations cannot manufacture that reversible time-varying motion.
+
+### Key geometric reconciliation to investigate
+The dominant measured component is FC roll (~±2.45°). At stand yaw ≈ -90°, the physical roll axis may be close to the camera viewing axis depending on camera/translation geometry. A rotation about the viewing axis is easy to see as 2-D tilt; a rotation about an axis close to the camera optical axis or line of sight can instead be poorly represented by the particular structural edges selected, and perspective changes can dominate cross-angle measurements.
+
+Before declaring a contradiction with video, map FC body axes onto the v37 camera view and identify which image features are sensitive to FC roll specifically. Do not use generic “platform horizontal” as a roll ground truth without this axis mapping.
+
+**No new physical test yet.**
+**Статус:** ArduPilot common-processing artifact is strongly downgraded; dual-IMU angular motion remains physically meaningful. Next task is camera/FC-axis geometry reconciliation.

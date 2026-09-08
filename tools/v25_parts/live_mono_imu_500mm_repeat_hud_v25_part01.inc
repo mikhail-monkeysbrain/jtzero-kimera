@@ -42,6 +42,14 @@ constexpr double kV25MaxStartBackendAgeMs = 300.0;
 constexpr int64_t kV25FatalLoopStallNs = 500000000LL;
 bool gV25BFirst = false;
 
+// Controlled repeatability mode: four measured A->B passes.
+// Returns B->A happen while WAIT_START and are intentionally not measured.
+bool gV26ControlledAb4 = false;
+int64_t gV26MoveStartWallNs = 0;
+double gV26ReferenceMoveSec = 0.0;
+std::array<double,4> gV26MoveDurationsSec{{0.0,0.0,0.0,0.0}};
+constexpr double kV26DurationToleranceSec = 1.5;  // total allowed spread ~= 3 s
+
 constexpr double kStartupStaticSec = 3.0;
 constexpr size_t kStartupMinSamples = 450;
 constexpr double kStartupMaxMeanGyroRadS = 0.010;

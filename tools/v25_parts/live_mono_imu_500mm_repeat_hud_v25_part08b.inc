@@ -94,10 +94,10 @@
           if(gV26ControlledAb4 && leg>=0 && leg<4 && gV26MoveStartWallNs>0){
             const double move_sec=(event_wall_ns-gV26MoveStartWallNs)*1e-9;
             gV26MoveDurationsSec[leg]=move_sec;
-            const double dt_target=move_sec-kV26TargetMoveSec;
-            const bool timing_ok=std::abs(dt_target)<=kV26DurationToleranceSec;
+            const double dt_target=move_sec-gV26TargetMoveSec;
+            const bool timing_ok=std::abs(dt_target)<=gV26DurationToleranceSec;
             std::cout<<"PASS "<<leg+1<<"AB MOTION DURATION "<<std::fixed<<std::setprecision(3)<<move_sec<<" s"
-                     <<"  delta_from_7.5="<<std::showpos<<dt_target<<std::noshowpos<<" s"
+                     <<"  delta_from_target="<<std::showpos<<dt_target<<std::noshowpos<<" s"
                      <<"  timing="<<(timing_ok?"PASS":"FAIL")<<"\n";
           }
           stable.reset();phase=CapturePhase::SETTLE_END;notice="SPACE ПРИНЯТ — ОСТАНОВИТЕ НА B И НЕ ДВИГАЙТЕ";notice_until=monotonicNs()+2200000000LL;std::cout<<"LEG "<<leg+1<<" END key accepted KF="<<s.keyframe<<" event_wall_ns="<<event_wall_ns<<" state_ts="<<s.timestamp_ns<<" cb_wall_ns="<<s.callback_wall_ns<<" age_ms="<<(event_wall_ns-s.callback_wall_ns)/1e6<<" [gravity feedback remains OFF, settling]\n";}
@@ -153,7 +153,9 @@
     saveCsvV8(rows);
     saveBackendTraceV8(states,rows,"/home/vio/jtzero_500mm_v25_backend.csv");
     if(imu_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);imu_req=false;}if(att_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);att_req=false;}requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,0);if(streaming){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(camera_fd,VIDIOC_STREAMOFF,&t);streaming=false;}for(auto&bf:buffers)if(bf.start&&bf.start!=MAP_FAILED)munmap(bf.start,bf.length);if(camera_fd!=-1)close(camera_fd);if(serial_fd!=-1)close(serial_fd);
-    if(gV26ControlledAb4) std::cout<<"V26 MODE: CONTROLLED_AB4 — four A->B passes, fixed target 7.5 s, accepted window 6.5..8.5 s\n"; else std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
+    if(gV26ControlledAb4) std::cout<<"V26 MODE: CONTROLLED_AB4 — four A->B passes, target "<<gV26TargetMoveSec
+      <<" s, accepted window "<<(gV26TargetMoveSec-gV26DurationToleranceSec)<<".."
+      <<(gV26TargetMoveSec+gV26DurationToleranceSec)<<" s\n"; else std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
     printSummaryV8(rows,raw,rejected,selected,decoded,imu_rx,imu_fed,att_rx,sync.size(),mapping,states.size());
     raw_combined.flush();raw_camera.flush();raw_mjpg.flush();raw_attitude.flush();raw_range.flush();
     std::cout<<"RAW IMU CSV: "<<kV11CombinedPath<<" rows="<<raw_imu_rows<<"\n"
@@ -184,7 +186,7 @@
           const auto& r=rows[i];
           ss+=(r.measured.horizontal-mean)*(r.measured.horizontal-mean);
           metric_pass=metric_pass && std::abs(r.measured.error)<=kV8MaxLegErrorM && std::abs(r.measured.dz)<=kV8MaxAbsDzM;
-          metric_pass=metric_pass && std::abs(gV26MoveDurationsSec[i]-kV26TargetMoveSec)<=kV26DurationToleranceSec;
+          metric_pass=metric_pass && std::abs(gV26MoveDurationsSec[i]-gV26TargetMoveSec)<=gV26DurationToleranceSec;
         }
         sd=std::sqrt(ss/4.0);
         metric_pass=metric_pass && sd<=kV8MaxStdM;

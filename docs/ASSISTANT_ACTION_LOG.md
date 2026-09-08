@@ -2471,3 +2471,33 @@ Before declaring a contradiction with video, map FC body axes onto the v37 camer
 
 **No new physical test yet.**
 **Статус:** ArduPilot common-processing artifact is strongly downgraded; dual-IMU angular motion remains physically meaningful. Next task is camera/FC-axis geometry reconciliation.
+
+
+## 2026-09-08 — camera/FC-axis reconciliation: side video was weak for roll
+
+Reconciled the v39 inertial result with the existing side-view video geometry.
+
+Relevant facts:
+- the late -90° runs have physical A->B horizontal axis approximately [+0.1, -0.995] in backend XY;
+- with the stand physically yawed ≈ -90°, this is consistent with A->B being approximately along body X (Forward);
+- the side-view camera sees the A<->B translation laterally across the image, so its optical axis is approximately perpendicular to body X, i.e. near body Y;
+- the v39 dual-gyro rotation is roll-dominant, ~±2.45° about body X.
+
+Geometric consequence:
+- body-X roll is approximately a rotation about a horizontal axis lying in the image plane;
+- it tilts the rig toward/away from the camera rather than producing a large in-plane rotation of horizontal edges;
+- a cross whose face is approximately toward the camera will keep its horizontal arm nearly horizontal under pure roll about body X;
+- therefore measuring “cross angle relative to image horizontal” or “top-platform horizontal edge angle” was the wrong observable for the dominant roll component.
+
+This explains why the video did not visibly show a ~2.5° in-plane tilt even though two gyros and two accelerometers consistently support ~2.5° roll.
+
+The correct existing-video observables for roll are perspective/depth-sensitive:
+- relative apparent spacing/foreshortening between near/far legs;
+- vertical position/parallax of top vs bottom features;
+- changes in projected height/shape of the front-facing marker;
+- not simple 2-D edge angle.
+
+**Methodological correction:** do not use the earlier cross-angle estimate as a roll ground truth.
+
+**No new physical test yet.**
+**Статус:** apparent video-vs-IMU contradiction is largely resolved geometrically; existing side video was poorly conditioned for measuring body-X roll directly.

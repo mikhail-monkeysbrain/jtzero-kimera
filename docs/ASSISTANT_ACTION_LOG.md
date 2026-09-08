@@ -2016,3 +2016,45 @@ The original side-view MP4 is not currently recoverable from the accessible conv
 **Next decision:** if the original side-view MP4 can be recovered/re-uploaded, quantify marker angle and platform angle separately. If not, one short repeat external-reference video may eventually be required, but only after checking whether the previously captured video can be restored.
 
 **Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — FC estimator hallucination is strongly downgraded; remaining unresolved branch is whole-rig tilt vs local FC/IMU mechanical motion.
+
+
+## 2026-09-08 — prepared external mechanical translation reference test
+
+The original side-view MP4 with cross is not recoverable from the currently accessible conversation/library index. To resolve whole-rig tilt vs local FC/IMU motion without changing estimator parameters, a dedicated mechanical reference test was prepared.
+
+**Mandatory physical-test yaw:** **DRONE/STAND YAW ≈ -90°**.
+
+**Test purpose:** independently compare:
+- externally visible angle of a marker rigidly attached next to FC/IMU;
+- externally visible angle of the rigid upper stand platform;
+- FC ATTITUDE;
+- raw HIGHRES_IMU gravity/gyro.
+
+No Kimera estimator output is used for the mechanical conclusion.
+
+**Added:**
+- `tools/live_mechanical_translation_fc_accel_v37.cpp`;
+- `tools/run_mechanical_translation_v37.sh`.
+
+Protocol:
+- fixed phone/camera;
+- one continuous side-view recording;
+- marker/cross near FC/IMU and rigid upper platform must both remain visible;
+- fixed background reference must remain visible;
+- A settle >=3 s -> A->B exactly 500 mm -> B settle >=3 s -> B->A exactly 500 mm -> A settle >=3 s;
+- yaw, height and rig configuration must remain unchanged.
+
+Output:
+- `/home/vio/jtzero_mechanical_translation_v37.csv`;
+- external phone video.
+
+**Decision:**
+- marker and platform both rotate ~2.5° together => whole-rig mechanical tilt;
+- marker rotates ~2.5° while platform remains near fixed angle => local FC/IMU mount flex/motion;
+- neither visibly rotates but raw gravity/gyro report ~2.5° => re-check marker rigidity/view geometry and sensor-frame interpretation before estimator changes.
+
+**Commits:**
+- `e943363` — mechanical 500-mm translation logger;
+- `87b0d57` — dedicated runner.
+
+**Статус:** ГОТОВ К МЕХАНИЧЕСКОМУ REFERENCE TEST — one short physical session can now resolve the remaining mechanical branch.

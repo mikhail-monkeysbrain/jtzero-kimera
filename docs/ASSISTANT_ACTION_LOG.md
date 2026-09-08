@@ -2614,3 +2614,33 @@ Added:
 **Physical test:** none. Existing archives at ≈ -90° only.
 
 **Статус:** SIMPLE ACCEL-vs-ATTITUDE LAG NOT SUPPORTED; previous dynamic accel-roll mismatch is not a valid gravity-only observable. Next: gyro-vs-FC roll timing.
+
+
+## 2026-09-08 — gyro vs FC roll timing: FC attitude lag is ruled down
+
+User ran `analyze_v25_gyro_vs_fc_roll_timeseries.py` on the four isolated reset runs (existing archives, stand yaw ≈ -90°).
+
+Results:
+- A->B #1: integrated gyro roll -2.4616°, FC dRoll -2.4964°, endpoint diff +0.0349°, best corr 1.000 at +20 ms.
+- B->A #1: +2.4755° vs +2.3796°, diff +0.0959°, corr 0.999 at +10 ms.
+- A->B #2: -2.4686° vs -2.6930°, diff +0.2244°, corr 1.000 at 0 ms.
+- B->A #2: +2.3002° vs +2.4723°, diff -0.1721°, corr 1.000 at -30 ms.
+
+### Conclusion
+The gyro-integrated roll and FC roll have essentially perfect time-series shape agreement. Best lag is small (-30..+20 ms) and, critically, not consistent in sign across runs. Therefore a single systematic FC-attitude timing delay is not supported and is very unlikely to be the primary source of the directional Z error.
+
+Endpoint differences are sub-degree (0.035..0.224°) but change sign and do not map consistently to A->B/B->A Z sign. They are not sufficient evidence for a fixed roll calibration error.
+
+Combined with prior results:
+1. real ~2.5° roll is independently supported by both gyros/accelerometers;
+2. freezing attitude evolution leaves most reconstructed signed Z intact;
+3. body-Y->world-Z is the dominant signed term, partially cancelled by body-Z;
+4. simple accel-vs-attitude lag test was invalid during translation because linear acceleration contaminates accel-derived gravity direction;
+5. gyro-vs-FC roll now rules down a simple attitude timestamp lag.
+
+Next target should be the accelerometer specific-force dynamics themselves: quantify the coupled Y/Z vector during translation, especially whether body-Z changes are exactly what rigid rotation + horizontal translation predict, and whether filtering/calibration/non-gravitational acceleration leaves a direction-dependent residual. Avoid another timing hypothesis unless new evidence supports it.
+
+**Physical test:** none.
+**Yaw:** archived runs ≈ -90°.
+
+**Статус:** FC ATTITUDE TIMING IS NOT THE PRIMARY MECHANISM; diagnostic focus moves to accelerometer Y/Z specific-force dynamics and cancellation.

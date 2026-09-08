@@ -34,7 +34,7 @@
     size_t loop_stall_count=0;
     int64_t max_loop_stall_ns=0;
 
-    while(leg<kLegCount){
+    while(gV26ControlledAb4 || leg<kLegCount){
       const int64_t now=monotonicNs();
       const int64_t loop_dt_ns=now-prev_loop_wall_ns;
       if(loop_dt_ns>100000000LL){

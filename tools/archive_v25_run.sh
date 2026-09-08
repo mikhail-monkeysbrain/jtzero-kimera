@@ -16,6 +16,9 @@ for f in \
   "$HOME/jtzero_500mm_v25_backend.csv" \
   "$HOME/jtzero_500mm_v25_frontend.csv" \
   "$HOME/jtzero_500mm_v25_events.csv"; do copy_if_exists "$f"; done
+for f in "$HOME"/jtzero_500mm_v26_[1-4]AB.csv; do
+  [[ -e "$f" ]] && copy_if_exists "$f"
+done
 {
   echo "label=$LABEL"
   echo "timestamp=$STAMP"

@@ -186,8 +186,12 @@ for n in range(1,5):
     q=build_pass(f"FRESH_{n}",d,1)
     if q: passes.append(q)
 
-if len(passes)<8:
-    print(f"WARNING: найдено только {len(passes)} из 8 ожидаемых измеряемых A→B проходов.")
+if len(passes) != 8:
+    labels = ", ".join(p["label"] for p in passes) if passes else "none"
+    raise SystemExit(
+        f"INVALID DATASET: найдено {len(passes)} из 8 ожидаемых измеряемых A→B проходов. "
+        f"Найдены: {labels}. Причинный анализ и корреляции НЕ выполняются."
+    )
 
 print("="*150)
 print("V40 — V39 CLEAN RESTART / CARRY-OVER CAUSAL LOCALIZATION")

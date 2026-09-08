@@ -2379,3 +2379,35 @@ Given the user's mechanical constraint that FC is rigidly bolted and the upper p
 **Physical test yaw:** v39 performed at ≈ -90°.
 
 **Статус:** IMU switching and single-sensor fault excluded; effect is common-mode and position-dependent.
+
+
+## 2026-09-08 — v39 dual-gyro integration confirms real common rigid rotation
+
+Further analysis of the already-recorded v39 CSV; no new physical test.
+
+Stationary gyro bias was estimated separately from A-start for A->B and B for B->A, then each source was deduplicated by its own timestamp and trapezoid-integrated over the motion phase.
+
+A->B:
+- HIGHRES_IMU rotvec ≈ [-2.525, +0.139, +0.559] deg, |rotvec| ≈ 2.589°;
+- SCALED_IMU / IMU0 ≈ [-2.451, +0.206, +0.520] deg, |rotvec| ≈ 2.514°;
+- SCALED_IMU2 / IMU1 ≈ [-2.422, +0.248, +0.499] deg, |rotvec| ≈ 2.486°.
+
+B->A:
+- HIGHRES_IMU ≈ [+2.472, -0.225, -0.148] deg, |rotvec| ≈ 2.487°;
+- IMU0 ≈ [+2.427, -0.198, -0.107] deg, |rotvec| ≈ 2.437°;
+- IMU1 ≈ [+2.452, -0.188, +0.068] deg, |rotvec| ≈ 2.460°.
+
+The two independent gyros therefore agree to roughly hundredths of a degree on a reversible ~2.45° roll-dominant rotation linked to A/B translation.
+
+**Updated conclusion:** this is not an accelerometer-only apparent gravity effect, not HIGHRES instance switching, and not a single-IMU fault. The FC board undergoes real angular motion in inertial space during the translation.
+
+Given the user's mechanical constraint that FC is rigidly bolted to the upper platform and upper platform cannot rotate by degrees relative to the lower support, do NOT infer local FC flex. The compatible mechanical interpretation is a rotation of the rigid assembly as a whole relative to gravity/support contact, unless an external geometric reference disproves that.
+
+This resolves an earlier ambiguity:
+- local FC-vs-upper-platform motion is strongly disfavored by construction;
+- dual gyros support absolute rotation of the shared rigid body;
+- the remaining question is where the whole-assembly orientation change comes from (base/contact/table geometry, rocking while translating, or another rigid-body degree of freedom), not Kimera or FC estimator.
+
+**No new test yet.** Next step is to re-examine the existing side video using lower ring/base, both legs, and upper rigid geometry together, specifically looking for whole-rig rotation/rocking rather than cross-only angle.
+
+**Статус:** REAL RIGID-BODY ROTATION STRONGLY SUPPORTED BY TWO INDEPENDENT GYROS.

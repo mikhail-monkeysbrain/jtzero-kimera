@@ -2151,3 +2151,43 @@ The current v37 CSV did not record the HIGHRES_IMU MAVLink extension field `id`,
 **No new physical test yet.** Next priority is to inspect FC INS instance/priority configuration and, only if needed, add id + SCALED_IMU1/2/3 comparison to an existing logger.
 
 **Статус:** МЕТОДОЛОГИЧЕСКАЯ ПОПРАВКА — HIGHRES_IMU is processed ArduPilot INS frontend data, not raw sensor-frame data.
+
+
+## 2026-09-08 — подготовлен статический тест источников IMU v38
+
+После чтения FC-параметров подтверждено:
+- два физических IMU присутствуют и включены;
+- `INS_ACC_ID/INS_GYR_ID = 3408138`;
+- `INS_ACC2_ID/INS_GYR2_ID = 3408162`;
+- `EK3_IMU_MASK = 3`;
+- `EK3_PRIMARY = 0`.
+
+Также ранее исправлена трактовка `HIGHRES_IMU`: это обработанный ArduPilot INS frontend поток первого usable IMU, а не untouched raw sensor-frame stream.
+
+Для проверки источника без нового движения стенда добавлен v38:
+- `tools/live_static_imu_sources_v38.cpp`;
+- `tools/run_static_imu_sources_v38.sh`.
+
+**Физический протокол:** стенд полностью неподвижен 30 секунд. Yaw не менять. Никаких A/B движений.
+
+Логируются одновременно:
+- HIGHRES_IMU, включая MAVLink extension field `id`;
+- SCALED_IMU;
+- SCALED_IMU2;
+- SCALED_IMU3;
+- ATTITUDE.
+
+Цели:
+1. определить, какой `HIGHRES_IMU.id` используется;
+2. проверить стабильность `id` на протяжении записи;
+3. сопоставить HIGHRES_IMU с SCALED_IMU1/2;
+4. сравнить stationary gravity vectors двух физических IMU;
+5. установить, существует ли уже до Kimera постоянное меж-IMU различие.
+
+**Коммиты:**
+- `d13104d` — static IMU source logger v38;
+- `529b0fd` — runner v38.
+
+**Операторский интерфейс:** полностью на русском согласно постоянному правилу.
+
+**Статус:** ГОТОВО К СТАТИЧЕСКОМУ IMU-INSTANCE TEST; новых движений стенда не требуется.

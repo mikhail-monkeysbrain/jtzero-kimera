@@ -2126,3 +2126,28 @@ The video already makes “no physical motion at all” untenable. Further estim
 **Physical test yaw:** none now. v37 was performed at ≈ -90°.
 
 **Статус:** МЕХАНИЧЕСКОЕ ВРАЩЕНИЕ ПОДТВЕРЖДЕНО — remaining task is localize which structural part rotates and redesign/measure the bench constraint before using this motion as Z ground truth.
+
+
+## 2026-09-08 — corrected interpretation of ArduPilot HIGHRES_IMU
+
+Important methodological correction after reviewing current ArduPilot source.
+
+We previously called MAVLink HIGHRES_IMU values "raw IMU". That is inaccurate for ArduPilot.
+
+ArduPilot `GCS_MAVLINK::send_highres_imu()` takes:
+- `ins.get_accel()`;
+- `ins.get_gyro()`;
+- sets `id = ins.get_first_usable_accel()`.
+
+`AP_InertialSensor::get_accel()` / `get_gyro()` return the first usable IMU frontend values. Before publication, the backend applies sensor orientation and board orientation; accelerometer calibration offsets/scales and optional temperature correction are also applied. Therefore HIGHRES_IMU is a calibrated/body-aligned frontend IMU stream, not untouched sensor-frame ADC/raw data.
+
+**Consequence for v25/v37 interpretation:**
+- agreement between HIGHRES_IMU gravity direction and FC ATTITUDE does not constitute two fully independent raw-vs-estimator channels;
+- gyro/accel in HIGHRES_IMU are still useful independent of Kimera, but they are already processed by ArduPilot's INS frontend;
+- the repeatable A/B change in stationary HIGHRES_IMU remains real in the transmitted data, but it must now be explained by first-usable IMU selection/calibration/body-frame semantics or actual sensor motion, not labelled "raw sensor rotation" without qualification.
+
+The current v37 CSV did not record the HIGHRES_IMU MAVLink extension field `id`, so this run cannot prove whether the same IMU instance remained selected throughout A/B/A.
+
+**No new physical test yet.** Next priority is to inspect FC INS instance/priority configuration and, only if needed, add id + SCALED_IMU1/2/3 comparison to an existing logger.
+
+**Статус:** МЕТОДОЛОГИЧЕСКАЯ ПОПРАВКА — HIGHRES_IMU is processed ArduPilot INS frontend data, not raw sensor-frame data.

@@ -2644,3 +2644,31 @@ Next target should be the accelerometer specific-force dynamics themselves: quan
 **Yaw:** archived runs ≈ -90°.
 
 **Статус:** FC ATTITUDE TIMING IS NOT THE PRIMARY MECHANISM; diagnostic focus moves to accelerometer Y/Z specific-force dynamics and cancellation.
+
+
+## 2026-09-08 — Y/Z residual phase localization
+
+User ran `analyze_v25_yz_residual_phases.py` on four isolated reset runs (archived yaw ≈ -90°).
+
+Results:
+- A->B #1: Q1 +0.00067, Q2 -0.00554, Q3 -0.01473, Q4 -0.02681 m/s²; whole -0.01159.
+- B->A #1: Q1 -0.00128, Q2 +0.02573, Q3 +0.07045, Q4 +0.04241 m/s²; whole +0.03433.
+- A->B #2: Q1 +0.00155, Q2 -0.00443, Q3 -0.01502, Q4 -0.00730 m/s²; whole -0.00630.
+- B->A #2: Q1 -0.00056, Q2 -0.00129, Q3 +0.06474, Q4 +0.04519 m/s²; whole +0.02702.
+
+### Conclusion
+The direction-dependent world-Z residual is essentially absent in Q1, begins in Q2 in three runs, and is strongest/repeatable in Q3-Q4. Therefore it is not a constant offset present from START and is not explained by a simple static calibration error alone.
+
+The sign is highly repeatable:
+- A->B: late residual negative.
+- B->A: late residual positive.
+
+The body-Y term develops the same directional sign and is large; body-Z partially cancels it in A->B and changes its cancellation behavior in B->A. This localizes the mechanism to the later part of physical translation / settling, but time quartiles alone cannot label acceleration, cruise, braking, or post-motion.
+
+Important methodological limitation: local_dPz resets integration inside each quartile and therefore must not be summed to reproduce WHOLE Pz. Use residual means for phase localization, not local_dPz as additive contributions.
+
+Next analysis should identify actual motion phases from raw horizontal specific force and/or operator/event timing, rather than assuming quartiles correspond to acceleration/cruise/braking. Then compare Y/Z residual against physical horizontal acceleration and roll rate.
+
+**Physical test:** none.
+**Yaw:** existing archived runs ≈ -90°.
+**Статус:** DIRECTIONAL Z GENERATION IS LATE-PHASE AND BODY-Y-COUPLED; static-start offset and FC-attitude timing are ruled down.

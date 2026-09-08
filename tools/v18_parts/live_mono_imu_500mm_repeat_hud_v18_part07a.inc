@@ -43,7 +43,7 @@ int main(int argc,char**argv){
   gV26ControlledAb4=(argc>3 && std::string(argv[3])=="CONTROLLED_AB4");
   if(gV26ControlledAb4){
     gV25BFirst=false;
-    std::cout<<"[MODE] CONTROLLED_AB4: four measured A->B passes; B->A returns are unmeasured; pass 1 defines duration reference\n";
+    std::cout<<"[MODE] CONTROLLED_AB4: four measured A->B passes; B->A returns are unmeasured; fixed target 7.5 s; accepted 6.5..8.5 s\n";
   }
   std::cout<<"[CAM] device="<<camera_device<<"\n";
   cv::namedWindow(kV8WindowName, cv::WINDOW_NORMAL);

@@ -65,6 +65,10 @@
           if(gV26ControlledAb4){
             start_mark=start_press;
             gV26MoveStartWallNs=event_wall_ns;
+#ifdef JTZERO_V41_METRIC_CAMERA
+            if(const char* e=std::getenv("JTZERO_V41_CAMERA_HEIGHT_OFFSET_M")) gV41Cam.camera_height_offset_m=std::atof(e);
+            gV41Cam.reset();
+#endif
             phase=CapturePhase::MOVING;
             notice="СТАРТ ЗАФИКСИРОВАН — ДВИГАЙТЕ A → B";
             notice_until=monotonicNs()+1800000000LL;
@@ -91,6 +95,12 @@
             v25_events.flush();
           }
           end_press.s=s;end_press.valid=true;
+#ifdef JTZERO_V41_METRIC_CAMERA
+          gV41Cam.stop();
+          std::cout<<"[V41-CAMERA] net="<<std::fixed<<std::setprecision(2)<<gV41Cam.net()*1000.0
+                   <<" mm path="<<gV41Cam.path_m*1000.0<<" mm height="<<gV41Cam.cameraHeight()
+                   <<" m good_updates="<<gV41Cam.good_updates<<" rejected="<<gV41Cam.rejected_updates<<"\n";
+#endif
           if(gV26ControlledAb4 && leg>=0 && leg<4 && gV26MoveStartWallNs>0){
             const double move_sec=(event_wall_ns-gV26MoveStartWallNs)*1e-9;
             gV26MoveDurationsSec[leg]=move_sec;

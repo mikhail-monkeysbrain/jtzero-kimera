@@ -72,4 +72,13 @@ if [ -z "$CAMERA" ]; then
   exit 2
 fi
 
-exec "$BIN" "$PARAMS" "$CAMERA" "$@"
+# Pass the resolved /dev/videoN node to the C++ process.
+# This avoids a late udev symlink-resolution failure between discovery and open().
+CAMERA_REAL="$(readlink -f "$CAMERA" 2>/dev/null || true)"
+if [ -z "$CAMERA_REAL" ] || [ ! -e "$CAMERA_REAL" ]; then
+  echo "ERROR: OV9281 resolved node is missing: $CAMERA -> $CAMERA_REAL" >&2
+  exit 2
+fi
+echo "[AUTO-CAM] launching with resolved node $CAMERA_REAL"
+
+exec "$BIN" "$PARAMS" "$CAMERA_REAL" "$@"

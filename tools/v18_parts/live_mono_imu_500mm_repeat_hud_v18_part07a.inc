@@ -32,6 +32,11 @@ int main(int argc,char**argv){
   gV23BFirst=(argc>3 && std::string(argv[3])=="B_FIRST");
   #endif
 #endif
+  gV26ControlledAb4=(argc>3 && std::string(argv[3])=="CONTROLLED_AB4");
+  if(gV26ControlledAb4){
+    gV25BFirst=false;
+    std::cout<<"[MODE] CONTROLLED_AB4: four measured A->B passes; B->A returns are unmeasured; pass 1 defines duration reference\n";
+  }
   std::cout<<"[CAM] device="<<camera_device<<"\n";
   cv::namedWindow(kV8WindowName, cv::WINDOW_NORMAL);
   cv::setWindowProperty(kV8WindowName, cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);

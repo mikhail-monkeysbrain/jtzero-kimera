@@ -2264,3 +2264,48 @@ Still unresolved:
 The next high-value test is not another generic 500-mm VIO run. It should compare IMU0 and IMU1 simultaneously across the same A->B->A translation while logging HIGHRES_IMU.id, using existing geometry and no new markers. If BOTH IMUs show the same A/B gravity-vector shift, the effect is common to the FC/body-frame processing or real rigid motion. If only IMU0 shifts, the issue is IMU0-specific.
 
 **Статус:** IMU switching and inter-IMU fixed bias mismatch strongly downgraded; A/B common-mode behavior is next discriminator.
+
+
+## 2026-09-08 — подготовлен dual-IMU A-B-A test v39
+
+После v38 статическая проверка показала:
+- HIGHRES_IMU стабильно использует id=0;
+- IMU0 и IMU1 почти совпадают по stationary gravity direction;
+- переключение IMU в статике не подтверждено.
+
+Следующий discriminator — сравнить оба физических IMU на одном и том же A->B->A перемещении.
+
+**Обязательный YAW:** примерно -90°.
+
+Добавлено:
+- `tools/live_dual_imu_translation_v39.cpp`;
+- `tools/run_dual_imu_translation_v39.sh`;
+- `tools/analyze_dual_imu_translation_v39.py`.
+
+Логируются одновременно:
+- HIGHRES_IMU + MAVLink `id`;
+- SCALED_IMU (IMU0);
+- SCALED_IMU2 (IMU1);
+- SCALED_IMU3 (контроль наличия);
+- ATTITUDE.
+
+Протокол:
+- A: покой >=3 с;
+- A->B: ровно 500 мм;
+- B: покой >=3 с;
+- B->A: ровно 500 мм;
+- A: покой >=3 с.
+
+Новые метки/ArUco не нужны. Видео не обязательно для этого discriminator.
+
+Decision:
+- оба IMU дают близкий A/B gravity-vector shift => common-mode effect;
+- только IMU0/HIGHRES даёт shift => IMU0-specific chain;
+- HIGHRES id меняется => обнаружен instance-switch mechanism.
+
+Коммиты:
+- `068d78f` — logger v39;
+- `0a3c92a` — runner v39;
+- `9f4f180` — analyzer v39.
+
+**Статус:** ГОТОВО К ОДНОМУ DUAL-IMU A-B-A TEST.

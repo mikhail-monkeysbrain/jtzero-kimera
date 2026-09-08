@@ -60,4 +60,16 @@ fi
 export JTZERO_STAGED_ZUPT="${JTZERO_STAGED_ZUPT:-1}"
 export LD_LIBRARY_PATH="$KIMERA_BUILD:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
+# The UVC node can be renumbered while Kimera/FC startup is in progress.
+# Pass the persistent by-id name when available, but verify it immediately
+# before exec and fall back to a fresh discovery if udev has changed it.
+if ! v4l2-ctl -d "$CAMERA" --list-formats-ext >/dev/null 2>&1; then
+  echo "[AUTO-CAM] camera node changed before launch; rediscovering..."
+  CAMERA="$(find_camera || true)"
+fi
+if [ -z "$CAMERA" ]; then
+  echo "ERROR: Arducam OV9281 disappeared before launch." >&2
+  exit 2
+fi
+
 exec "$BIN" "$PARAMS" "$CAMERA" "$@"

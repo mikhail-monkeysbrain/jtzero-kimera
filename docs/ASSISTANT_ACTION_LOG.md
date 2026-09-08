@@ -2717,3 +2717,50 @@ Next discriminator should compare settled windows BEFORE vs AFTER physical motio
 **Physical test:** none.
 **Yaw:** archived runs ≈ -90°.
 **Статус:** DIRECTIONAL Z IS MOTION-INDUCED AND PERSISTS AFTER DETECTED HORIZONTAL DYNAMICS IN 3 USABLE RUNS; next isolate stationary AFTER state.
+
+
+## 2026-09-08 — stationary BEFORE/AFTER: new settled attitude is real, not filter memory
+
+User ran `analyze_v25_stationary_before_after.py` on the isolated reset runs (archived yaw ≈ -90°).
+
+Usable AFTER windows exist for 3/4 runs; A->B #1 has no usable AFTER window because detected dynamics reach END.
+
+Results:
+
+B->A #1:
+- gravity-vector angle BEFORE->AFTER = 2.5378°;
+- accel dRoll = +2.5366°;
+- FC dRoll = +2.5653°;
+- AFTER gyro norm = 0.000971 rad/s;
+- dResidual = +0.04322 m/s².
+
+A->B #2:
+- gravity-vector angle = 2.5556°;
+- accel dRoll = -2.5548°;
+- FC dRoll = -2.7417°;
+- AFTER gyro norm = 0.000999 rad/s;
+- dResidual = -0.02060 m/s².
+
+B->A #2:
+- gravity-vector angle = 2.3265°;
+- accel dRoll = +2.3019°;
+- FC dRoll = +2.5065°;
+- AFTER gyro norm = 0.000916 rad/s;
+- dResidual = +0.04710 m/s².
+
+### Conclusion
+The AFTER windows are genuinely near-stationary in gyro rate, yet both accelerometer gravity direction and FC roll remain shifted by ~2.3..2.6°. Therefore the rig/FC assembly reaches a new stationary physical attitude after translation. A pure transient/filter-memory explanation is strongly downgraded.
+
+Direction consistency remains:
+- B->A: stationary dResidual positive in 2/2 usable runs;
+- A->B: stationary dResidual negative in the one usable AFTER run.
+
+Methodological note: the `residual` printed by this analyzer is the absolute Y/Z world-Z sum, not the baseline-subtracted residual used by some earlier analyzers. Do not interpret its absolute BEFORE value as an error from zero. The meaningful quantity here is AFTER-BEFORE `dResidual`.
+
+This still does NOT mean the ~2.5° physical roll itself is the main integrated Z-error mechanism; the earlier frozen-attitude counterfactual showed it is not. The remaining issue is the small mismatch in how the changed stationary Y/Z gravity components cancel when transformed to world Z.
+
+Next discriminator: solve, at each stationary BEFORE and AFTER window, the tiny effective roll correction that would make reconstructed world-Z acceleration unchanged/zeroed. Test whether one constant roll correction explains both positions. If yes, fixed calibration/frame misalignment is plausible. If required correction changes with A/B, the error is state/position-dependent and not a single static extrinsic correction.
+
+**Physical test:** none.
+**Yaw:** existing archives ≈ -90°.
+**Статус:** NEW STATIONARY ATTITUDE CONFIRMED; FILTER MEMORY DOWNGRADED; NEXT TEST = CONSTANT-vs-STATE-DEPENDENT EFFECTIVE ROLL CORRECTION.

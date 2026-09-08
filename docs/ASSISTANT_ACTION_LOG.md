@@ -2208,3 +2208,59 @@ The current v37 CSV did not record the HIGHRES_IMU MAVLink extension field `id`,
 Предупреждения MAVLink о packed-member не являются причиной ошибки сборки.
 
 **Следующий тест:** тот же v38, 30 секунд полностью неподвижно. Yaw не менять, стенд не двигать.
+
+
+## 2026-09-08 — результат статического IMU-instance test v38
+
+Получен и проанализирован `jtzero_static_imu_sources_v38.csv` (≈30 с, 2998 строк, стенд неподвижен).
+
+### Источники
+- HIGHRES_IMU valid 100%, `id=0` во всех 2998 строках;
+- SCALED_IMU valid 100%, instance 0;
+- SCALED_IMU2 valid 100%, instance 1;
+- SCALED_IMU3 отсутствует.
+
+Следовательно, в этом статическом тесте HIGHRES_IMU не переключался между двумя физическими IMU; он стабильно соответствовал primary/first-usable instance 0.
+
+### Стационарные средние
+HIGHRES_IMU:
+- ACC FLU ≈ [-0.04563, +1.14251, +9.81808] m/s²;
+- |a| ≈ 9.88444 m/s².
+
+SCALED_IMU (IMU0):
+- ACC FLU ≈ [-0.04206, +1.13744, +9.81322] m/s²;
+- |a| ≈ 9.87901 m/s².
+
+SCALED_IMU2 (IMU1):
+- ACC FLU ≈ [-0.03892, +1.14233, +9.80464] m/s²;
+- |a| ≈ 9.87103 m/s².
+
+Gravity-vector angle:
+- IMU0 vs IMU1 ≈ 0.038°;
+- HIGHRES vs IMU0 ≈ 0.033°;
+- HIGHRES vs IMU1 ≈ 0.039°.
+
+Thus both physical IMUs agree extremely closely on stationary gravity direction at the same pose. The previously observed A/B apparent tilt of ~2.4° is not a fixed disagreement between IMU0 and IMU1.
+
+### HIGHRES relationship
+HIGHRES_IMU is much closer dynamically/statistically to SCALED_IMU (instance 0) than to SCALED_IMU2, consistent with `id=0`.
+
+### ATTITUDE during complete static
+- roll drift ≈ +0.019° over 30 s;
+- pitch drift ≈ +0.010° over 30 s;
+- yaw changes by ~177° despite gyro norms near zero.
+
+Therefore roll/pitch remain stable when the stand is stationary. The large yaw drift is again non-physical and separate from roll/pitch.
+
+### Updated diagnosis
+Strongly downgraded:
+- HIGHRES_IMU instance switching in static;
+- fixed disagreement between the two physical IMUs;
+- spontaneous roll/pitch drift while stationary.
+
+Still unresolved:
+- why HIGHRES/SCALED_IMU gravity direction changes by ~2.4° between A and B in the translation test despite rigid mechanics.
+
+The next high-value test is not another generic 500-mm VIO run. It should compare IMU0 and IMU1 simultaneously across the same A->B->A translation while logging HIGHRES_IMU.id, using existing geometry and no new markers. If BOTH IMUs show the same A/B gravity-vector shift, the effect is common to the FC/body-frame processing or real rigid motion. If only IMU0 shifts, the issue is IMU0-specific.
+
+**Статус:** IMU switching and inter-IMU fixed bias mismatch strongly downgraded; A/B common-mode behavior is next discriminator.

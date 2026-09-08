@@ -2830,3 +2830,37 @@ Commits:
 **Physical test:** none.
 **Yaw:** irrelevant for this read-only parameter dump; do not move the stand.
 **Статус:** POSITION-DEPENDENT ACCEL NORM SHIFT CONFIRMED ON BOTH IMUS; next inspect real calibration parameters before inventing a correction model.
+
+
+## 2026-09-08 — FC accel calibration dump reveals suspicious Y-offset correspondence
+
+User ran v40 read-only FC calibration dump.
+
+Key parameters:
+- IMU0 offsets: X=-0.149449, Y=+0.805226, Z=+0.037333 m/s²;
+- IMU1 offsets: X=-0.177095, Y=+0.780801, Z=+0.085140 m/s²;
+- all accel scale factors for IMU0/IMU1 are exactly 1.0;
+- temperature calibration disabled for both IMUs (`INS_TCAL1_ENABLE=0`, `INS_TCAL2_ENABLE=0`);
+- `AHRS_ORIENTATION=0`;
+- `INS_ACC_BODYFIX=2` means IMU2 is selected as the body-fixed accelerometer for trim calculation; it is not a dynamic correction;
+- accel low-pass cutoff `INS_ACCEL_FILTER=20` Hz.
+
+Important numerical clue from v39 stationary A/B vectors:
+- if X/Z are held fixed, the constant FLU-Y correction required to make stationary |a| equal between A and B is approximately:
+  - IMU0: +0.832 m/s² in magnitude;
+  - IMU1: +0.768 m/s² in magnitude.
+- configured Y offset magnitudes are:
+  - IMU0: 0.805 m/s²;
+  - IMU1: 0.781 m/s².
+
+The correspondence is striking. However, ArduPilot applies accel offsets in sensor frame after the per-sensor orientation transform and before board rotation. Therefore the sign in logged FLU coordinates is not yet proven. Do not edit FC offsets based on this numerical match alone.
+
+Added diagnostic:
+- `tools/analyze_v39_offset_hypothesis.py`
+- commit `96d1aac`.
+
+Next step: run the analyzer on existing v39 CSV. If one sign of the configured Y-offset magnitude collapses the A/B norm difference on both IMUs, inspect the internal sensor-orientation mapping before any recalibration/change.
+
+**Physical test:** none.
+**Yaw:** no physical test; existing v39 was ≈ -90°.
+**Статус:** Y-OFFSET/CALIBRATION PATH IS NOW A HIGH-PRIORITY SUSPECT; no FC parameter changes authorized yet.

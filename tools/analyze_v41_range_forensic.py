@@ -22,12 +22,12 @@ def pick(*names):
         if n in keys: return n
     return None
 
-kc = pick("current_distance","current_distance_cm")
+kc = pick("current_cm","current_distance","current_distance_cm")
 kv = pick("vertical_m","vertical_range_m")
 kr = pick("roll_deg","fc_roll_deg")
 kp = pick("pitch_deg","fc_pitch_deg")
 if not kc:
-    raise SystemExit(f"Не найден current_distance. Колонки: {list(keys)}")
+    raise SystemExit(f"Не найдена колонка дальности current_cm/current_distance. Колонки: {list(keys)}")
 
 curr = [num(r,kc) for r in rows if math.isfinite(num(r,kc))]
 vert = [num(r,kv) for r in rows if kv and math.isfinite(num(r,kv))]
@@ -40,8 +40,8 @@ print("="*92)
 print(f"RUN: {run}")
 print(f"rows={len(rows)}")
 if curr:
-    print(f"current_distance (MAVLink, cm): mean={statistics.mean(curr):.3f} median={statistics.median(curr):.3f} min={min(curr):.3f} max={max(curr):.3f}")
-    print(f"current_distance raw height: mean={statistics.mean(curr)*10:.1f} mm")
+    print(f"{kc} (MAVLink DISTANCE_SENSOR, см): mean={statistics.mean(curr):.3f} median={statistics.median(curr):.3f} min={min(curr):.3f} max={max(curr):.3f}")
+    print(f"сырая дальность TF-Luna: mean={statistics.mean(curr)*10:.1f} мм")
 if vert:
     print(f"vertical_m (после cos(roll)*cos(pitch)): mean={statistics.mean(vert)*1000:.1f} mm median={statistics.median(vert)*1000:.1f} mm min={min(vert)*1000:.1f} max={max(vert)*1000:.1f}")
 if roll:
@@ -67,7 +67,7 @@ if curr:
 
 print()
 print("INTERPRETATION")
-print("1) current_distance — значение DISTANCE_SENSOR, уже пришедшее от FC; V41 его не калибрует до записи.")
+print("1) current_cm — сырая дальность TF-Luna из MAVLink DISTANCE_SENSOR (сообщения дальномера от FC, полётного контроллера).")
 print("2) vertical_m отличается только на cos(roll)*cos(pitch); при малых углах это доли миллиметра.")
-print("3) Если current_distance уже ~160 мм при физической высоте ~185-190 мм, источник расхождения находится ДО V41:")
+print("3) Если current_cm уже ~160 мм при физической высоте ~185-190 мм, источник расхождения находится ДО V41:")
 print("   TF-Luna / настройки rangefinder FC / геометрия измерения, а не camera_height_offset V41.")

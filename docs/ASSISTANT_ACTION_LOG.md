@@ -1861,3 +1861,33 @@ This turns leg state inheritance from an observational association into an inter
 - One physical session is sufficient for the first intervention. A reverse-order confirmation is only needed if the result is ambiguous.
 
 **Статус:** ГОТОВ К CAUSAL TEST — observational archive analysis is exhausted enough to justify one controlled physical intervention.
+
+
+## 2026-09-08 — isolated fresh-process V25 result: inheritance is not the primary Z cause
+
+Physical causal test completed at **DRONE/STAND YAW ≈ -90°** with a fresh VIO process before every 500-mm leg.
+
+Sequence and archived results:
+- RESET_L1 A->B: horizontal 503.66 mm, scale 1.0073, dz -59.54 mm;
+- RESET_L2 B->A: horizontal 540.20 mm, scale 1.0804, dz +254.42 mm;
+- RESET_L3 A->B: horizontal 512.22 mm, scale 1.0244, dz -53.18 mm;
+- RESET_L4 B->A: horizontal 534.15 mm, scale 1.0683, dz +166.33 mm.
+
+Each leg passed the pipeline and was archived separately. Measurement FAIL reflects acceptance thresholds, not loss of the causal dataset.
+
+**Causal conclusion:** breaking estimator-state inheritance between legs does not remove the direction-dependent Z sign. A->B remains consistently negative in Z and B->A consistently positive, despite complete process reinitialization. Therefore inter-leg state inheritance is not the primary cause of the Z asymmetry.
+
+Horizontal scale variability improved relative to the strongest continuous-run outliers, so inheritance may amplify horizontal run/order variability, but a residual direction-dependent horizontal scale difference remains.
+
+**Next analysis, no physical test:** apply existing archive-compatible diagnostics to the four fresh-process archives:
+- raw-profile cross-run matching;
+- frontend quality cross-run;
+- normalized mono frontend pose per archive;
+- first-bad-state timeline;
+- PIM-vs-backend-Z per archive.
+
+Goal: determine whether the persistent direction-dependent Z is already present in inertial PIM prediction, appears in visual frontend direction, or is created/amplified by backend correction within each fresh process.
+
+**Physical test yaw:** none — analysis only. Recorded archives are at ≈ -90°.
+
+**Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — state inheritance causally downgraded; persistent within-process direction-dependent Z is now the primary target.

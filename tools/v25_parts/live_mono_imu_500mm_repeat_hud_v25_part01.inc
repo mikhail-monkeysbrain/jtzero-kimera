@@ -46,9 +46,9 @@ bool gV25BFirst = false;
 // Returns B->A happen while WAIT_START and are intentionally not measured.
 bool gV26ControlledAb4 = false;
 int64_t gV26MoveStartWallNs = 0;
-constexpr double kV26TargetMoveSec = 7.5;
-constexpr double kV26DurationToleranceSec = 1.0;  // accepted window 6.5..8.5 s
-double gV26ReferenceMoveSec = kV26TargetMoveSec;
+double gV26TargetMoveSec = 7.5;
+double gV26DurationToleranceSec = 1.0;
+double gV26ReferenceMoveSec = 7.5;
 std::array<double,4> gV26MoveDurationsSec{{0.0,0.0,0.0,0.0}};
 
 constexpr double kStartupStaticSec = 3.0;

@@ -42,6 +42,72 @@ constexpr double kV25MaxStartBackendAgeMs = 300.0;
 constexpr int64_t kV25FatalLoopStallNs = 500000000LL;
 bool gV25BFirst = false;
 
+#ifdef JTZERO_V41_METRIC_CAMERA
+struct V41MetricCamera {
+  cv::Mat prev;
+  double net_x_m=0.0, net_y_m=0.0, path_m=0.0;
+  double last_step_m=0.0;
+  int good_updates=0, rejected_updates=0;
+  bool armed=false;
+  double vertical_range_m=0.0;
+  bool range_valid=false;
+  double camera_height_offset_m=-0.020; // camera is 20 mm closer to ground than TF-Luna in JT-Zero rig.
+  static constexpr double fx=568.53170752165227;
+  static constexpr double fy=569.68005562865858;
+  static constexpr double cx=315.98271077441063;
+  static constexpr double cy=239.88148589100641;
+
+  void reset(){
+    prev.release(); net_x_m=net_y_m=path_m=last_step_m=0.0;
+    good_updates=rejected_updates=0; armed=true;
+  }
+  void stop(){ armed=false; }
+  double cameraHeight() const {
+    return range_valid ? std::max(0.05, vertical_range_m + camera_height_offset_m) : 0.0;
+  }
+  double net() const { return std::hypot(net_x_m,net_y_m); }
+
+  void update(const cv::Mat& gray){
+    if(!armed || gray.empty() || !range_valid){ prev=gray.clone(); return; }
+    if(prev.empty()){ prev=gray.clone(); return; }
+
+    std::vector<cv::Point2f> p0;
+    cv::goodFeaturesToTrack(prev,p0,350,0.01,7.0,cv::Mat(),7,false,0.04);
+    if(p0.size()<40){ ++rejected_updates; prev=gray.clone(); return; }
+
+    std::vector<cv::Point2f> p1; std::vector<unsigned char> st; std::vector<float> err;
+    cv::calcOpticalFlowPyrLK(prev,gray,p0,p1,st,err,cv::Size(21,21),3);
+    std::vector<cv::Point2f> a,b;
+    a.reserve(p0.size()); b.reserve(p0.size());
+    for(size_t i=0;i<p0.size();++i){
+      if(!st[i] || err[i]>30.0f) continue;
+      const float dx=p1[i].x-p0[i].x, dy=p1[i].y-p0[i].y;
+      if(std::hypot(dx,dy)>80.0f) continue;
+      a.emplace_back(p0[i].x-static_cast<float>(cx),p0[i].y-static_cast<float>(cy));
+      b.emplace_back(p1[i].x-static_cast<float>(cx),p1[i].y-static_cast<float>(cy));
+    }
+    if(a.size()<30){ ++rejected_updates; prev=gray.clone(); return; }
+
+    cv::Mat inliers;
+    cv::Mat A=cv::estimateAffinePartial2D(a,b,inliers,cv::RANSAC,2.0,2000,0.99,10);
+    int nin=0; if(!inliers.empty()) nin=cv::countNonZero(inliers);
+    if(A.empty() || nin<20){ ++rejected_updates; prev=gray.clone(); return; }
+
+    const double tx=A.at<double>(0,2), ty=A.at<double>(1,2);
+    const double h=cameraHeight();
+    // Ground translation is opposite to image motion. Magnitude is independent of camera/body axis naming.
+    const double dx_m=-tx*h/fx;
+    const double dy_m=-ty*h/fy;
+    const double step=std::hypot(dx_m,dy_m);
+    // Reject impossible one-frame jumps (>30 mm at ~30 fps).
+    if(!std::isfinite(step) || step>0.030){ ++rejected_updates; prev=gray.clone(); return; }
+    net_x_m+=dx_m; net_y_m+=dy_m; path_m+=step; last_step_m=step; ++good_updates;
+    prev=gray.clone();
+  }
+};
+V41MetricCamera gV41Cam;
+#endif
+
 // Controlled repeatability mode: four measured A->B passes.
 // Returns B->A happen while WAIT_START and are intentionally not measured.
 bool gV26ControlledAb4 = false;

@@ -2309,3 +2309,73 @@ Decision:
 - `9f4f180` — analyzer v39.
 
 **Статус:** ГОТОВО К ОДНОМУ DUAL-IMU A-B-A TEST.
+
+
+## 2026-09-08 — v39: A/B gravity-vector shift is common-mode across both physical IMUs
+
+Получен и проанализирован `jtzero_dual_imu_translation_v39.csv` (5208 строк).
+
+### HIGHRES instance
+- HIGHRES_IMU.id = 0 на протяжении всего теста;
+- переключений id не обнаружено;
+- SCALED_IMU = IMU0;
+- SCALED_IMU2 = IMU1;
+- SCALED_IMU3 отсутствует.
+
+### Stationary gravity vectors
+Central stationary windows:
+
+A_START:
+- HIGHRES ≈ [-0.05457, +1.15299, +9.82131] m/s²;
+- IMU0 ≈ [-0.05111, +1.14946, +9.81546];
+- IMU1 ≈ [-0.04862, +1.15349, +9.80274].
+
+B:
+- HIGHRES ≈ [-0.08310, +0.72307, +9.82402];
+- IMU0 ≈ [-0.08134, +0.71791, +9.81974];
+- IMU1 ≈ [-0.07430, +0.71985, +9.81004].
+
+A_END:
+- HIGHRES ≈ [-0.03401, +1.14137, +9.82144];
+- IMU0 ≈ [-0.03221, +1.13769, +9.81703];
+- IMU1 ≈ [-0.02916, +1.14390, +9.80731].
+
+Gravity-vector angle changes:
+- A->B: HIGHRES 2.492°, IMU0 2.504°, IMU1 2.519°;
+- B->A: HIGHRES 2.436°, IMU0 2.446°, IMU1 2.470°;
+- A closure: HIGHRES 0.137°, IMU0 0.129°, IMU1 0.127°.
+
+Inter-IMU angle disagreement remains tiny:
+- A_START ≈ 0.035°;
+- B ≈ 0.043°;
+- A_END ≈ 0.046°.
+
+### Accel-derived tilt
+All three streams show the same dominant roll-like change:
+- A_START roll-like tilt ≈ 6.68..6.71°;
+- B ≈ 4.18..4.21°;
+- A_END ≈ 6.61..6.65°.
+
+FC ATTITUDE also changes in the same sense:
+- A->B dRP ≈ [-2.10°, +0.86°], |dTilt| ≈ 2.27°;
+- B->A dRP ≈ [+1.92°, -1.27°], |dTilt| ≈ 2.30°;
+- A closure ≈ 0.45°.
+
+### Conclusion
+Strongly rejected:
+- HIGHRES_IMU instance switching;
+- IMU0-only defect;
+- fixed angular disagreement between IMU0 and IMU1.
+
+The A/B effect is common-mode across both physical accelerometers and is reversible with translation position.
+
+Because SCALED_IMU and SCALED_IMU2 are both ArduPilot INS frontend outputs with fixed board/sensor transforms, a repeatable common-mode change of ~0.43 m/s² in body-Y between stationary A and B cannot be explained by choosing a different IMU. Remaining classes are:
+1. actual common physical specific-force/orientation change of the whole FC board/body;
+2. a common processing effect upstream/shared by both ArduPilot frontend outputs;
+3. analysis/reference geometry mismatch about what is truly stationary/level at A and B.
+
+Given the user's mechanical constraint that FC is rigidly bolted and the upper platform cannot rotate by degrees, do not claim whole-rig tilt from IMU alone. Reconcile against rigid structural features in the existing video before assigning a mechanical cause.
+
+**Physical test yaw:** v39 performed at ≈ -90°.
+
+**Статус:** IMU switching and single-sensor fault excluded; effect is common-mode and position-dependent.

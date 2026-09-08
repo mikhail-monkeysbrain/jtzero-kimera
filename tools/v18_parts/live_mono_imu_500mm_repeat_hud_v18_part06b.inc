@@ -7,7 +7,14 @@
   video.copyTo(canvas(cv::Rect(0,45,900,675)));
 
   ru(canvas,gV26ControlledAb4?"JT-ZERO — CONTROL 4× A→B":"JT-ZERO — 500 мм × 4 — V25",{24,32},23,{245,245,245},cv::QT_FONT_BOLD);
-  ru(canvas,gV26ControlledAb4?"4 одинаковых A→B • цель 7.5 с • окно 6.5..8.5 с • B→A не измеряется":"12s warm-up • stabilized endpoints • TF-Luna • mono frontend",{430,30},14,{190,190,190});
+  if(gV26ControlledAb4){
+    char hb[256];
+    std::snprintf(hb,sizeof(hb),"4 одинаковых A→B • цель %.1f с • окно %.1f..%.1f с • B→A не измеряется",
+                  gV26TargetMoveSec,gV26TargetMoveSec-gV26DurationToleranceSec,gV26TargetMoveSec+gV26DurationToleranceSec);
+    ru(canvas,hb,{430,30},14,{190,190,190});
+  }else{
+    ru(canvas,"12s warm-up • stabilized endpoints • TF-Luna • mono frontend",{430,30},14,{190,190,190});
+  }
   char b[256];
   std::snprintf(b,sizeof(b),"ПРОХОД %d / %d",std::min(leg+1,kLegCount),kLegCount);
   ru(panel,b,{18,42},22,{245,245,245},cv::QT_FONT_BOLD);
@@ -58,10 +65,10 @@ if(gV26ControlledAb4){
 
   if(gV26ControlledAb4 && phase==CapturePhase::MOVING && gV26MoveStartWallNs>0){
     const double elapsed=std::max(0.0,(now_ns-gV26MoveStartWallNs)*1e-9);
-    const double ref=kV26TargetMoveSec;
-    const double lo=ref-kV26DurationToleranceSec;
-    const double hi=ref+kV26DurationToleranceSec;
-    const double scale_sec=10.0;
+    const double ref=gV26TargetMoveSec;
+    const double lo=ref-gV26DurationToleranceSec;
+    const double hi=ref+gV26DurationToleranceSec;
+    const double scale_sec=std::max(7.0,ref+2.5);
     const int x0=55,y0=655,w=790,h=24;
 
     cv::rectangle(canvas,{x0,y0,w,h},cv::Scalar(35,35,35),-1);
@@ -70,26 +77,27 @@ if(gV26ControlledAb4){
     cv::rectangle(canvas,{gx,y0,gw,h},cv::Scalar(45,125,45),-1);
     cv::rectangle(canvas,{x0,y0,w,h},cv::Scalar(230,230,230),1);
 
-    // Time ticks: 0, 1.5, 3.0, 3.75(mid), 4.5, 6.0, 7.5, 8.5, 10 s.
-    const double ticks[]={0.0,1.5,3.0,3.75,4.5,6.0,7.5,8.5,10.0};
-    for(double t:ticks){
+    for(int i=0;i<=5;++i){
+      const double t=ref*i/5.0;
       const int tx=x0+static_cast<int>(w*(t/scale_sec));
-      const bool major=std::abs(t-3.75)<1e-6 || std::abs(t-7.5)<1e-6;
-      cv::line(canvas,{tx,y0-(major?8:4)},{tx,y0+h+(major?8:4)},
-               major?cv::Scalar(255,255,255):cv::Scalar(150,150,150),major?2:1);
+      cv::line(canvas,{tx,y0-4},{tx,y0+h+4},cv::Scalar(150,150,150),1);
     }
-
     const int midx=x0+static_cast<int>(w*((ref*0.5)/scale_sec));
-    ru(canvas,"СЕРЕДИНА ~3.75 с",{midx-75,y0-14},13,{235,235,235},cv::QT_FONT_BOLD);
+    cv::line(canvas,{midx,y0-8},{midx,y0+h+8},cv::Scalar(255,255,255),2);
+    char mb[64]; std::snprintf(mb,sizeof(mb),"СЕРЕДИНА ~%.2f с",ref*0.5);
+    ru(canvas,mb,{midx-75,y0-14},13,{235,235,235},cv::QT_FONT_BOLD);
 
     const int targetx=x0+static_cast<int>(w*(ref/scale_sec));
-    ru(canvas,"B / SPACE ~7.5 с",{targetx-85,y0-14},13,{235,235,235},cv::QT_FONT_BOLD);
+    cv::line(canvas,{targetx,y0-8},{targetx,y0+h+8},cv::Scalar(255,255,255),2);
+    char gb[64]; std::snprintf(gb,sizeof(gb),"B / SPACE ~%.2f с",ref);
+    ru(canvas,gb,{targetx-85,y0-14},13,{235,235,235},cv::QT_FONT_BOLD);
 
     const int px=x0+static_cast<int>(w*std::min(1.0,elapsed/scale_sec));
     cv::circle(canvas,{px,y0+h/2},8,cv::Scalar(0,230,255),-1);
 
     char tb[256];
-    std::snprintf(tb,sizeof(tb),"ВРЕМЯ %.2f с   ЦЕЛЬ 7.50 с   ДОПУСК 6.50..8.50 с",elapsed);
+    std::snprintf(tb,sizeof(tb),"ВРЕМЯ %.2f с   ЦЕЛЬ %.2f с   ДОПУСК %.2f..%.2f с",
+                  elapsed,ref,lo,hi);
     ru(canvas,tb,{55,642},16,{255,255,255},cv::QT_FONT_BOLD);
 
     const char* pace_text=nullptr;

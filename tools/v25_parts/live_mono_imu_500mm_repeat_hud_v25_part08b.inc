@@ -174,9 +174,12 @@
     saveCsvV8(rows);
     saveBackendTraceV8(states,rows,"/home/vio/jtzero_500mm_v25_backend.csv");
     if(imu_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);imu_req=false;}if(att_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);att_req=false;}requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,0);if(streaming){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(camera_fd,VIDIOC_STREAMOFF,&t);streaming=false;}for(auto&bf:buffers)if(bf.start&&bf.start!=MAP_FAILED)munmap(bf.start,bf.length);if(camera_fd!=-1)close(camera_fd);if(serial_fd!=-1)close(serial_fd);
-    if(gV26ControlledAb4) std::cout<<"V26 MODE: CONTROLLED_AB4 — four A->B passes, target "<<gV26TargetMoveSec
-      <<" s, accepted window "<<(gV26TargetMoveSec-gV26DurationToleranceSec)<<".."
-      <<(gV26TargetMoveSec+gV26DurationToleranceSec)<<" s\n"; else std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
+    if(gV26ControlledAb4){
+      std::cout<<"V26 MODE: CONTROLLED_AB4 — "<<kLegCount<<" measured A->B pass"
+               <<(kLegCount==1?"":"es")<<", target "<<gV26TargetMoveSec
+               <<" s, accepted window "<<(gV26TargetMoveSec-gV26DurationToleranceSec)<<".."
+               <<(gV26TargetMoveSec+gV26DurationToleranceSec)<<" s\n";
+    } else std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
     printSummaryV8(rows,raw,rejected,selected,decoded,imu_rx,imu_fed,att_rx,sync.size(),mapping,states.size());
     raw_combined.flush();raw_camera.flush();raw_mjpg.flush();raw_attitude.flush();raw_range.flush();
     std::cout<<"RAW IMU CSV: "<<kV11CombinedPath<<" rows="<<raw_imu_rows<<"\n"

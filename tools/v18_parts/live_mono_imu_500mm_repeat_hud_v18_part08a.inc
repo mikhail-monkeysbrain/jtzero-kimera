@@ -12,6 +12,10 @@
             const double rr=fc.valid?fc.roll_deg*kPi/180.0:0.0;
             const double pp=fc.valid?fc.pitch_deg*kPi/180.0:0.0;
             const double vertical_m=r_m*std::cos(rr)*std::cos(pp);
+#ifdef JTZERO_V41_METRIC_CAMERA
+            gV41Cam.vertical_range_m=vertical_m;
+            gV41Cam.range_valid=std::isfinite(vertical_m) && vertical_m>0.05 && vertical_m<5.0;
+#endif
             raw_range<<recv<<','<<d.time_boot_ms<<','<<d.min_distance<<','<<d.max_distance<<','<<d.current_distance<<','
                      <<static_cast<int>(d.type)<<','<<static_cast<int>(d.id)<<','<<static_cast<int>(d.orientation)<<','
                      <<static_cast<int>(d.covariance)<<','<<d.horizontal_fov<<','<<d.vertical_fov<<','
@@ -36,4 +40,8 @@
         if(vio_feed_enabled){
           raw_camera<<b.sequence<<','<<raw_ts_ns<<','<<corrected<<','<<(mapping.valid?1:0)<<','<<((ok&&due&&mapping.valid)?1:0)<<','<<this_offset<<','<<b.bytesused<<'\n';
         }
-        if(ok&&due&&mapping.valid&&vio_feed_enabled){std::vector<unsigned char>jpg(b.bytesused);std::memcpy(jpg.data(),buffers[b.index].start,b.bytesused);cv::Mat g=cv::imdecode(jpg,cv::IMREAD_GRAYSCALE);if(!g.empty()){++decoded;gray=g;pipeline->fillLeftFrameQueue(std::make_unique<VIO::Frame>(fid++,corrected,vp.camera_params_.at(0),g.clone()));last_sel=corrected;++selected;}}if(xioctl(camera_fd,VIDIOC_QBUF,&b)==-1)fail("QBUF");}}
+        if(ok&&due&&mapping.valid&&vio_feed_enabled){std::vector<unsigned char>jpg(b.bytesused);std::memcpy(jpg.data(),buffers[b.index].start,b.bytesused);cv::Mat g=cv::imdecode(jpg,cv::IMREAD_GRAYSCALE);if(!g.empty()){++decoded;gray=g;
+#ifdef JTZERO_V41_METRIC_CAMERA
+          gV41Cam.update(g);
+#endif
+          pipeline->fillLeftFrameQueue(std::make_unique<VIO::Frame>(fid++,corrected,vp.camera_params_.at(0),g.clone()));last_sel=corrected;++selected;}}if(xioctl(camera_fd,VIDIOC_QBUF,&b)==-1)fail("QBUF");}}

@@ -106,6 +106,10 @@ struct V41MetricCamera {
   }
 };
 V41MetricCamera gV41Cam;
+static std::atomic<bool> gV41MouseSpace{false};
+static void v41MouseCallback(int event,int,int,int,void*){
+  if(event==cv::EVENT_LBUTTONDOWN) gV41MouseSpace.store(true);
+}
 #endif
 
 // Controlled repeatability mode: four measured A->B passes.

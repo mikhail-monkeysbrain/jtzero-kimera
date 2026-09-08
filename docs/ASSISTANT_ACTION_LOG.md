@@ -2411,3 +2411,37 @@ This resolves an earlier ambiguity:
 **No new test yet.** Next step is to re-examine the existing side video using lower ring/base, both legs, and upper rigid geometry together, specifically looking for whole-rig rotation/rocking rather than cross-only angle.
 
 **Статус:** REAL RIGID-BODY ROTATION STRONGLY SUPPORTED BY TWO INDEPENDENT GYROS.
+
+
+## 2026-09-08 — v39 gyro predicts accelerometer gravity endpoint
+
+No new physical test. Additional consistency analysis on existing v39 CSV.
+
+For each physical IMU separately:
+- stationary gyro bias was estimated from A-start;
+- body-rate gyro was integrated over A->B;
+- the measured A gravity vector was rotated by the integrated gyro orientation;
+- that predicted B gravity vector was compared with the actual stationary B accelerometer vector.
+
+Results:
+- IMU0:
+  - gyro rotation magnitude ≈ 2.513°;
+  - actual A->B gravity angle ≈ 2.504°;
+  - gyro-predicted gravity change ≈ 2.452°;
+  - predicted-vs-measured B gravity residual ≈ 0.055°.
+- IMU1:
+  - gyro rotation magnitude ≈ 2.485°;
+  - actual A->B gravity angle ≈ 2.519°;
+  - gyro-predicted gravity change ≈ 2.427°;
+  - predicted-vs-measured B gravity residual ≈ 0.106°.
+
+**Conclusion:** on each independent IMU, integrated gyro motion predicts the endpoint accelerometer gravity direction to ~0.1° or better. This is a strong internal inertial-consistency proof that the shared FC/IMU rigid frame rotates relative to gravity during A->B. The effect is not explained by HIGHRES instance switching, a single sensor bias, or FC/Kimera attitude estimation.
+
+Given the user's mechanical statement that FC is rigidly bolted to the upper platform and there is essentially no FC-vs-platform angular freedom, the rotation must belong to the larger rigid assembly containing the FC unless the mechanical premise/reference is wrong. Do not reintroduce local FC flex without direct evidence.
+
+This still does not identify where the larger assembly gains ~2.5° relative to gravity (base rocking, contact geometry, support deformation, table/surface geometry, etc.). Existing side video should be used only as a secondary geometric check because perspective/lens distortion previously made cross-only angle estimates unreliable.
+
+**Added:** `tools/analyze_v39_gyro_gravity_consistency.py`.
+**Commit:** `a3b72ff`.
+
+**Статус:** INERTIAL CONSISTENCY CLOSED — real shared-frame rotation relative to gravity is strongly supported; remaining problem is mechanical localization, not estimator origin.

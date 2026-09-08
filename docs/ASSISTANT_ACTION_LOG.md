@@ -2798,3 +2798,35 @@ Commit: `16db13b`.
 **Physical test:** none.
 **Yaw:** existing v39 ≈ -90°.
 **Статус:** FIXED ROLL CORRECTION REJECTED; POSITION/ORIENTATION-DEPENDENT ACCELEROMETER MAGNITUDE ERROR IS NOW THE STRONGEST CLUE.
+
+
+## 2026-09-08 — next step: inspect actual FC accelerometer calibration parameters
+
+v39 confirmed a reversible stationary acceleration-magnitude shift between A and B on both physical IMUs:
+- HIGHRES: -0.03796 m/s² A->B, +0.03665 B->A, A closure -0.00131;
+- IMU0: -0.03638, +0.03650, closure +0.00012;
+- IMU1: -0.03380, +0.03714, closure +0.00334.
+
+This makes a pure attitude-only explanation insufficient, because rotation preserves vector magnitude.
+
+Before fitting speculative scale/non-orthogonality models, inspect the actual ArduPilot accelerometer calibration configuration first.
+
+Added read-only tools:
+- `tools/dump_fc_accel_calibration_v40.cpp`;
+- `tools/run_dump_fc_accel_calibration_v40.sh`.
+
+The dump includes:
+- `INS_ACC*` calibration parameters (offsets/scales/IDs and related accel params);
+- `INS_TCAL*` temperature-calibration parameters;
+- IMU enable/ID mapping;
+- `AHRS_ORIENTATION`.
+
+No FC parameter is modified.
+
+Commits:
+- `f2f8e11`;
+- `5dcab0a`.
+
+**Physical test:** none.
+**Yaw:** irrelevant for this read-only parameter dump; do not move the stand.
+**Статус:** POSITION-DEPENDENT ACCEL NORM SHIFT CONFIRMED ON BOTH IMUS; next inspect real calibration parameters before inventing a correction model.

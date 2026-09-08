@@ -43,7 +43,13 @@ int main(int argc,char**argv){
   gV26ControlledAb4=(argc>3 && std::string(argv[3])=="CONTROLLED_AB4");
   if(gV26ControlledAb4){
     gV25BFirst=false;
-    std::cout<<"[MODE] CONTROLLED_AB4: four measured A->B passes; B->A returns are unmeasured; fixed target 7.5 s; accepted 6.5..8.5 s\n";
+    if(const char* e=std::getenv("JTZERO_V26_TARGET_SEC")) gV26TargetMoveSec=std::max(0.5,std::atof(e));
+    if(const char* e=std::getenv("JTZERO_V26_TOLERANCE_SEC")) gV26DurationToleranceSec=std::max(0.1,std::atof(e));
+    gV26ReferenceMoveSec=gV26TargetMoveSec;
+    std::cout<<"[MODE] CONTROLLED_AB4: four measured A->B passes; B->A returns are unmeasured; target "
+             <<gV26TargetMoveSec<<" s; accepted "
+             <<(gV26TargetMoveSec-gV26DurationToleranceSec)<<".."
+             <<(gV26TargetMoveSec+gV26DurationToleranceSec)<<" s\n";
   }
   std::cout<<"[CAM] device="<<camera_device<<"\n";
   cv::namedWindow(kV8WindowName, cv::WINDOW_NORMAL);

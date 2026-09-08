@@ -2501,3 +2501,42 @@ The correct existing-video observables for roll are perspective/depth-sensitive:
 
 **No new physical test yet.**
 **Статус:** apparent video-vs-IMU contradiction is largely resolved geometrically; existing side video was poorly conditioned for measuring body-X roll directly.
+
+
+## 2026-09-08 — attitude-evolution counterfactual: ~2.5° roll is NOT the main Z-error mechanism
+
+User ran `analyze_v25_attitude_evolution_z_counterfactual.py` on the four isolated fresh-process -90° runs.
+
+Results:
+- RESET L1 A->B, backend dz=-59.5 mm:
+  - ACTUAL FC attitude Pz=-209.6 mm;
+  - FROZEN start attitude Pz=-236.7 mm;
+  - ACTUAL-FROZEN = +27.0 mm.
+- RESET L2 B->A, backend dz=+254.4 mm:
+  - ACTUAL +690.0 mm;
+  - FROZEN +686.4 mm;
+  - difference +3.6 mm.
+- RESET L3 A->B, backend dz=-53.2 mm:
+  - ACTUAL -71.1 mm;
+  - FROZEN -74.7 mm;
+  - difference +3.6 mm.
+- RESET L4 B->A, backend dz=+166.3 mm:
+  - ACTUAL +276.4 mm;
+  - FROZEN +282.4 mm;
+  - difference -6.0 mm.
+
+### Conclusion
+The time-varying ~2.5° roll/tilt evolution contributes only a small fraction of the large signed world-Z displacement reconstructed from FC IMU data. Freezing attitude at the settled-start orientation leaves the dominant A->B negative / B->A positive Z effect essentially intact.
+
+Therefore:
+- the real dual-IMU-supported roll is not the primary source of the directional Z error;
+- do not attempt to "fix" the problem by removing measured roll;
+- the dominant mechanism is in the accelerometer specific-force signal and its projection into world Z under the approximately fixed non-zero starting attitude/calibration geometry.
+
+A likely next discriminator is to decompose reconstructed world-Z acceleration into body-axis contributions:
+  world_z = R31*ax + R32*ay + R33*az - g
+and quantify, for each leg, how much signed Z comes from body-X, body-Y and body-Z acceleration terms separately. This should reveal whether horizontal translational acceleration is being projected into Z through the several-degree static roll/pitch mounting/attitude.
+
+**Physical test:** none. Existing archives at ≈ -90° only.
+
+**Статус:** REAL ROLL CONFIRMED BUT CAUSALLY DOWNGRADED FOR Z; next target is body-axis acceleration projection.

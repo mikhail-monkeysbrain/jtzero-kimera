@@ -1991,3 +1991,28 @@ The extremely large FC yaw changes remain non-physical because raw gyro did not 
 **Next action:** recover or re-upload the side-view video and quantify the marker/rig angle frame-by-frame against the fixed cross/reference. Compare observed whole-rig angle change to the raw-gravity/FC ~2.5° endpoint rotation. No further estimator parameter changes before resolving this mechanical-reference discrepancy.
 
 **Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — FC roll/pitch change is corroborated by raw gravity; remaining question is whole-rig tilt vs local IMU/FC motion.
+
+
+## 2026-09-08 — three independent inertial observables agree on ~2.5° real IMU-frame rotation
+
+Reassessment after raw-gravity validation:
+
+1. FC ATTITUDE relative roll/pitch change is ~2.4..2.7° with direction-dependent sign.
+2. Stationary raw accelerometer gravity-vector direction changes by ~2.34..2.56°, matching FC tilt with RAW/FC ratio ~0.94..1.03.
+3. Earlier raw-gyro integration on these late -90° runs produced only ~2.3..2.9° total 3-D rigid rotation while disproving the huge 34..55° FC yaw excursion. That magnitude is consistent with the roll/pitch/gravity rotation now observed.
+
+**Updated conclusion:** the ~2.5° orientation change of the FC/IMU sensor frame is supported by both raw accelerometer direction and raw gyro magnitude. A pure FC-attitude-estimator hallucination is therefore strongly downgraded.
+
+The remaining mechanical discriminator is no longer “does the IMU rotate?” — it does. It is:
+- does the entire externally visible rig/platform rotate by the same ~2.5°,
+- or does the FC/IMU assembly rotate/flex locally relative to the rig?
+
+The retained stand/video schematic confirms that the intended external-video protocol was specifically designed to keep both a marker near FC/IMU and the upper stand platform visible, so that local FC/IMU motion could be distinguished from whole-rig motion.
+
+The original side-view MP4 is not currently recoverable from the accessible conversation/library file index. Therefore no new quantitative video-angle claim is made from memory.
+
+**Physical test yaw:** none — no new test yet.
+
+**Next decision:** if the original side-view MP4 can be recovered/re-uploaded, quantify marker angle and platform angle separately. If not, one short repeat external-reference video may eventually be required, but only after checking whether the previously captured video can be restored.
+
+**Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — FC estimator hallucination is strongly downgraded; remaining unresolved branch is whole-rig tilt vs local FC/IMU mechanical motion.

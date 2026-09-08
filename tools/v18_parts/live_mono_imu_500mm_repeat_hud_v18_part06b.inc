@@ -40,6 +40,15 @@ if(gV26ControlledAb4){
     std::snprintf(b,sizeof(b),"P [%.3f  %.3f  %.3f] м",s.px,s.py,s.pz);ru(panel,b,{18,158},15,{220,220,220});
     std::snprintf(b,sizeof(b),"|V| %.1f мм/с   KF %lld",StableCapture::speed(s)*1000.0,(long long)s.keyframe);ru(panel,b,{18,186},14,{190,190,190});
   }
+
+#ifdef JTZERO_V41_METRIC_CAMERA
+  std::snprintf(b,sizeof(b),"CAMERA-ONLY net: %.1f мм",gV41Cam.net()*1000.0);
+  ru(panel,b,{18,205},16,{120,230,255},cv::QT_FONT_BOLD);
+  std::snprintf(b,sizeof(b),"CAM path: %.1f мм  h=%.3f м  upd=%d/%d",
+                gV41Cam.path_m*1000.0,gV41Cam.cameraHeight(),
+                gV41Cam.good_updates,gV41Cam.rejected_updates);
+  ru(panel,b,{18,228},12,{190,190,190});
+#endif
   if(fc.valid){std::snprintf(b,sizeof(b),"FC: R %.2f  P %.2f  Y %.2f°",fc.roll_deg,fc.pitch_deg,fc.yaw_deg);ru(panel,b,{18,217},14,{190,190,190});}
 
   std::string status,action;

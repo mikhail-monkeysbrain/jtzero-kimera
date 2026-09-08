@@ -2069,3 +2069,60 @@ Output:
 Причина фиксации правила: в `live_mechanical_translation_fc_accel_v37.cpp` снова был создан англоязычный HUD, несмотря на русскоязычный рабочий процесс пользователя. Это считается ошибкой реализации и не должно повторяться.
 
 Перед каждым новым GUI/HUD необходимо явно проверить язык всех пользовательских строк.
+
+
+## 2026-09-08 — v37 mechanical reference: video + raw gravity + gyro agree
+
+User supplied the v37 CSV and continuous side-view video.
+
+### CSV result
+Using central stationary windows:
+- A start raw ACC tilt ≈ [R +6.812°, P +0.586°];
+- B raw ACC tilt ≈ [R +4.426°, P +0.768°];
+- A final raw ACC tilt ≈ [R +6.680°, P +0.441°].
+
+Therefore:
+- A->B raw gravity-vector angle change ≈ 2.392°;
+- B->A raw gravity-vector angle change ≈ 2.277°;
+- A-start->A-final gravity closure ≈ 0.196°.
+
+FC ATTITUDE over the same stationary endpoints:
+- A->B dRP ≈ [-2.229°, +0.644°], |dTilt| ≈ 2.320°;
+- B->A dRP ≈ [+1.937°, -1.079°], |dTilt| ≈ 2.217°;
+- A closure |dTilt| ≈ 0.523°.
+
+Raw gyro integration with stationary bias subtraction:
+- A->B rotvec ≈ [-2.608°, +0.224°, +0.322°], magnitude ≈ 2.637°;
+- B->A rotvec ≈ [+2.333°, -0.303°, +0.142°], magnitude ≈ 2.357°.
+
+Thus raw accelerometer gravity direction, FC roll/pitch, and raw gyro independently support a reversible ~2.3..2.6° rotation of the FC/IMU frame linked to the 500-mm translation.
+
+### External video result
+The black-cross marker angle was measured over stable video windows relative to the image horizontal:
+- A start ≈ +3.64° (window SD ≈ 0.06°);
+- B ≈ +0.18° (SD ≈ 0.14°);
+- A final ≈ +3.15° (SD ≈ 0.12°).
+
+Observed image-angle changes:
+- A->B ≈ -3.46°;
+- B->A ≈ +2.97°;
+- A closure ≈ -0.48°.
+
+The external marker therefore visibly rotates in the same reversible sense and on the same order of magnitude as the inertial ~2.3..2.6° change. Exact equality is not expected because the video angle is a 2-D projection and the marker occupies different image positions at A and B.
+
+### Updated conclusion
+The hypothesis that the ~2.5° attitude change is purely an FC estimator or Kimera artifact is strongly rejected. A physically visible assembly carrying the marker near FC/IMU rotates with the translation.
+
+What remains unresolved is whether:
+- the entire support/upper platform tilts as a rigid body, or
+- the drone/FC assembly moves relative to the lower support/base.
+
+The video already makes “no physical motion at all” untenable. Further estimator tuning should not be used to compensate this bench mechanics.
+
+**Added:** `tools/analyze_mechanical_translation_v37.py` for reproducible CSV-side v37 analysis.
+
+**Commit:** `2a5de2d`.
+
+**Physical test yaw:** none now. v37 was performed at ≈ -90°.
+
+**Статус:** МЕХАНИЧЕСКОЕ ВРАЩЕНИЕ ПОДТВЕРЖДЕНО — remaining task is localize which structural part rotates and redesign/measure the bench constraint before using this motion as Z ground truth.

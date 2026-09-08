@@ -50,6 +50,17 @@
         else if(!warmup_gate.passed){notice="VIO WARM-UP НЕ ЗАВЕРШЕН — НЕ ДВИГАТЬ";notice_until=monotonicNs()+1500000000LL;std::cout<<"[WARMUP] START key ignored: t="<<std::fixed<<std::setprecision(2)<<warmup_gate.elapsedSec(monotonicNs())<<"s stable="<<warmup_gate.stableCount()<<"/"<<kWarmupStableStatesNeeded<<"\n";}
         else if(phase==CapturePhase::WAIT_START){
           const int64_t event_wall_ns=monotonicNs();
+#ifdef JTZERO_V41_METRIC_CAMERA
+          if(!gV41Cam.range_valid){
+            notice="V41: НЕТ ВАЛИДНОЙ TF-LUNA ДАЛЬНОСТИ — START НЕ ПРИНЯТ";
+            notice_until=monotonicNs()+2500000000LL;
+            std::cout<<"[V41-PREFLIGHT] START REJECTED: TF-Luna range invalid, vertical_range="
+                     <<gV41Cam.vertical_range_m<<" m\n";
+            continue;
+          }
+          std::cout<<"[V41-PREFLIGHT] PASS: TF-Luna vertical="<<std::fixed<<std::setprecision(3)
+                   <<gV41Cam.vertical_range_m<<" m, camera_height="<<gV41Cam.cameraHeight()<<" m\n";
+#endif
           const double start_backend_age_ms=(event_wall_ns-s.callback_wall_ns)/1e6;
           if(start_backend_age_ms>kV25MaxStartBackendAgeMs){
             notice="START INVALID — BACKEND СЛИШКОМ СТАРЫЙ";

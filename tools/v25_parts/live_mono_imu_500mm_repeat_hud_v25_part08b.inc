@@ -36,7 +36,13 @@
         notice=(kLegCount==1)?"1AB СОХРАНЁН — Q / ESC: ВЫХОД":"4AB СОХРАНЁН — ТЕСТ ЗАВЕРШЁН. Q / ESC: ВЫХОД";
         notice_until=monotonicNs()+3600000000000LL;
       }
-      const int key=cv::waitKey(1)&0xff;
+      int key=cv::waitKey(1)&0xff;
+#ifdef JTZERO_V41_METRIC_CAMERA
+      if(gV41MouseSpace.exchange(false)){
+        key=32;
+        std::cout<<"[V41-INPUT] mouse click -> SPACE\n";
+      }
+#endif
       if(key==27||key=='q'||key=='Q'){
         if(!(gV26ControlledAb4 && leg>=kLegCount)) aborted=true;
         break;

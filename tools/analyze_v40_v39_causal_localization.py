@@ -186,12 +186,17 @@ for n in range(1,5):
     q=build_pass(f"FRESH_{n}",d,1)
     if q: passes.append(q)
 
-if len(passes) != 8:
-    labels = ", ".join(p["label"] for p in passes) if passes else "none"
+labels = ", ".join(p["label"] for p in passes) if passes else "none"
+if len(contp := [p for p in passes if p["label"].startswith("CONT")]) != 4:
     raise SystemExit(
-        f"INVALID DATASET: найдено {len(passes)} из 8 ожидаемых измеряемых A→B проходов. "
-        f"Найдены: {labels}. Причинный анализ и корреляции НЕ выполняются."
+        f"INVALID DATASET: нужны все 4 CONTINUOUS. Найдены: {labels}"
     )
+fresh = [p for p in passes if p["label"].startswith("FRESH")]
+if len(fresh) < 2:
+    raise SystemExit(
+        f"INVALID DATASET: для сравнительного экрана нужны минимум 2 FRESH. Найдены: {labels}"
+    )
+dataset_complete = len(fresh) == 4
 
 print("="*150)
 print("V40 — V39 CLEAN RESTART / CARRY-OVER CAUSAL LOCALIZATION")
@@ -202,6 +207,10 @@ print("backend = часть Kimera, которая оценивает полож
 print("bias = внутренняя оценка постоянного смещения акселерометра; bax/bay/baz — её компоненты X/Y/Z.")
 print("PIM = Preintegrated IMU Measurement, интегрированное IMU-предсказание движения между соседними состояниями Kimera.")
 print("fusion correction = разница между итоговым состоянием backend и чистым IMU-предсказанием на ТОЧНО том же интервале.")
+print("visual translation = монокулярная оценка направления движения камеры; её абсолютный масштаб в текущем frontend CSV НЕ наблюдаем.")
+print(f"DATASET: {len(passes)} passes = 4 CONTINUOUS + {len(fresh)} FRESH; complete_8pass={dataset_complete}.")
+if not dataset_complete:
+    print("STATUS: PARTIAL BUT USABLE — дополнительных физических проходов для этого диагностического шага НЕ требуется.")
 print("inlier = доля визуальных соответствий, признанных геометрически согласованными.")
 print("tracked = число визуальных точек, прослеженных между кадрами.\n")
 
@@ -212,8 +221,8 @@ for p in passes:
     print(f"{p['label']:10s} {p['duration_s']:6.3f} {p['horiz_mm']:8.2f} {p['err_mm']:+7.2f} {p['dz_mm']:+7.2f}"
           f" {p['start_bx']:+10.5f} {p['end_bx']:+9.5f} {p['start_roll']:+6.2f} {p['start_pitch']:+7.2f} {p['camera_gap_max_ms']:7.1f}")
 
-contp=[p for p in passes if p["label"].startswith("CONT")]
-fresh=[p for p in passes if p["label"].startswith("FRESH")]
+# contp/fresh validated above. V40 intentionally supports the already-recorded
+# partial V39 dataset so no additional physical pass is required merely to run analysis.
 
 def series(name,q):
     errs=[p["err_mm"] for p in q]
@@ -254,7 +263,7 @@ for name,q in (("CONT",contp),("FRESH",fresh)):
           f" mean_PIM_dP={mean([x['pim_dp_mm'] for x in ex]):.2f} mm"
           f" mean_PIM_dV={mean([x['pim_dv'] for x in ex]):.4f} m/s")
 
-print("\nCORRELATION WITH FINAL ERROR — ALL 8 PASSES")
+print(f"\nCORRELATION WITH FINAL ERROR — ALL {len(passes)} AVAILABLE PASSES")
 print("-"*150)
 features=defaultdict(list); errors=[]
 for p in passes:
@@ -312,6 +321,14 @@ if contp and fresh:
     else:
         print("REPEATABILITY EFFECT: MIXED — средняя точность и разброс реагируют по-разному.")
 
+print("\nOBSERVABILITY LIMIT")
+print("-"*150)
+print("Текущие CSV НЕ содержат независимой метрической camera-only оценки перемещения.")
+print("Поэтому этот анализ может локализовать расхождение IMU/PIM ↔ backend/fusion и изменения frontend quality,")
+print("но НЕ может доказать абсолютную ошибку масштаба чисто визуального измерения.")
+print("Если после этого шага visual-scale останется ведущим кандидатом, следующий физический тест должен быть ОДИН,")
+print("с добавленным метрическим camera-only диагностическим каналом в тот же GUI, а не новая серия из 4–12 проходов.")
+
 print("\nHOW TO READ THIS TEST")
 print("-"*150)
 print("1) Сначала сравнить MAE и STD: это отвечает, влияет ли перезапуск процесса на реальную точность.")
@@ -320,7 +337,8 @@ print("3) Если PIM одинаков, а fusion correction расходитс
 print("4) Если PIM расходится раньше backend — подозрение смещается к IMU preintegration, то есть интегрированию IMU между состояниями.")
 print("5) Если bias расходится раньше fusion correction и имеет сопоставимый порядок величины — bias остаётся причинным кандидатом.")
 print("6) Если frontend/inlier/tracked расходятся раньше всего — визуальная часть снова становится ведущим кандидатом.")
-print("7) Шаг 3 должен менять ТОЛЬКО выявленную подсистему и считаться успешным только при снижении MAE или STD.")
+print("7) Следующий физический шаг допускается только если этот анализ не локализует источник по существующим данным.")
+print("8) Любое изменение считается прогрессом только при снижении MAE (средней абсолютной ошибки) или STD (разброса), либо при строгом исключении целого класса причин.")
 
 out=Path("/home/vio/jtzero_v40_v39_causal_localization.csv")
 with out.open("w",newline="") as f:

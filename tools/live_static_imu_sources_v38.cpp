@@ -13,8 +13,8 @@
 namespace jtzero_v38 {
 using namespace jtzero_v10;
 
-constexpr const char* kCsv = "/home/vio/jtzero_static_imu_sources_v38.csv";
-constexpr const char* kWindow = "JT-ZERO: СТАТИЧЕСКОЕ СРАВНЕНИЕ IMU v38";
+constexpr const char* kCsv38 = "/home/vio/jtzero_static_imu_sources_v38.csv";
+constexpr const char* kWindow38 = "JT-ZERO: СТАТИЧЕСКОЕ СРАВНЕНИЕ IMU v38";
 constexpr double kDurationSec = 30.0;
 
 struct Src {
@@ -25,7 +25,7 @@ struct Src {
   Eigen::Vector3d gyro=Eigen::Vector3d::Zero();
 };
 
-struct Att {
+struct Att38 {
   bool valid=false;
   uint64_t t_us=0;
   double roll=0,pitch=0,yaw=0;
@@ -34,7 +34,7 @@ struct Att {
 struct Row {
   uint64_t wall_ns=0;
   double elapsed=0;
-  Att att;
+  Att38 att;
   std::array<Src,4> s;
 };
 
@@ -54,7 +54,7 @@ static bool fresh(const Src& s,uint64_t ref_us){
 }
 
 static void save(const std::vector<Row>& rows){
-  std::ofstream f(kCsv,std::ios::trunc);
+  std::ofstream f(kCsv38,std::ios::trunc);
   f<<std::fixed<<std::setprecision(9);
   f<<"wall_ns,elapsed_s,att_valid,att_roll_deg,att_pitch_deg,att_yaw_deg";
   for(int i=0;i<4;++i){
@@ -81,7 +81,7 @@ static void save(const std::vector<Row>& rows){
   }
 }
 
-static void hud(const std::array<Src,4>& src,const Att& att,double elapsed,bool recording){
+static void hud(const std::array<Src,4>& src,const Att38& att,double elapsed,bool recording){
   cv::Mat c(860,1280,CV_8UC3,cv::Scalar(15,15,15));
   cv::Scalar white(235,235,235),green(80,220,80),yellow(0,220,255),red(70,70,255),muted(150,150,150);
   uiText(c,"JT-ZERO: СТАТИЧЕСКОЕ СРАВНЕНИЕ IMU v38",28,52,.72,white,2);
@@ -117,7 +117,7 @@ static void hud(const std::array<Src,4>& src,const Att& att,double elapsed,bool 
   }
 
   uiText(c,"ESC / Q — прервать",40,824,.42,muted,1);
-  cv::imshow(kWindow,c);
+  cv::imshow(kWindow38,c);
 }
 
 } // namespace jtzero_v38
@@ -128,7 +128,7 @@ int main(int argc,char**argv){
 
   int fd=-1; uint8_t sys=0,comp=0;
   mavlink_status_t mst{}; mavlink_message_t msg{};
-  std::array<Src,4> src; Att att;
+  std::array<Src,4> src; Att38 att;
   std::vector<Row> rows;
   bool recording=false;
   int64_t start_ns=0;
@@ -157,8 +157,8 @@ int main(int argc,char**argv){
     requestRate(fd,sys,comp,MAVLINK_MSG_ID_SCALED_IMU2,100);
     requestRate(fd,sys,comp,MAVLINK_MSG_ID_SCALED_IMU3,100);
 
-    cv::namedWindow(kWindow,cv::WINDOW_NORMAL);
-    cv::resizeWindow(kWindow,1280,860);
+    cv::namedWindow(kWindow38,cv::WINDOW_NORMAL);
+    cv::resizeWindow(kWindow38,1280,860);
 
     while(true){
       pollfd p{fd,POLLIN,0}; poll(&p,1,5);
@@ -226,7 +226,7 @@ int main(int argc,char**argv){
     }
 
     save(rows);
-    std::cout<<"CSV: "<<kCsv<<"\n";
+    std::cout<<"CSV: "<<kCsv38<<"\n";
 
     requestRate(fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);
     requestRate(fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);

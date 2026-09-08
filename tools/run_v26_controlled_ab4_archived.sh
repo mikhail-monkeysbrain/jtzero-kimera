@@ -9,13 +9,13 @@ export JTZERO_V25_PARAMS="$PARAMS"
 export JTZERO_GRAVITY_ALIGNED_IMU_INIT=1
 export JTZERO_DIAG_IMU_INIT="${JTZERO_DIAG_IMU_INIT:-1}"
 export JTZERO_STAGED_ZUPT="${JTZERO_STAGED_ZUPT:-1}"
-export JTZERO_V25_MODE_DESC="V26 CONTROLLED_AB4: four measured A->B passes; B->A returns unmeasured; SPACE starts/stops motion; pass 1 timing reference; tolerance +/-1.5 s"
+export JTZERO_V25_MODE_DESC="V26 CONTROLLED_AB4: four measured A->B passes; B->A returns unmeasured; SPACE starts/stops motion; fixed 7.5 s target; accepted timing 6.5..8.5 s"
 
 rm -f "$HOME"/jtzero_500mm_v26_[1-4]AB.csv
 
 echo "[V26] params=$PARAMS"
 echo "[V26] mode=CONTROLLED_AB4"
-echo "[V26] 1AB defines timing reference; 2AB..4AB should finish within +/-1.5 s"
+echo "[V26] fixed target for ALL passes: 7.5 s; accepted window: 6.5..8.5 s"
 echo "[V26] rebuilding binary..."
 bash "$ROOT/tools/build_v25.sh" /tmp/live_mono_imu_500mm_repeat_hud_v25
 

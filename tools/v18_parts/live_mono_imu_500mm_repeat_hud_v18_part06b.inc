@@ -6,10 +6,10 @@
   cv::Mat canvas(720,1280,CV_8UC3,cv::Scalar(8,8,8));
   video.copyTo(canvas(cv::Rect(0,45,900,675)));
 
-  ru(canvas,gV26ControlledAb4?"JT-ZERO — CONTROL 4× A→B":"JT-ZERO — 500 мм × 4 — V25",{24,32},23,{245,245,245},cv::QT_FONT_BOLD);
+  ru(canvas,gV26ControlledAb4?(kLegCount==1?"JT-ZERO — FRESH START 1× A→B":"JT-ZERO — CONTROL 4× A→B"):"JT-ZERO — 500 мм × 4 — V25",{24,32},23,{245,245,245},cv::QT_FONT_BOLD);
   if(gV26ControlledAb4){
     char hb[256];
-    std::snprintf(hb,sizeof(hb),"4 одинаковых A→B • цель %.1f с • окно %.1f..%.1f с • B→A не измеряется",
+    std::snprintf(hb,sizeof(hb),kLegCount==1?"1 A→B • цель %.1f с • окно %.1f..%.1f с • после сохранения Q/ESC":"4 одинаковых A→B • цель %.1f с • окно %.1f..%.1f с • B→A не измеряется",
                   gV26TargetMoveSec,gV26TargetMoveSec-gV26DurationToleranceSec,gV26TargetMoveSec+gV26DurationToleranceSec);
     ru(canvas,hb,{430,30},14,{190,190,190});
   }else{

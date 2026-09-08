@@ -2864,3 +2864,39 @@ Next step: run the analyzer on existing v39 CSV. If one sign of the configured Y
 **Physical test:** none.
 **Yaw:** no physical test; existing v39 was ≈ -90°.
 **Статус:** Y-OFFSET/CALIBRATION PATH IS NOW A HIGH-PRIORITY SUSPECT; no FC parameter changes authorized yet.
+
+
+## 2026-09-08 — ArduPilot source trace resolves MAVLink ambiguity
+
+Inspected current upstream ArduPilot source, specifically:
+- `libraries/GCS_MAVLink/GCS_Common.cpp`;
+- `libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp`;
+- `libraries/AP_InertialSensor/AP_InertialSensor.h`.
+
+Confirmed data path:
+
+`AP_InertialSensor_Backend::_rotate_and_correct_accel()`:
+1. rotate raw sample by per-sensor orientation;
+2. optional temperature correction;
+3. subtract configured accel offset;
+4. multiply configured accel scale;
+5. rotate by board orientation;
+6. publish into internal `_accel[instance]`.
+
+MAVLink:
+- `SCALED_IMU` uses `ins.get_accel(0)`;
+- `SCALED_IMU2` uses `ins.get_accel(1)`;
+- `HIGHRES_IMU` uses `ins.get_accel()`, which resolves to `get_accel(_first_usable_accel)`.
+
+Therefore all three messages used in our diagnostics contain the already corrected/body-frame AP_InertialSensor acceleration, not raw MEMS acceleration. HIGHRES_IMU is not an independent raw third source; it is another representation of the first usable accel.
+
+This resolves the earlier ambiguity: the v39 A/B magnitude shift exists in ArduPilot's post-calibration internal acceleration itself, before JT-Zero/Kimera consumes it.
+
+Also, because SCALED_IMU and SCALED_IMU2 are distinct instances, the same reversible effect on both still remains meaningful evidence.
+
+Important correction to prior wording: the numerical experiment of subtracting the configured Y-offset again from logged FLU data is NOT reconstructing raw sensor data. It is a counterfactual showing a numerical correspondence only. Since the logged MAVLink values already have offsets subtracted internally, do not conclude that the offset is being applied with the wrong sign or twice.
+
+Next required discriminator should use true pre-calibration/raw accelerometer samples from ArduPilot logging (e.g. raw sensor-rate logging / ISBH-ISBD if available) or perform a controlled recalibration comparison. Prefer raw pre-calibration evidence before changing calibration parameters.
+
+**Physical test:** none.
+**Статус:** MAVLINK FRAME/STAGE AMBIGUITY RESOLVED. POST-CALIBRATION AP INS ACCEL ITSELF HAS THE A/B NORM EFFECT. HIGHRES IS NOT INDEPENDENT. DO NOT DOUBLE-SUBTRACT OFFSETS.

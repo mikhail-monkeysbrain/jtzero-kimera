@@ -45,7 +45,12 @@
                  <<" leg="<<(leg+1)<<" raw="<<raw<<" imu_fed="<<imu_fed<<"\n";
 #ifdef JTZERO_STRICT_STALL_NS
         if(loop_dt_ns>JTZERO_STRICT_STALL_NS){
-          if(phase==CapturePhase::SETTLE_START){
+          if(gV26ControlledAb4){
+            // Controlled repeatability run: never abort or reject a pass because
+            // of a loop stall. Keep the event in the log for later comparison.
+            std::cout<<"[LOOP-STALL-WARN] "<<loop_dt_ns/1e6
+                     <<" ms during pass "<<(leg+1)<<"AB — CONTINUING\n";
+          }else if(phase==CapturePhase::SETTLE_START){
             std::cout<<"LEG "<<leg+1<<" START REJECTED due to loop stall "<<loop_dt_ns/1e6<<" ms\n";
             stable.reset();start_press.valid=false;phase=CapturePhase::WAIT_START;
             notice="START INVALID — LOOP STALL, НАЖМИТЕ START ЕЩЕ РАЗ";

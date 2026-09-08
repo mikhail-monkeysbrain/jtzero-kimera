@@ -68,8 +68,14 @@
         std::cout<<"[CAM-STALL] no camera frame for "<<std::fixed<<std::setprecision(1)
                  <<(now-last_camera_frame_wall_ns)/1e6<<" ms raw="<<raw
                  <<" selected="<<selected<<" imu_fed="<<imu_fed<<"\n";
-        aborted=true;
-        break;
+        if(gV26ControlledAb4){
+          std::cout<<"[CAM-STALL-WARN] CONTROLLED_AB4 — CONTINUING, no automatic abort\n";
+          // Prevent warning spam while preserving the fact that the stall occurred.
+          last_camera_frame_wall_ns=now;
+        }else{
+          aborted=true;
+          break;
+        }
       }
       if(now>=next_sync&&pending==0){pending=now;sendTimesync(serial_fd,pending,sys,comp);next_sync=now+kTimesyncPeriodNs;}
       pollfd pf[2]={{camera_fd,POLLIN,0},{serial_fd,POLLIN,0}};int rc=poll(pf,2,2);if(rc<0){if(errno==EINTR)continue;fail("poll");}

@@ -19,8 +19,8 @@
             }
           }
           else {V8Leg row;row.start_press=start_press;row.end_press=end_press;row.measured=makeLeg500(leg,start_mark,settled);
-            row.measured.direction=((leg%2==0)^gV25BFirst)?"A->B":"B->A";
-            row.start_settle_shift_m=markDistance(start_press,start_mark);row.end_settle_shift_m=markDistance(end_press,settled);rows.push_back(row);std::cout<<"LEG "<<leg+1<<' '<<row.measured.direction<<" horizontal="<<std::fixed<<std::setprecision(2)<<row.measured.horizontal*1000.0<<" mm error="<<row.measured.error*1000.0<<" mm dz="<<row.measured.dz*1000.0<<" mm end_settle_shift="<<row.end_settle_shift_m*1000.0<<" mm\n";++leg;phase=CapturePhase::WAIT_START;notice="КОНЕЦ СТАБИЛИЗИРОВАН — СЛЕДУЮЩИЙ ПРОХОД";notice_until=monotonicNs()+1500000000LL;}
+            row.measured.direction=gV26ControlledAb4?"A->B":(((leg%2==0)^gV25BFirst)?"A->B":"B->A");
+            row.start_settle_shift_m=markDistance(start_press,start_mark);row.end_settle_shift_m=markDistance(end_press,settled);rows.push_back(row);std::cout<<"LEG "<<leg+1<<' '<<row.measured.direction<<" horizontal="<<std::fixed<<std::setprecision(2)<<row.measured.horizontal*1000.0<<" mm error="<<row.measured.error*1000.0<<" mm dz="<<row.measured.dz*1000.0<<" mm end_settle_shift="<<row.end_settle_shift_m*1000.0<<" mm\n";++leg;phase=CapturePhase::WAIT_START;notice=gV26ControlledAb4?"ПРОХОД СОХРАНЁН — ВЕРНИТЕ СТЕНД B → A":"КОНЕЦ СТАБИЛИЗИРОВАН — СЛЕДУЮЩИЙ ПРОХОД";notice_until=monotonicNs()+2500000000LL;}
         }}
       }
 
@@ -48,7 +48,21 @@
             v25_events<<event_wall_ns<<",START,"<<(leg+1)<<","<<static_cast<int>(phase)<<","<<s.keyframe<<","<<s.timestamp_ns<<","<<s.callback_wall_ns<<","<<(event_wall_ns-s.callback_wall_ns)/1e6<<","<<s.px<<","<<s.py<<","<<s.pz<<","<<s.vx<<","<<s.vy<<","<<s.vz<<"\n";
             v25_events.flush();
           }
-          start_press.s=s;start_press.valid=true;stable.reset();phase=CapturePhase::SETTLE_START;notice="НЕ ДВИГАТЬ — ФИКСИРУЮ СТАРТ";notice_until=monotonicNs()+1500000000LL;std::cout<<"LEG "<<leg+1<<" START key accepted KF="<<s.keyframe<<" event_wall_ns="<<event_wall_ns<<" state_ts="<<s.timestamp_ns<<" cb_wall_ns="<<s.callback_wall_ns<<" age_ms="<<(event_wall_ns-s.callback_wall_ns)/1e6<<" [settling]\n";}
+          start_press.s=s;start_press.valid=true;stable.reset();
+          if(gV26ControlledAb4){
+            start_mark=start_press;
+            gV26MoveStartWallNs=event_wall_ns;
+            phase=CapturePhase::MOVING;
+            notice="СТАРТ ЗАФИКСИРОВАН — ДВИГАЙТЕ A → B";
+            notice_until=monotonicNs()+1800000000LL;
+            std::cout<<"PASS "<<leg+1<<"AB START KF="<<s.keyframe
+                     <<" move_timer=0.000 s [CONTROLLED_AB4]\n";
+          }else{
+            phase=CapturePhase::SETTLE_START;
+            notice="НЕ ДВИГАТЬ — ФИКСИРУЮ СТАРТ";
+            notice_until=monotonicNs()+1500000000LL;
+            std::cout<<"LEG "<<leg+1<<" START key accepted KF="<<s.keyframe<<" event_wall_ns="<<event_wall_ns<<" state_ts="<<s.timestamp_ns<<" cb_wall_ns="<<s.callback_wall_ns<<" age_ms="<<(event_wall_ns-s.callback_wall_ns)/1e6<<" [settling]\n";
+          }}
         else if(phase==CapturePhase::MOVING){
           const int64_t event_wall_ns=monotonicNs();
           const double end_backend_age_ms=(event_wall_ns-s.callback_wall_ns)/1e6;
@@ -63,7 +77,17 @@
             v25_events<<event_wall_ns<<",END,"<<(leg+1)<<","<<static_cast<int>(phase)<<","<<s.keyframe<<","<<s.timestamp_ns<<","<<s.callback_wall_ns<<","<<(event_wall_ns-s.callback_wall_ns)/1e6<<","<<s.px<<","<<s.py<<","<<s.pz<<","<<s.vx<<","<<s.vy<<","<<s.vz<<"\n";
             v25_events.flush();
           }
-          end_press.s=s;end_press.valid=true;stable.reset();phase=CapturePhase::SETTLE_END;notice="НЕ ДВИГАТЬ — ФИКСИРУЮ КОНЕЦ";notice_until=monotonicNs()+1500000000LL;std::cout<<"LEG "<<leg+1<<" END key accepted KF="<<s.keyframe<<" event_wall_ns="<<event_wall_ns<<" state_ts="<<s.timestamp_ns<<" cb_wall_ns="<<s.callback_wall_ns<<" age_ms="<<(event_wall_ns-s.callback_wall_ns)/1e6<<" [gravity feedback remains OFF, settling]\n";}
+          end_press.s=s;end_press.valid=true;
+          if(gV26ControlledAb4 && leg>=0 && leg<4 && gV26MoveStartWallNs>0){
+            const double move_sec=(event_wall_ns-gV26MoveStartWallNs)*1e-9;
+            gV26MoveDurationsSec[leg]=move_sec;
+            if(leg==0) gV26ReferenceMoveSec=move_sec;
+            std::cout<<"PASS "<<leg+1<<"AB MOTION DURATION "<<std::fixed<<std::setprecision(3)<<move_sec<<" s";
+            if(leg>0 && gV26ReferenceMoveSec>0.0)
+              std::cout<<"  delta_from_1AB="<<std::showpos<<(move_sec-gV26ReferenceMoveSec)<<std::noshowpos<<" s";
+            std::cout<<"\n";
+          }
+          stable.reset();phase=CapturePhase::SETTLE_END;notice="SPACE ПРИНЯТ — ОСТАНОВИТЕ НА B И НЕ ДВИГАЙТЕ";notice_until=monotonicNs()+2200000000LL;std::cout<<"LEG "<<leg+1<<" END key accepted KF="<<s.keyframe<<" event_wall_ns="<<event_wall_ns<<" state_ts="<<s.timestamp_ns<<" cb_wall_ns="<<s.callback_wall_ns<<" age_ms="<<(event_wall_ns-s.callback_wall_ns)/1e6<<" [gravity feedback remains OFF, settling]\n";}
       }
     }
 
@@ -90,10 +114,33 @@
         }
       }
     }
+    if(gV26ControlledAb4){
+      for(size_t i=0;i<rows.size() && i<4;++i){
+        const std::string path="/home/vio/jtzero_500mm_v26_"+std::to_string(i+1)+"AB.csv";
+        std::ofstream pf(path,std::ios::trunc);
+        if(!pf) continue;
+        pf<<"pass,direction,keyframe,timestamp_ns,elapsed_ms,px_rel_mm,py_rel_mm,pz_rel_mm,vx_m_s,vy_m_s,vz_m_s,speed_m_s\n";
+        pf<<std::fixed<<std::setprecision(9);
+        const int64_t ta=rows[i].start_press.s.timestamp_ns;
+        const int64_t tb=rows[i].end_press.s.timestamp_ns;
+        const double x0=rows[i].start_press.s.px;
+        const double y0=rows[i].start_press.s.py;
+        const double z0=rows[i].start_press.s.pz;
+        for(const auto& st:states){
+          if(st.timestamp_ns<ta || st.timestamp_ns>tb) continue;
+          pf<<(i+1)<<",A->B,"<<st.keyframe<<','<<st.timestamp_ns<<','
+            <<(st.timestamp_ns-ta)/1e6<<','
+            <<(st.px-x0)*1000.0<<','<<(st.py-y0)*1000.0<<','<<(st.pz-z0)*1000.0<<','
+            <<st.vx<<','<<st.vy<<','<<st.vz<<','<<StableCapture::speed(st)<<'\n';
+        }
+        std::cout<<"CONTROL CSV "<<(i+1)<<"AB: "<<path
+                 <<" motion_duration="<<gV26MoveDurationsSec[i]<<" s\n";
+      }
+    }
     saveCsvV8(rows);
     saveBackendTraceV8(states,rows,"/home/vio/jtzero_500mm_v25_backend.csv");
     if(imu_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);imu_req=false;}if(att_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);att_req=false;}requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,0);if(streaming){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(camera_fd,VIDIOC_STREAMOFF,&t);streaming=false;}for(auto&bf:buffers)if(bf.start&&bf.start!=MAP_FAILED)munmap(bf.start,bf.length);if(camera_fd!=-1)close(camera_fd);if(serial_fd!=-1)close(serial_fd);
-    std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
+    if(gV26ControlledAb4) std::cout<<"V26 MODE: CONTROLLED_AB4 — four A->B passes, first pass defines timing reference ±1.5 s\n"; else std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
     printSummaryV8(rows,raw,rejected,selected,decoded,imu_rx,imu_fed,att_rx,sync.size(),mapping,states.size());
     raw_combined.flush();raw_camera.flush();raw_mjpg.flush();raw_attitude.flush();raw_range.flush();
     std::cout<<"RAW IMU CSV: "<<kV11CombinedPath<<" rows="<<raw_imu_rows<<"\n"
@@ -112,7 +159,24 @@
 #ifdef JTZERO_SINGLE_LEG_MODE
     const bool metric_pass = rows.size()==1 && std::abs(rows[0].measured.error)<=kV8MaxLegErrorM && std::abs(rows[0].measured.dz)<=kV8MaxAbsDzM;
 #else
-    const bool metric_pass=v8MeasurementPass(rows,&sd);
+    bool metric_pass=false;
+    if(gV26ControlledAb4){
+      if(rows.size()==4){
+        double mean=0.0;
+        for(const auto& r:rows) mean+=r.measured.horizontal;
+        mean/=4.0;
+        double ss=0.0;
+        metric_pass=true;
+        for(const auto& r:rows){
+          ss+=(r.measured.horizontal-mean)*(r.measured.horizontal-mean);
+          metric_pass=metric_pass && std::abs(r.measured.error)<=kV8MaxLegErrorM && std::abs(r.measured.dz)<=kV8MaxAbsDzM;
+        }
+        sd=std::sqrt(ss/4.0);
+        metric_pass=metric_pass && sd<=kV8MaxStdM;
+      }
+    }else{
+      metric_pass=v8MeasurementPass(rows,&sd);
+    }
 #endif
     const bool pipeline_pass=!aborted&&rows.size()==kLegCount&&mapping.valid&&states.size()>0;
     std::cout<<"PIPELINE RESULT: "<<(pipeline_pass?"PASS":"FAIL")<<"\nMEASUREMENT RESULT: "<<(metric_pass?"PASS":"FAIL")<<"\n";

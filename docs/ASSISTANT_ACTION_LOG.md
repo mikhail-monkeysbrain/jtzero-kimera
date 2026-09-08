@@ -1915,3 +1915,49 @@ Following the isolated fresh-process result and PIM vertical-axis decomposition,
 **Physical test yaw:** none — analysis only on existing fresh-process archives at ≈ -90°.
 
 **Статус:** ПРОДВИНУЛИСЬ — external video is now explicitly used as an independent constraint on the newly identified attitude-projection mechanism.
+
+
+## 2026-09-08 — FC attitude/raw-IMU reproduce directional Z upstream of Kimera backend
+
+User ran the two new V25 discriminators on the four isolated fresh-process -90° archives.
+
+### VIO vs FC attitude
+Across all four runs, FC and Kimera backend relative tilt changes agree closely in sign and magnitude:
+- RESET L1 A->B: VIO tilt 2.546°, FC tilt 2.603°, ratio 0.98;
+- RESET L2 B->A: VIO 2.484°, FC 2.568°, ratio 0.97;
+- RESET L3 A->B: VIO 2.577°, FC 2.791°, ratio 0.92;
+- RESET L4 B->A: VIO 2.319°, FC 2.506°, ratio 0.93.
+
+Direction is systematic:
+- A->B roll change is about -2.5°;
+- B->A roll change is about +2.4°.
+
+Therefore Kimera is not independently inventing the several-degree tilt history; essentially the same attitude evolution is already present in FC ATTITUDE.
+
+### FC attitude + raw HIGHRES_IMU world-Z
+Using only FC attitude + raw HIGHRES_IMU, with no Kimera attitude and no Kimera backend accelerometer bias, the integrated world-Z reproduces the same direction-dependent sign:
+- L1 A->B: integrated Pz ≈ -209.6 mm;
+- L2 B->A: +690.0 mm;
+- L3 A->B: -71.1 mm;
+- L4 B->A: +276.4 mm.
+
+Whole-leg mean residual acceleration also has the same sign:
+- A->B: negative (-0.01173, -0.00523 m/s²);
+- B->A: positive (+0.03298, +0.02580 m/s²).
+
+This is stronger than the Kimera/PIM-only result: the signed vertical effect exists upstream of Kimera backend and survives removal of Kimera bias and orientation states.
+
+### Consequence
+The primary problem is no longer "Kimera creates false tilt/Z". The candidate set moves upstream:
+1. real mechanical/IMU tilt during the translation;
+2. FC attitude estimator reports a tilt that does not correspond to whole-rig mechanical tilt;
+3. local FC/IMU board flex/vibration/mount compliance relative to the externally observed rig;
+4. incorrect interpretation of FC ATTITUDE convention when rotating raw HIGHRES_IMU into world coordinates.
+
+The side-view video with cross now becomes a critical independent constraint: it was intended to detect whole-rig tilt/lift. If quantified video motion is much smaller than the FC-reported ~2.5° directional roll change, the discrepancy points to FC attitude/local IMU mechanics/frame interpretation rather than Kimera.
+
+**Physical test yaw:** none — analysis only. Existing runs are at ≈ -90°.
+
+**Next action:** quantify the side-view video against the fixed cross/reference and compare observed rig angle change to the ±2.5° FC roll change; in parallel validate FC ATTITUDE frame/sign convention with raw gravity-vector change.
+
+**Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — directional Z is reproduced upstream of Kimera using FC attitude + raw IMU; Kimera backend is no longer the primary origin candidate.

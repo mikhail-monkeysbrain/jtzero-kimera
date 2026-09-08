@@ -1961,3 +1961,33 @@ The side-view video with cross now becomes a critical independent constraint: it
 **Next action:** quantify the side-view video against the fixed cross/reference and compare observed rig angle change to the ±2.5° FC roll change; in parallel validate FC ATTITUDE frame/sign convention with raw gravity-vector change.
 
 **Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — directional Z is reproduced upstream of Kimera using FC attitude + raw IMU; Kimera backend is no longer the primary origin candidate.
+
+
+## 2026-09-08 — raw gravity confirms FC-reported ~2.5° IMU tilt change
+
+User ran `analyze_v25_raw_gravity_vs_fc_attitude.py` on the four isolated -90° fresh-process archives.
+
+Results:
+- L1 A->B: raw gravity angle 2.5584°, FC tilt 2.5277°, ratio 1.012;
+- L2 B->A: raw gravity angle 2.5589°, FC tilt 2.4963°, ratio 1.025;
+- L3 A->B: raw gravity angle 2.5621°, FC tilt 2.7312°, ratio 0.938;
+- L4 B->A: raw gravity angle 2.3406°, FC tilt 2.4431°, ratio 0.958.
+
+Direction medians:
+- A->B raw gravity 2.5603°, FC tilt 2.6295°, ratio 0.975;
+- B->A raw gravity 2.4498°, FC tilt 2.4697°, ratio 0.992.
+
+**Conclusion:** FC ATTITUDE is not merely inventing a ~2.5° tilt unsupported by the accelerometer. The stationary raw accelerometer gravity-vector itself rotates by essentially the same amount between settled start and settled end. Therefore the IMU sensor frame really changes orientation relative to gravity between endpoints.
+
+This still does NOT prove the entire rig visibly tilts by 2.5°. Remaining explanations:
+1. whole-rig mechanical tilt that should be observable in external video;
+2. local FC/IMU board motion/flex/compliance relative to the visually observed rig;
+3. video viewpoint/marker geometry did not observe the same rotation axis well enough.
+
+The extremely large FC yaw changes remain non-physical because raw gyro did not support them; that issue is separate from the roll/pitch gravity-vector rotation, which is now physically supported by accelerometer direction.
+
+**Physical test yaw:** none — analysis only on existing ≈ -90° archives.
+
+**Next action:** recover or re-upload the side-view video and quantify the marker/rig angle frame-by-frame against the fixed cross/reference. Compare observed whole-rig angle change to the raw-gravity/FC ~2.5° endpoint rotation. No further estimator parameter changes before resolving this mechanical-reference discrepancy.
+
+**Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — FC roll/pitch change is corroborated by raw gravity; remaining question is whole-rig tilt vs local IMU/FC motion.

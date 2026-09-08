@@ -2540,3 +2540,48 @@ and quantify, for each leg, how much signed Z comes from body-X, body-Y and body
 **Physical test:** none. Existing archives at ≈ -90° only.
 
 **Статус:** REAL ROLL CONFIRMED BUT CAUSALLY DOWNGRADED FOR Z; next target is body-axis acceleration projection.
+
+
+## 2026-09-08 — world-Z axis decomposition: body-Y/roll channel dominates residual Z
+
+User ran `analyze_v25_world_z_axis_decomposition.py` on the four isolated -90° reset runs.
+
+Results:
+
+RESET L1 A->B, backend dz=-59.5 mm:
+- body-X -> Z: -1.0 mm;
+- body-Y -> Z: -592.7 mm;
+- body-Z -> Z: +383.6 mm;
+- sum: -210.2 mm.
+
+RESET L2 B->A, backend dz=+254.4 mm:
+- X: +2.9 mm;
+- Y: +541.4 mm;
+- Z: +198.5 mm;
+- sum: +742.8 mm.
+
+RESET L3 A->B, backend dz=-53.2 mm:
+- X: +2.7 mm;
+- Y: -334.6 mm;
+- Z: +238.4 mm;
+- sum: -93.4 mm.
+
+RESET L4 B->A, backend dz=+166.3 mm:
+- X: +0.8 mm;
+- Y: +201.8 mm;
+- Z: +98.9 mm;
+- sum: +301.5 mm.
+
+### Conclusion
+- body-X/pitch leakage is negligible;
+- body-Y/roll channel is the dominant signed contributor (58–73% by absolute integrated contribution);
+- body-Z often partially cancels body-Y but does not cancel it exactly;
+- the residual signed world-Z therefore arises from imperfect cancellation between the Y and Z components of the same specific-force/gravity geometry.
+
+This is consistent with the previous counterfactual: freezing attitude does not remove the error because the physical accelerometer vector itself changes between A and B. A small mismatch between the body-Y/body-Z vector and the attitude used to rotate it to world frame can leave only ~0.01–0.03 m/s² residual, yet integrate to hundreds of millimetres over 6–9 s.
+
+The next discriminator should quantify the tiny effective roll/tilt mismatch required to produce the observed residual and compare signed accelerometer-derived roll against FC roll at settled endpoints and through low-dynamic samples. A residual of 0.02–0.03 m/s² corresponds to only roughly 0.1–0.2° of gravity-direction mismatch.
+
+**Physical test:** none. Existing archives at ≈ -90° only.
+
+**Статус:** Z ERROR LOCALIZED TO Y/Z CANCELLATION UNDER ROLL; next target is sub-degree FC-attitude vs accelerometer-gravity mismatch, not the 2.5° physical roll itself.

@@ -18,6 +18,13 @@ export JTZERO_STAGED_ZUPT="${JTZERO_STAGED_ZUPT:-1}"
 
 cd "${ROOT}" || exit 1
 
+# V39 must be invariant to caller shell state. Previous one-pass experiments may
+# leave JTZERO_V25_EXTRA_CXXFLAGS=-DJTZERO_LEG_COUNT=1 in the environment.
+# Force this test to compile exactly four measured passes. The same binary is
+# then reused for CONTINUOUS and all FRESH runs; FRESH is closed manually after pass 1.
+unset JTZERO_V25_EXTRA_CXXFLAGS
+export JTZERO_V25_EXTRA_CXXFLAGS="-DJTZERO_LEG_COUNT=4"
+
 echo "======================================================================"
 echo "V39 CLEAN RESTART / CARRY-OVER TEST"
 echo "Один бинарник и один каталог параметров для всей серии."
@@ -40,6 +47,7 @@ echo "======================================================================"
 
 echo
 echo "[V39] Building ONE common binary..."
+echo "[V39] compile invariant: JTZERO_LEG_COUNT=4 (four measured passes)"
 bash "${ROOT}/tools/build_v25.sh" "${BIN}"
 if [[ ! -x "${BIN}" ]]; then
     echo "[V39] ERROR: binary not created: ${BIN}"

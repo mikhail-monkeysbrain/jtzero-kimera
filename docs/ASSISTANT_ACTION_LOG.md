@@ -2764,3 +2764,37 @@ Next discriminator: solve, at each stationary BEFORE and AFTER window, the tiny 
 **Physical test:** none.
 **Yaw:** existing archives ≈ -90°.
 **Статус:** NEW STATIONARY ATTITUDE CONFIRMED; FILTER MEMORY DOWNGRADED; NEXT TEST = CONSTANT-vs-STATE-DEPENDENT EFFECTIVE ROLL CORRECTION.
+
+
+## 2026-09-08 — effective roll correction not constant; accel magnitude shift emerges as stronger clue
+
+User ran `analyze_v25_effective_roll_correction.py` on four isolated reset runs.
+
+Effective roll correction START->END changes:
+- A->B #1: -0.170°;
+- B->A #1: +0.265°;
+- A->B #2: +0.047°;
+- B->A #2: -0.082°.
+
+The sign is not direction-consistent, so one fixed roll/extrinsic correction cannot explain the directional Z behavior.
+
+More importantly, the same settled endpoint data show a repeatable change in stationary acceleration magnitude |a|:
+- A->B #1: 9.88283 -> 9.84514 m/s² (delta -0.03769);
+- B->A #1: 9.85158 -> 9.88837 (delta +0.03679);
+- A->B #2: 9.88947 -> 9.85573 (delta -0.03374);
+- B->A #2: 9.84893 -> 9.89347 (delta +0.04454).
+
+Thus A consistently has a larger measured |a| than B by roughly 0.034..0.045 m/s².
+
+This is especially important because rotation of a correctly calibrated acceleration vector cannot change its magnitude, and a 500-mm horizontal translation cannot physically change local gravity magnitude by ~0.04 m/s². Therefore the effect points toward orientation-/calibration-/processing-dependent accelerometer magnitude error rather than an attitude-only error.
+
+The prior v39 dual-IMU stationary means also already suggest the same effect on both physical IMUs:
+- IMU0 A ≈ 9.883, B ≈ 9.846, A-end ≈ 9.883 m/s²;
+- IMU1 A ≈ 9.870, B ≈ 9.837, A-end ≈ 9.874 m/s².
+
+Added `tools/analyze_v39_accel_norm_by_position.py` to quantify this directly from the v39 CSV.
+Commit: `16db13b`.
+
+**Physical test:** none.
+**Yaw:** existing v39 ≈ -90°.
+**Статус:** FIXED ROLL CORRECTION REJECTED; POSITION/ORIENTATION-DEPENDENT ACCELEROMETER MAGNITUDE ERROR IS NOW THE STRONGEST CLUE.

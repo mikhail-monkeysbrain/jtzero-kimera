@@ -1,4 +1,12 @@
-    ru(panel,phase==CapturePhase::WAIT_START?"Установите камеру точно на метку":"Переместите камеру ровно на 500 мм",{18,355},14,{220,220,220});
+    if(gV26ControlledAb4){
+      std::string guide;
+      if(phase==CapturePhase::WAIT_START) guide=(leg==0)?"1) УПОР A  2) SPACE  3) СРАЗУ ДВИГАТЬ":"ВОЗВРАТ B→A НЕ ИЗМЕРЯЕТСЯ; СНОВА УПОР A";
+      else if(phase==CapturePhase::MOVING) guide="ДВИГАЙТЕ ПЛАВНО; НА УПОРЕ B: SPACE, ЗАТЕМ СТОП";
+      else guide="НЕ ДВИГАТЬ ДО СООБЩЕНИЯ О СОХРАНЕНИИ";
+      ru(panel,guide,{18,355},13,{220,220,220},cv::QT_FONT_BOLD);
+    }else{
+      ru(panel,phase==CapturePhase::WAIT_START?"Установите камеру точно на метку":"Переместите камеру ровно на 500 мм",{18,355},14,{220,220,220});
+    }
   }
   cv::rectangle(panel,{18,395,344,92},cv::Scalar(55,145,55),-1);
   cv::rectangle(panel,{18,395,344,92},cv::Scalar(220,220,220),2);

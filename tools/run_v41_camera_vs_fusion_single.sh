@@ -33,14 +33,16 @@ echo "СЦЕНАРИЙ:"
 echo "1) Стенд на упоре A, полностью неподвижен."
 echo "2) Дождаться окончания STARTUP/WARM-UP."
 echo "3) SPACE на A -> плавно двигать к B."
+echo "   Если SPACE не срабатывает из-за фокуса окна: ЛЕВЫЙ КЛИК по GUI = SPACE."
 echo "4) Попасть к B примерно за 7.5 с."
 echo "5) На физическом упоре B нажать SPACE и остановить стенд."
+echo "   Резерв: ЛЕВЫЙ КЛИК по GUI = SPACE."
 echo "6) Дождаться сообщения 1AB СОХРАНЁН."
 echo "7) Q/ESC — закрыть GUI самостоятельно."
 echo "ПОСЛЕ ЭТОГО НИКАКИХ ДОПОЛНИТЕЛЬНЫХ A→B НЕ БУДЕТ."
 echo "======================================================================"
 
-if [[ ! -x "${BIN}" || "${ROOT}/tools/live_mono_imu_500mm_v41_camera_vs_fusion.cpp" -nt "${BIN}" || "${ROOT}/tools/v25_parts/live_mono_imu_500mm_repeat_hud_v25_part01.inc" -nt "${BIN}" || "${ROOT}/tools/v25_parts/live_mono_imu_500mm_repeat_hud_v25_part08b.inc" -nt "${BIN}" ]]; then
+if [[ ! -x "${BIN}" || "${ROOT}/tools/live_mono_imu_500mm_v41_camera_vs_fusion.cpp" -nt "${BIN}" || "${ROOT}/tools/v25_parts/live_mono_imu_500mm_repeat_hud_v25_part01.inc" -nt "${BIN}" || "${ROOT}/tools/v18_parts/live_mono_imu_500mm_repeat_hud_v18_part07b.inc" -nt "${BIN}" || "${ROOT}/tools/v18_parts/live_mono_imu_500mm_repeat_hud_v18_part08a.inc" -nt "${BIN}" || "${ROOT}/tools/v25_parts/live_mono_imu_500mm_repeat_hud_v25_part08b.inc" -nt "${BIN}" ]]; then
   echo "[V41] Сборка диагностического бинарника (один раз после изменения исходников)..."
   bash "${ROOT}/tools/build_v25.sh" "${BIN}"
 else

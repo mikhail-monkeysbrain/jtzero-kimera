@@ -1891,3 +1891,27 @@ Goal: determine whether the persistent direction-dependent Z is already present 
 **Physical test yaw:** none — analysis only. Recorded archives are at ≈ -90°.
 
 **Статус:** СИЛЬНО ПРОДВИНУЛИСЬ — state inheritance causally downgraded; persistent within-process direction-dependent Z is now the primary target.
+
+
+## 2026-09-08 — next discriminator: FC attitude vs Kimera attitude and FC-attitude raw-IMU world-Z
+
+Following the isolated fresh-process result and PIM vertical-axis decomposition, the next question is whether the several-degree attitude change used for Y->world-Z projection is physically present or estimator-side.
+
+**External-video role:** the side-view video with cross was recorded specifically as an independent mechanical reference for visible rig tilt/lift during A/B motion. It weakened the hypothesis of several-degree whole-rig tilt during the pass. Therefore any estimator-side multi-degree attitude change must now be checked against FC attitude and raw gravity rather than re-assumed physical.
+
+**Added archive-compatible diagnostics:**
+- `tools/analyze_v25_vio_vs_fc_attitude.py`: compares relative roll/pitch/yaw change along each V25 leg between Kimera backend and FC ATTITUDE using wall-time matching;
+- `tools/analyze_v25_fc_attitude_raw_world_z.py`: computes world-Z acceleration/integrated Vz/Pz from FC attitude + raw HIGHRES_IMU only, excluding Kimera backend attitude and backend bias.
+
+**Commits:**
+- `a91f6ee` — V25 VIO vs FC attitude comparison;
+- `3587136` — FC-attitude raw-IMU world-Z discriminator.
+
+**Decision logic:**
+- FC attitude and Kimera attitude change together, and FC+raw world-Z reproduces the signed Z => the effect is upstream of Kimera backend and must be reconciled with the external video/FC estimator or local FC/IMU mechanics.
+- FC attitude remains stable while Kimera tilts, and FC+raw Z stays near zero => Kimera orientation/extrinsic/preintegration handling becomes primary.
+- FC and Kimera agree on tilt while raw gravity vector does not => FC attitude estimate/history is suspect rather than actual whole-rig tilt.
+
+**Physical test yaw:** none — analysis only on existing fresh-process archives at ≈ -90°.
+
+**Статус:** ПРОДВИНУЛИСЬ — external video is now explicitly used as an independent constraint on the newly identified attitude-projection mechanism.

@@ -15,7 +15,7 @@ for p in sorted(glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*") + glob.glo
     if p not in CANDIDATES:
         CANDIDATES.append(p)
 
-BAUDS = [115200, 57600]
+BAUDS = [460800, 115200, 57600]
 
 def connect():
     last = []

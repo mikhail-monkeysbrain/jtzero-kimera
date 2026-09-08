@@ -33,7 +33,7 @@
         v25_events_header=true;
       }
       if(gV26ControlledAb4 && leg>=kLegCount){
-        notice="4AB СОХРАНЁН — ТЕСТ ЗАВЕРШЁН. Q / ESC: ВЫХОД";
+        notice=(kLegCount==1)?"1AB СОХРАНЁН — Q / ESC: ВЫХОД":"4AB СОХРАНЁН — ТЕСТ ЗАВЕРШЁН. Q / ESC: ВЫХОД";
         notice_until=monotonicNs()+3600000000000LL;
       }
       const int key=cv::waitKey(1)&0xff;
@@ -42,7 +42,7 @@
         break;
       }
       if((key==32||key==13||key==10) && gV26ControlledAb4 && leg>=kLegCount){
-        notice="4AB УЖЕ СОХРАНЁН — НАЖМИТЕ Q / ESC ДЛЯ ВЫХОДА";
+        notice=(kLegCount==1)?"1AB УЖЕ СОХРАНЁН — Q / ESC ДЛЯ ВЫХОДА":"4AB УЖЕ СОХРАНЁН — НАЖМИТЕ Q / ESC ДЛЯ ВЫХОДА";
         notice_until=monotonicNs()+3000000000LL;
         continue;
       }

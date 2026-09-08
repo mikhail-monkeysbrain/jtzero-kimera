@@ -2672,3 +2672,48 @@ Next analysis should identify actual motion phases from raw horizontal specific 
 **Physical test:** none.
 **Yaw:** existing archived runs ≈ -90°.
 **Статус:** DIRECTIONAL Z GENERATION IS LATE-PHASE AND BODY-Y-COUPLED; static-start offset and FC-attitude timing are ruled down.
+
+
+## 2026-09-08 — raw-IMU physical phase detection localizes directional Z onset
+
+User ran `analyze_v25_physical_motion_phases.py` on four isolated reset runs (archived yaw ≈ -90°).
+
+### BEFORE physical horizontal dynamics
+Residual is essentially zero in every run:
+- A->B #1: -0.00053 m/s²
+- B->A #1: +0.00024 m/s²
+- A->B #2: +0.00053 m/s²
+- B->A #2: -0.00080 m/s²
+
+### ACTIVE envelope
+A clear direction-dependent residual appears:
+- A->B #1: -0.02141 m/s²
+- B->A #1: +0.07712 m/s²
+- A->B #2: -0.01128 m/s²
+- B->A #2: +0.05908 m/s²
+
+Thus 4/4 runs show the same sign rule during physical horizontal dynamics:
+A->B negative, B->A positive.
+
+### AFTER final detected active interval
+Residual remains direction-dependent:
+- B->A #1: +0.04339 m/s² over ~2.22 s
+- A->B #2: -0.01496 m/s² over ~1.11 s
+- B->A #2: +0.04821 m/s² over ~0.83 s
+- A->B #1 has effectively no usable AFTER window because the last detected burst reaches END; its single endpoint sample is not evidence for persistence.
+
+### Interpretation
+This is strong evidence that the signed Z residual is induced by physical motion and/or the state left by that motion, not by a static START offset. The persistence after ACTIVE in three usable runs means a purely instantaneous horizontal-acceleration projection is insufficient by itself. Candidates include:
+- changed physical roll/gravity state after translation;
+- sensor/estimator/filter settling or memory;
+- acceleration calibration/cross-axis behavior whose effect persists with the changed orientation.
+
+Do NOT claim filter memory yet: AFTER also occurs after the rig has acquired a different real roll (~2.5°), so changed physical attitude is a major confounder.
+
+Methodological note: ACTIVE detector thresholds differ per run because they are derived from each run's settled-start noise. It is suitable for temporal localization but not yet a precise cross-run comparison of acceleration magnitudes.
+
+Next discriminator should compare settled windows BEFORE vs AFTER physical motion using raw accel vector, gyro rate, FC attitude, and reconstructed Y/Z residual. This can distinguish persistent motion/filter settling from a new stationary attitude/gravity equilibrium.
+
+**Physical test:** none.
+**Yaw:** archived runs ≈ -90°.
+**Статус:** DIRECTIONAL Z IS MOTION-INDUCED AND PERSISTS AFTER DETECTED HORIZONTAL DYNAMICS IN 3 USABLE RUNS; next isolate stationary AFTER state.

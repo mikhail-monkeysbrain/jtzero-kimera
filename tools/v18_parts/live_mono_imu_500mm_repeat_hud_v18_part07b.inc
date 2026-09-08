@@ -3,9 +3,6 @@
     camera_fd=open(camera_device.c_str(),O_RDWR|O_NONBLOCK);if(camera_fd==-1)fail("open camera");configureCamera(camera_fd);buffers=initCameraBuffers(camera_fd);
     v4l2_buf_type type=V4L2_BUF_TYPE_VIDEO_CAPTURE;if(xioctl(camera_fd,VIDIOC_STREAMON,&type)==-1)fail("STREAMON");streaming=true;discardWarmup(camera_fd);
     cv::setNumThreads(1);cv::namedWindow(kV8WindowName,cv::WINDOW_NORMAL);cv::setWindowProperty(kV8WindowName,cv::WND_PROP_FULLSCREEN,cv::WINDOW_FULLSCREEN);
-#ifdef JTZERO_V41_METRIC_CAMERA
-    cv::setMouseCallback(kV8WindowName,v41MouseCallback,nullptr);
-#endif
 
 
     std::vector<TimeSyncSample>sync;sync.reserve(500);ClockMapping mapping;int64_t pending=0,next_sync=monotonicNs();

@@ -2585,3 +2585,32 @@ The next discriminator should quantify the tiny effective roll/tilt mismatch req
 **Physical test:** none. Existing archives at ≈ -90° only.
 
 **Статус:** Z ERROR LOCALIZED TO Y/Z CANCELLATION UNDER ROLL; next target is sub-degree FC-attitude vs accelerometer-gravity mismatch, not the 2.5° physical roll itself.
+
+
+## 2026-09-08 — roll mismatch time-series: simple accel-vs-attitude lag not supported
+
+User ran `analyze_v25_roll_mismatch_timeseries.py` on four isolated -90° reset runs.
+
+Best accel-roll vs FC-roll correlation / lag:
+- A->B #1: +0.565 at 0 ms;
+- B->A #1: +0.360 at +250 ms;
+- A->B #2: +0.330 at +240 ms;
+- B->A #2: +0.178 at 0 ms.
+
+Mismatch standard deviation during motion is very large:
+- 1.23°, 1.82°, 1.80°, 1.93°.
+
+### Methodological correction
+The time-series analyzer used accel-derived roll during active translation. During acceleration/deceleration, an accelerometer measures specific force (gravity plus translational acceleration), so its instantaneous vector cannot be treated as a pure gravity direction. Therefore the ±1–2° apparent roll mismatch during motion is substantially contaminated by the commanded translation itself.
+
+The inconsistent 0/240/250/0 ms optimum lags do NOT support a single timing delay.
+
+Next timing test should use gyro-X integration (roll-rate from gyroscope) versus FC roll, because gyro roll-rate is not directly contaminated by linear translation.
+
+Added:
+- `tools/analyze_v25_gyro_vs_fc_roll_timeseries.py`
+- commit `b620d75`.
+
+**Physical test:** none. Existing archives at ≈ -90° only.
+
+**Статус:** SIMPLE ACCEL-vs-ATTITUDE LAG NOT SUPPORTED; previous dynamic accel-roll mismatch is not a valid gravity-only observable. Next: gyro-vs-FC roll timing.

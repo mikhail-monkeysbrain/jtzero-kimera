@@ -328,3 +328,10 @@ Observed:
 Therefore the 417.6 mm regression is NOT caused by applying the ChArUco focal correction to Kimera: production Kimera parameters were not changed by V44.10. The camera-only correction actually moves the independent visual displacement toward 500 mm, while Kimera independently underestimates the same pass.
 
 Added `tools/analyze_v44_11_kimera_regression_crossrun.py` to compare the current bad run against a prior reference run using the already archived data only. It jointly screens camera pixel motion, frontend validity/inliers/tracks, raw IMU excitation/attitude span, backend endpoint components, and final Kimera scale. No new physical run is required.
+
+
+## 2026-09-09 — V44.12 reveals non-monotonic current backend trajectory
+
+V44.12 shows the 417.6 mm run is not a simple constant scale underestimate. Relative to the reference, the current backend starts behind, overtakes strongly in the middle (+59.5 mm horizontal at 60% normalized progress), then loses distance rapidly late in the run and finishes -68.9 mm behind. Current horizontal displacement peaks around 85% (~439 mm) and then falls to 417.6 mm while the reference continues toward ~486.5 mm.
+
+The V44.12 frontend columns were empty because frontend and backend keyframe IDs are not directly shared. Added V44.13 to fix that methodological error: frontend rows are now matched to backend rows by nearest timestamp. The new analyzer prints backend per-step motion from the late run, identifies negative along-track steps and post-peak loss, and correlates them with timestamp-matched frontend status/inlier/tracked/mono-pose quality. No new physical run is required.

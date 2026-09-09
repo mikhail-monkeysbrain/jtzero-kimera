@@ -1,9 +1,17 @@
     if(gV26ControlledAb4){
+#ifdef JTZERO_CLEAN01
+      std::string guide;
+      if(phase==CapturePhase::WAIT_START) guide="ТОЧКА A → ПРОБЕЛ";
+      else if(phase==CapturePhase::MOVING) guide="ДВИГАЙТЕ A → B; НА B: СТОП → ПРОБЕЛ";
+      else guide="НЕ ДВИГАТЬ ДО СОХРАНЕНИЯ";
+      ru(panel,guide,{18,355},13,{220,220,220},cv::QT_FONT_BOLD);
+#else
       std::string guide;
       if(phase==CapturePhase::WAIT_START) guide=(leg==0)?"1) УПОР A  2) SPACE  3) СРАЗУ ДВИГАТЬ":"ВОЗВРАТ B→A НЕ ИЗМЕРЯЕТСЯ; СНОВА УПОР A";
       else if(phase==CapturePhase::MOVING) guide="ДВИГАЙТЕ ПЛАВНО; НА УПОРЕ B: SPACE, ЗАТЕМ СТОП";
       else guide="НЕ ДВИГАТЬ ДО СООБЩЕНИЯ О СОХРАНЕНИИ";
       ru(panel,guide,{18,355},13,{220,220,220},cv::QT_FONT_BOLD);
+#endif
     }else{
       ru(panel,phase==CapturePhase::WAIT_START?"Установите камеру точно на метку":"Переместите камеру ровно на 500 мм",{18,355},14,{220,220,220});
     }
@@ -18,8 +26,13 @@
     std::snprintf(b,sizeof(b),"Ошибка: %+.1f мм",r.error*1000.0);ru(panel,b,{18,595},16,{220,220,220});
     std::snprintf(b,sizeof(b),"ΔZ: %+.1f мм",r.dz*1000.0);ru(panel,b,{18,630},15,{190,190,190});
   }
+#ifdef JTZERO_CLEAN01
+  ru(panel,"CLEAN-01: результат не оценивается во время записи",{18,700},12,{185,185,185});
+  ru(panel,"Сначала сохраняются данные, анализ выполняется после прогона",{18,725},12,{185,185,185});
+#else
   ru(panel,"PASS: каждый ±30 мм, σ≤20 мм, ΔZ≤30 мм",{18,700},12,{185,185,185});
   ru(panel,"Разворот каждой пары ≥160°",{18,725},12,{185,185,185});
+#endif
   ru(panel,"Q / ESC — выход",{18,755},14,{215,215,215});
   if(!notice.empty()){cv::rectangle(panel,{10,790,360,70},cv::Scalar(35,35,125),-1);ru(panel,notice,{20,835},13,{255,255,255},cv::QT_FONT_BOLD);}
   panel.copyTo(canvas(cv::Rect(900,0,380,720)));

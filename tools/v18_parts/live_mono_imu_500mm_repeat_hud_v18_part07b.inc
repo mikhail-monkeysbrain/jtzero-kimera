@@ -73,7 +73,11 @@
                  <<(now-last_camera_frame_wall_ns)/1e6<<" ms raw="<<raw
                  <<" selected="<<selected<<" imu_fed="<<imu_fed<<"\n";
         if(gV26ControlledAb4){
+#ifdef JTZERO_CLEAN01
+          std::cout<<"[CLEAN01] ПРЕДУПРЕЖДЕНИЕ: поток камеры временно остановился; запись продолжается\n";
+#else
           std::cout<<"[CAM-STALL-WARN] CONTROLLED_AB4 — CONTINUING, no automatic abort\n";
+#endif
           // Prevent warning spam while preserving the fact that the stall occurred.
           last_camera_frame_wall_ns=now;
         }else{

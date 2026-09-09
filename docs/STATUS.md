@@ -534,3 +534,15 @@ Step 2 candidate result on clean run 20260909_141831:
 This is an improvement over raw camera-only, but still not sufficient.
 
 Before changing scale, Step 3 found a concrete implementation risk: the Step-2 script inherited the older hard-coded R_BC used by V44 analyzers, while current `params/JTZeroMonoFLU/LeftCameraParams.yaml` contains a materially different camera-to-body rotation. Step 3 now compares legacy and current extrinsics on the SAME archive, with both logged and fixed height, and quantifies the rotation disagreement. No new physical run and no empirical scale correction.
+
+
+### OF navigation improvement — step 3/8 result
+
+Same-run geometry audit:
+- legacy vs current camera extrinsic rotation differs by 5.701 deg;
+- nevertheless logged-height endpoint changes only 548.84 -> 548.75 mm;
+- fixed-185.5-mm endpoint changes only 531.42 -> 531.33 mm.
+
+Conclusion: stale R_BC was a real code hygiene defect but is not the source of the remaining metric bias. Current fixed-height residual is +31.33 mm (+6.27%). The exact-height diagnostic gives 174.56 mm, about 10.94 mm below the supplied 185.5-mm physical height; this must not be adopted as calibration without resolving what each height represents geometrically.
+
+Step 4/8: audit height semantics and planar projection geometry on existing data before any scale tuning or new physical pass.

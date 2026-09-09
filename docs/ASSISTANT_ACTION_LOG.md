@@ -2960,3 +2960,21 @@ Commits:
 **Физический тест:** не требуется.
 **Следующий вопрос:** если height offset объясняет лишь часть ошибки, проверить rotational/projective contamination frame-to-frame affine camera-only модели.
 **Статус:** ПРОДВИНУЛИСЬ — новый offline discriminator подготовлен без дополнительного A→B.
+
+
+## 2026-09-09 — V42 height scale insufficient; next rotational/projective screen
+
+V42 metric reconciliation result:
+- physical truth 500.00 mm;
+- Kimera 491.34 mm (-8.66 mm);
+- CAMERA-ONLY 566.61 mm (+66.61 mm);
+- direct TF-Luna 180.0 mm;
+- configured camera offset +5 mm -> nominal h=185 mm.
+
+If h is changed from 185 to 180 mm, CAMERA-ONLY would still be ~551.30 mm, leaving +51.30 mm residual. The +5 mm offset explains only ~23% of camera-only error. Matching 500 mm would require h~163.25 mm, i.e. -16.75 mm relative to TF-Luna, inconsistent with current physical geometry.
+
+Therefore height-scale mismatch alone is insufficient. Next offline discriminator uses existing V42 frontend logs to test whether monocular translation direction becomes more out-of-plane as relative visual rotation increases, which would support rotational/projective contamination of the simple affine camera-only estimator.
+
+Added `tools/analyze_v42_rot_projective_screen.py`.
+**Physical test:** none.
+**Status:** HEIGHT-ONLY EXPLANATION REJECTED AS SUFFICIENT; next screen rotational/projective contamination of CAMERA-ONLY.

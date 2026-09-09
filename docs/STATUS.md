@@ -252,3 +252,20 @@ The analyzer derives a consistent marker-center lattice from stable ArUco IDs, b
 V44.6 produced ~66.5 px reprojection RMS and recovered plane heights 381-611 mm for all focal hypotheses, despite the independently measured 185.5 mm physical height. The inferred marker lattice coordinates are therefore wrong; this is not evidence about focal length. Do not use V44.6 to tune K.
 
 A stronger same-data discriminator avoids board-layout inference entirely: every detected ArUco marker is itself an independent metric square of measured outer side 26.47 mm. Added `tools/analyze_v44_marker_pose_height.py` (V44.7), which solves a planar pose independently for every marker across the same 20 frames while sweeping focal multiplier and distortion strength. It compares median recovered camera-to-plane distance and marker-to-marker height MAD against the physical 185.5 mm. This checks stored K vs k=1.068 without requiring any board-ID layout, new image, or A->B run.
+
+
+## 2026-09-09 — V44.8 known ChArUco board geometry
+
+The printed target PDF is explicitly: ChArUco 7x5, nominal square 30.0 mm, marker 22.0 mm, DICT_4X4_50, print 100%/actual-size reference. User physically measured the printed square as 26.47 mm. Therefore the printed marker outer black-square side implied by the board design ratio is 26.47*(22/30)=**19.411 mm**. This is close to V44.5's independently predicted 19.496 mm under the k=1.068 motion-residual hypothesis.
+
+The earlier V44.7 run is both computationally inefficient and was launched with marker-mm=26.47 (square size mistakenly used as marker size). Stop/ignore that run.
+
+Added `tools/analyze_v44_charuco_known_board.py` (V44.8):
+- uses the actual 7x5 ChArUco board definition;
+- uses actual printed square 26.47 mm and marker 19.411 mm by default;
+- detects/interpolates ChArUco corners once per frame, then median-aggregates stable corners across the existing 20 images;
+- sweeps focal multiplier and distortion strength on the cached median geometry, so runtime is fast;
+- compares reprojection RMS and recovered camera-to-plane distance against the independent 185.5 mm physical height;
+- explicitly reports stored K (1.0), motion k (1.068), and local-naive k.
+
+No new image or A->B run is required.

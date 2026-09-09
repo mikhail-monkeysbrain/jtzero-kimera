@@ -289,3 +289,14 @@ Interpretation:
 5. Existing V44.4 frames are near-static duplicates and therefore must not be treated as 20 independent geometry experiments.
 
 No new A->B motion run should be performed before the multi-height static validation.
+
+
+## 2026-09-09 — V44.9 multi-height static validation
+
+V44.8 prefers k~1.11 only after using one independently measured planar distance. Because focal length and planar pose are coupled in a near-frontoparallel single-view test, production intrinsics must not be changed from one height.
+
+Added V44.9:
+- tools/run_v44_9_static_capture.sh <height_mm> <label> auto-discovers the OV9281 V4L2 node and captures 20 MJPEG 640x480 frames plus metadata;
+- tools/analyze_v44_9_multiheight.py fits one common focal multiplier and distortion-strength scale across all captured heights and reports the per-height implied k with distortion disabled.
+
+Protocol: capture at least three independently measured sensor-plane-to-board distances spanning roughly 150-260 mm, board flat for the first three captures. No A->B motion run until common-k stability is established.

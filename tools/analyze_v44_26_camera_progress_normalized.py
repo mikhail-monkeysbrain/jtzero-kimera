@@ -52,3 +52,44 @@ def pairs(run):
     # values are harmless; interp() handles them.
     return sorted(z,key=lambda a:a[0])
 
+
+def interp(z,target):
+    if not z: raise RuntimeError("empty paired stream")
+    if target<=z[0][0]: return z[0]
+    if target>=z[-1][0]: return z[-1]
+    for i in range(len(z)-1):
+        a,b=z[i],z[i+1]
+        if a[0]<=target<=b[0]:
+            if b[0]==a[0]: return a
+            w=(target-a[0])/(b[0]-a[0])
+            return (target,a[1]*(1-w)+b[1]*w,max(a[2],b[2]))
+    return z[-1]
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--reference",required=True)
+    ap.add_argument("--current",required=True)
+    a=ap.parse_args()
+    R=Path(a.reference).expanduser(); C=Path(a.current).expanduser()
+    A=pairs(R); B=pairs(C)
+    common=min(max(x[0] for x in A),max(x[0] for x in B))
+    print("="*116)
+    print("V44.26e — CLEAN RUNS NORMALIZED BY CAMERA-ONLY OBSERVED PROGRESS")
+    print("="*116)
+    print(f"reference pairs={len(A)} current pairs={len(B)} common camera-progress=0..{common:.1f} mm")
+    print("cam progress | ref backend  cur backend  delta | ref backend/cam cur backend/cam | max norm mismatch")
+    print("-"*116)
+    for i in range(1,21):
+        target=common*i/20
+        ar=interp(A,target); br=interp(B,target)
+        print(f"{target:11.1f} | {ar[1]:11.1f} {br[1]:11.1f} {br[1]-ar[1]:+7.1f} |"
+              f" {ar[1]/target:15.4f} {br[1]/target:15.4f} | {max(ar[2],br[2]):8.5f}")
+    print("\nEND SCREEN")
+    print("-"*116)
+    for name,z in (("reference",A),("current",B)):
+        cam=z[-1][0]; be=z[-1][1]
+        print(f"{name:9s}: camera={cam:.2f}mm backend={be:.2f}mm backend/camera={be/cam:.5f}")
+    print("="*116)
+
+if __name__=="__main__":
+    main()

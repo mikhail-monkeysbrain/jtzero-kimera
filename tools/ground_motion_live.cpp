@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
@@ -104,9 +105,11 @@ struct Estimate{double x=0,y=0,vx=0,vy=0,path=0,height=0;int inliers=0;uint64_t 
 }
 
 int main(int argc,char**argv){
-  if(argc<8){std::cerr<<"Использование: "<<argv[0]<<" <camera> <luna_serial> <fc_serial> <out_csv> <fx> <fy> <camera_offset_mm>\n";return 2;}
-  const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3],csvpath=argv[4];const double fx=std::stod(argv[5]),fy=std::stod(argv[6]),offset_m=std::stod(argv[7])/1000.0;
+  if(argc<7){std::cerr<<"Использование: "<<argv[0]<<" <camera> <luna_serial> <fc_serial> <out_csv> <camera_yaml> <camera_offset_mm>\n";return 2;}
+  const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3],csvpath=argv[4],camera_yaml=argv[5];
+  const double offset_m=std::stod(argv[6])/1000.0;
   try{
+    const CameraCalib calib=loadCameraCalib(camera_yaml);
     Camera cam;cam.openDev(camdev);LunaReader luna;luna.start(lunadev);FcReader fc;fc.start(fcdev);std::ofstream csv(csvpath,std::ios::trunc);csv<<"mono_ns,frame,height_m,x_m,y_m,vx_mps,vy_mps,path_m,inliers,roll,pitch,yaw\n";
     cv::setNumThreads(1);cv::namedWindow(kWindow,cv::WINDOW_NORMAL);cv::setWindowProperty(kWindow,cv::WND_PROP_FULLSCREEN,cv::WINDOW_FULLSCREEN);
     cv::Mat prev;Attitude prev_att{};int64_t prev_ns=0;Estimate est;bool reset_pending=true;bool armed=false;uint64_t frame_id=0;

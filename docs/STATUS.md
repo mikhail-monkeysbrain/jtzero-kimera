@@ -165,3 +165,14 @@ Static audit on the active OV9281/rp1-cfe capture node:
 
 Physical sensor-plane height remains measured at 185-186 mm, so the ~173.2 mm height closure remains rejected.
 Next discriminator: independent static effective-focal / projection-scale measurement at the real 185-186 mm sensor-plane height. No A->B run is required.
+
+
+## 2026-09-09 — V44.4 static OV9281 grid capture ready
+
+A correct OV9281 USB capture was obtained from /dev/video11: 20 MJPEG frames, 640x480, camera remained enumerated after capture.
+
+Physical target measurement supplied by user: 80.77 mm over the marked two-large-square span, therefore one large checker square is provisionally 40.385 mm. Physical working-plane to OV9281 sensor-plane height remains 185-186 mm (use 185.5 mm nominal).
+
+Added `tools/analyze_v44_grid_effective_focal.py`. It uses the same 20 static OV9281 frames, auto-detects the largest checker-grid inner-corner pattern, solves planar pose with the stored K/D, compares recovered perpendicular camera-to-plane distance against the independently measured 185.5 mm, and converts the discrepancy into an independent effective focal multiplier. This directly tests the remaining ~1.068 focal-scale hypothesis without a new A->B run.
+
+Caution: if 80.77 mm was not exactly a two-large-square physical span, rerun with the correct one-square size; do not interpret focal scale until target geometry is confirmed.

@@ -1,0 +1,20 @@
+diff --git a/src/backend/VioBackend.cpp b/src/backend/VioBackend.cpp
+--- a/src/backend/VioBackend.cpp
++++ b/src/backend/VioBackend.cpp
+@@ -436,6 +436,15 @@ bool VioBackend::addVisualInertialStateAndOptimize(
+       status_smart_stereo_measurements_kf.first.kfTrackingStatus_mono_;
+   switch (kfTrackingStatus_mono) {
+     // vehicle is not moving
+     case TrackingStatus::LOW_DISPARITY: {
++      // JT-Zero CLEAN-01 forensic A/B:
++      // when explicitly enabled, do not interpret LOW_DISPARITY as proof
++      // of zero motion. Process visual landmarks like a normal keyframe.
++      // Default Kimera behavior is unchanged when the env var is absent.
++      if (std::getenv("JTZERO_CLEAN01_LOW_DISPARITY_AS_MOVING") != nullptr) {
++        LOG(WARNING) << "JT-Zero CLEAN-01: LOW_DISPARITY treated as moving";
++        addLandmarksToGraph(landmarks_kf);
++        break;
++      }
+       LOG(WARNING)
+           << "Low disparity: adding zero velocity and no motion factors.";
+       if (backend_params_.zero_velocity_precision_ > 0.0) {

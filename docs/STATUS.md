@@ -349,3 +349,22 @@ V44.14 explicitly tests causal order: it separates negative backend displacement
 V44.15: reference contains zero VALID large-geometry events. Current contains exactly one: at ~90% / backend kf89, the accepted monocular body translation jumps by ~63.2 deg, from ~5 deg out-of-plane to 56.5 deg, while status remains VALID, inlier=0.929 and tracked=312. Backend simultaneously moves -9.0 mm. LOW_DISPARITY begins only on the next backend state.
 
 This strongly shifts the diagnosis from generic frontend quality to a specific accepted monocular translation-direction degeneracy near the end of motion. Added V44.16 to cross-check that event against the already logged PIM delta-position/delta-velocity/delta-rotation and to counterfactually screen a conservative gate: VALID + pose_valid + translation direction jump >=30 deg + out-of-plane tilt >=30 deg. The gate is not yet applied to production; V44.16 first measures reference false positives and current selectivity. No new physical run is required.
+
+
+## 2026-09-09 — V44.16 passes selective pre-fusion gate screen
+
+V44.16 result:
+- reference: 33 keyframes, 28 VALID, gate fires = 0;
+- current: 32 keyframes, 24 VALID, gate fires = 1;
+- the single fire is the known ~90% anomaly: mono direction jump 63.2 deg, out-of-plane tilt 56.5 deg, inlier 0.929, tracked 312;
+- PIM rotation at that same interval is only 0.007 deg, while neighboring intervals are also small, so physical camera rotation cannot explain the accepted visual direction jump;
+- PIM delta-position magnitude at the event is ordinary for the current run, so the anomaly is isolated to the monocular visual translation geometry rather than a simultaneous inertial impulse.
+
+Added V44.17 as an opt-in Kimera pre-fusion diagnostic patch. Default behavior remains unchanged. When JTZERO_MONO_POSE_GATE=1, a VALID mono keyframe is converted to LOW_DISPARITY before BackendInput only if both body-frame translation direction jump >=30 deg and out-of-plane tilt >=30 deg. The previous-good direction is not updated by a rejected pose. PIM/IMU propagation continues through the backend exactly as with a natural LOW_DISPARITY update.
+
+Files:
+- patches/kimera_v44_17_mono_pose_gate.patch
+- tools/install_v44_17_mono_pose_gate.sh
+- tools/run_v44_17_mono_pose_gate_single.sh
+
+Next physical test is one A->B pass with the gate enabled. Do not change focal/intrinsics for this test.

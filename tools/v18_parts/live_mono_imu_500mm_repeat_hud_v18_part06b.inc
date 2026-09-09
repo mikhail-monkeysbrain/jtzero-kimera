@@ -55,18 +55,18 @@ if(gV26ControlledAb4){
 #endif
   if(fc.valid){std::snprintf(b,sizeof(b),"FC: R %.2f  P %.2f  Y %.2f°",fc.roll_deg,fc.pitch_deg,fc.yaw_deg);ru(panel,b,{18,217},14,{190,190,190});}
 
-  std::string status,action;
+  std::string status,action,next_action;
   cv::Scalar status_color(220,220,220);
   if(gV26ControlledAb4){
-    if(!warmup.passed){status="ПОДГОТОВКА — НЕ ДВИГАТЬ";action="КНОПКА ПРОБЕЛ ПОКА ЗАБЛОКИРОВАНА";status_color=cv::Scalar(0,210,255);}
+    if(!warmup.passed){status="ПОДГОТОВКА — НЕ ДВИГАТЬ";action="СЕЙЧАС: ДЕРЖИТЕ СТЕНД НЕПОДВИЖНО";next_action="ДАЛЬШЕ: ДОЖДИТЕСЬ ГОТОВНОСТИ И УСТАНОВИТЕ СТЕНД В ТОЧКУ A";status_color=cv::Scalar(0,210,255);}
     else if(phase==CapturePhase::WAIT_START){
       status=(leg==0)?"УСТАНОВИТЕ СТЕНД НА A":"ВЕРНИТЕ СТЕНД B → A";
-      action="НАЖМИТЕ ПРОБЕЛ: СТАРТ → ЗАТЕМ ДВИГАЙТЕ";
+      action="СЕЙЧАС: УСТАНОВИТЕ СТЕНД В ТОЧКУ A И НАЖМИТЕ ПРОБЕЛ"; next_action="ДАЛЬШЕ: ПОСЛЕ СТАРТА ПЛАВНО ДВИГАЙТЕ СТЕНД A → B";
       status_color=cv::Scalar(90,220,90);
     }
-    else if(phase==CapturePhase::SETTLE_START){status="ФИКСИРУЮ A — НЕ ДВИГАТЬ";action="ЖДИТЕ";status_color=cv::Scalar(0,210,255);}
-    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ A → B";action="НА ТОЧКЕ B: ОСТАНОВИТЕСЬ И НАЖМИТЕ ПРОБЕЛ";status_color=cv::Scalar(0,210,255);}
-    else {status="НА B — НЕ ДВИГАТЬ";action="ФИКСИРУЮ КОНЕЦ";status_color=cv::Scalar(0,210,255);}
+    else if(phase==CapturePhase::SETTLE_START){status="ФИКСИРУЮ ТОЧКУ A — НЕ ДВИГАТЬ";action="СЕЙЧАС: ДЕРЖИТЕ СТЕНД НЕПОДВИЖНО";next_action="ДАЛЬШЕ: ПО КОМАНДЕ НАЧНИТЕ ДВИЖЕНИЕ A → B";status_color=cv::Scalar(0,210,255);}
+    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ A → B";action="СЕЙЧАС: ПЛАВНО ДВИГАЙТЕ СТЕНД К ТОЧКЕ B";next_action="ДАЛЬШЕ: НА ТОЧКЕ B ОСТАНОВИТЕСЬ И НАЖМИТЕ ПРОБЕЛ";status_color=cv::Scalar(0,210,255);}
+    else {status="ТОЧКА B — НЕ ДВИГАТЬ";action="СЕЙЧАС: ДЕРЖИТЕ СТЕНД НЕПОДВИЖНО";next_action="ДАЛЬШЕ: ДОЖДИТЕСЬ СООБЩЕНИЯ О СОХРАНЕНИИ ДАННЫХ";status_color=cv::Scalar(0,210,255);}
   }else{
     if(!warmup.passed){status="ПРОГРЕВ VIO — НЕ ДВИГАТЬ";action="СТАРТ ПОКА ЗАБЛОКИРОВАН";status_color=cv::Scalar(0,210,255);}
     else if(phase==CapturePhase::WAIT_START){status="ГОТОВО К СТАРТУ";action="ПРОБЕЛ / ENTER: СТАРТ";status_color=cv::Scalar(90,220,90);}
@@ -74,7 +74,17 @@ if(gV26ControlledAb4){
     else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ — КОРРЕКЦИЯ ГРАВИТАЦИИ ВЫКЛЮЧЕНА";action="ПРОБЕЛ / ENTER: КОНЕЦ";status_color=cv::Scalar(0,210,255);}
     else {status="СТАБИЛИЗАЦИЯ КОНЦА";action="НЕ ДВИГАТЬ";status_color=cv::Scalar(0,210,255);}
   }
+#ifdef JTZERO_CLEAN01
+  if(gV26ControlledAb4 && leg>=kLegCount){
+    status="ТЕСТ ЗАВЕРШЁН";
+    action="СЕЙЧАС: НЕ ДВИГАЙТЕ СТЕНД";
+    next_action="ДАЛЬШЕ: НАЖМИТЕ Q ИЛИ ESC ДЛЯ ВЫХОДА";
+    status_color=cv::Scalar(90,220,90);
+  }
+#endif
   ru(panel,status,{18,260},15,status_color,cv::QT_FONT_BOLD);
+  if(!action.empty()) ru(panel,action,{18,335},14,{245,245,245},cv::QT_FONT_BOLD);
+  if(!next_action.empty()) ru(panel,next_action,{18,395},12,{190,220,255},cv::QT_FONT_BOLD);
 
   if(gV26ControlledAb4 && phase==CapturePhase::MOVING && gV26MoveStartWallNs>0){
     const double elapsed=std::max(0.0,(now_ns-gV26MoveStartWallNs)*1e-9);

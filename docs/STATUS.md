@@ -213,3 +213,14 @@ The analyzer now reports the physical marker side implied by two competing hypot
 - side required for the V44 motion residual focal hypothesis k=1.068.
 
 Next discriminator: caliper-measure the actual outer black-square side of one marker and compare to those two predicted physical sizes. No new camera capture or A->B run is needed.
+
+
+## 2026-09-09 — V44.5 physical marker-side discriminator targets
+
+Using the 20 static OV9281 frames, direct ArUco detection is stable (20/20 frames, 274 marker detections). The provisional `--marker-mm 24.35` was only an example and is not a physical measurement, so the corresponding k~0.855 remains non-interpretable.
+
+The observed pixel geometry predicts the real OUTER black-square side that would be required by two competing hypotheses:
+- stored focal correct (k=1.000): **20.822 mm**;
+- motion residual effective-focal hypothesis (k=1.068): **19.496 mm**.
+
+Next discriminator is purely physical and requires no new image or A->B run: measure the outer black-square side of at least three printed markers (center/left/right if possible) with calipers. Use the mean and spread to compare against 20.822 vs 19.496 mm. This also checks printer-scale uniformity across the sheet.

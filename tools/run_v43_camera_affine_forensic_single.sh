@@ -62,6 +62,7 @@ export JTZERO_V25_BIN="${BIN}"
 rm -f "${HOME}"/jtzero_500mm_v26_[1-4]AB.csv
 rm -f "${HOME}"/jtzero_500mm_v25_{legs,backend,frontend,events,camera,attitude,range}.csv
 rm -f "${HOME}/jtzero_500mm_v25.csv"
+rm -f "${HOME}/jtzero_v43_camera_forensic.csv"
 
 read -r -p "ENTER — запустить единственный V43 проход: " _
 set +e
@@ -74,6 +75,11 @@ mkdir -p "${OUT}"
 cp -a "${A}/." "${OUT}/"
 if [[ -f "${HOME}/jtzero_v43_camera_forensic.csv" ]]; then
   cp "${HOME}/jtzero_v43_camera_forensic.csv" "${OUT}/"
+  V43_ROWS=$(awk 'END{print (NR>0?NR-1:0)}' "${HOME}/jtzero_v43_camera_forensic.csv")
+  echo "[V43] forensic rows archived: ${V43_ROWS}"
+else
+  V43_ROWS=0
+  echo "[V43] ERROR: forensic CSV missing"
 fi
 {
   echo "test=v43_camera_forensic"

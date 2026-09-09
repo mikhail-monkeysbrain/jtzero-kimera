@@ -144,12 +144,12 @@ struct V41MetricCamera {
     if(forensic.is_open()) forensic.close();
     forensic.open("/home/vio/jtzero_v43_camera_forensic.csv",std::ios::out|std::ios::trunc);
     if(!forensic){
-      std::cerr<<"[V43-FORENSIC] ERROR opening /home/vio/jtzero_v43_camera_forensic.csv\\n";
+      std::cerr<<"[V43-FORENSIC] ERROR opening /home/vio/jtzero_v43_camera_forensic.csv\n";
     }else{
-      forensic<<"seq,n_tracks,n_inliers,c0x,c0y,c1x,c1y,aff_a,aff_b,aff_scale,aff_rot_deg,tx_px,ty_px,height_m,dx_m,dy_m,step_m,net_x_m,net_y_m\\n";
+      forensic<<"seq,n_tracks,n_inliers,c0x,c0y,c1x,c1y,aff_a,aff_b,aff_scale,aff_rot_deg,tx_px,ty_px,height_m,dx_m,dy_m,step_m,net_x_m,net_y_m\n";
       forensic.flush();
       std::cout<<"[V43-FORENSIC] OPEN OK offset="<<camera_height_offset_m
-               <<" camera_height="<<cameraHeight()<<" m\\n";
+               <<" camera_height="<<cameraHeight()<<" m\n";
     }
 #endif
   }
@@ -220,7 +220,7 @@ struct V41MetricCamera {
     if(forensic){
       forensic<<forensic_seq++<<","<<a.size()<<","<<nin<<","<<c0x<<","<<c0y<<","<<c1x<<","<<c1y<<","
               <<aff_a<<","<<aff_b<<","<<aff_scale<<","<<aff_rot_deg<<","<<tx<<","<<ty<<","<<h<<","
-              <<dx_m<<","<<dy_m<<","<<step<<","<<net_x_m<<","<<net_y_m<<"\\n";
+              <<dx_m<<","<<dy_m<<","<<step<<","<<net_x_m<<","<<net_y_m<<"\n";
       forensic.flush();
     }
 #endif

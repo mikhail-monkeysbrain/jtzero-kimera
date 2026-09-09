@@ -416,3 +416,15 @@ V44.18 adds a no-new-run comparison of the archived reference, ungated regressio
 question is whether the current-only large VALID translation-direction discontinuity identified by V44.15 is actually absent
 from the gated archive and whether V44.16 would have fired on that archive. Do not perform another 500 mm physical pass
 until this archive-only discriminator is evaluated.
+
+
+### V44.19 — V44.18 does not prove the runtime gate fired
+
+Archive-only V44.18 shows that the first V44.17d run has no VALID >=30deg translation-geometry event, unlike the
+ungated 417.6mm regression (63.2deg direction jump / 56.5deg tilt). However, the captured V44.17d terminal output contains
+no `[JTZERO-MONO-POSE-GATE]` rejection marker. The gated archive still enters LOW_DISPARITY at ~87% progress and loses
+~12.4mm after its ~469.8mm peak, ending near 457.4mm. Thus the large anomaly disappeared, but gate causality is unproven.
+
+Do not run another physical 500mm pass yet. V44.19 records the archive-only causal distinction. The next runtime change
+must add persistent gate counters/summary (evaluated/rejected/max jump/max tilt), so a future run can prove whether the gate
+actually evaluated and rejected a pose even if no transient rejection line is noticed.

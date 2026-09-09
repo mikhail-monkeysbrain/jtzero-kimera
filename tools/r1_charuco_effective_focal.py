@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse,csv,math,statistics
+import argparse,csv,math,re,statistics
 from pathlib import Path
 import cv2
 import numpy as np
@@ -21,22 +21,16 @@ def read_payload(mj,row):
     return im
 
 def read_intrinsics(path):
-    fs=cv2.FileStorage(str(path),cv2.FILE_STORAGE_READ)
-    if not fs.isOpened(): raise RuntimeError("cannot open camera yaml")
-    intr=fs.getNode("intrinsics").mat()
-    if intr is None:
-        vals=fs.getNode("intrinsics")
-        intr=[vals.at(i).real() for i in range(vals.size())]
-    else:
-        intr=np.asarray(intr).reshape(-1).tolist()
-    d=fs.getNode("distortion_coefficients").mat()
-    if d is None:
-        vals=fs.getNode("distortion_coefficients")
-        d=[vals.at(i).real() for i in range(vals.size())]
-    else:
-        d=np.asarray(d).reshape(-1).tolist()
-    fs.release()
-    return [float(x) for x in intr],[float(x) for x in d]
+    txt=Path(path).read_text()
+    mi=re.search(r'intrinsics:\\s*\\[([^\\]]+)\\]',txt)
+    md=re.search(r'distortion_coefficients:\\s*\\[([^\\]]+)\\]',txt)
+    if not (mi and md):
+        raise RuntimeError("camera yaml parse failed")
+    intr=[float(x.strip()) for x in mi.group(1).split(",")]
+    d=[float(x.strip()) for x in md.group(1).split(",")]
+    if len(intr)!=4 or len(d)<4:
+        raise RuntimeError("unexpected camera yaml values")
+    return intr,d
 
 def main():
     ap=argparse.ArgumentParser()

@@ -5,10 +5,7 @@ try:
     import cv2
     import numpy as np
 except ModuleNotFoundError as e:
-    raise SystemExit(
-        "ERROR: OpenCV Python module is missing in the active interpreter.\n"
-        "Run with /usr/bin/python3 on this system."
-    ) from e
+    raise SystemExit("ERROR: run with /usr/bin/python3 (cv2 required)") from e
 
 FX=568.53170752165227
 FY=569.68005562865858
@@ -17,134 +14,120 @@ CY=239.88148589100641
 D=np.array([0.073569192194028493,-0.095253893789117,-0.010810530757187299,-0.0022843373576970235,0.082177400802757483],dtype=np.float64)
 K=np.array([[FX,0,CX],[0,FY,CY],[0,0,1]],dtype=np.float64)
 
-def find_candidates(gray):
-    out=[]
-    for cols in range(4,11):
-        for rows in range(3,9):
-            ok,c=cv2.findChessboardCornersSB(
-                gray,(cols,rows),
-                flags=cv2.CALIB_CB_NORMALIZE_IMAGE|cv2.CALIB_CB_EXHAUSTIVE|cv2.CALIB_CB_ACCURACY
-            )
-            if not ok or c is None:
-                continue
-            pts=c.reshape(rows,cols,2)
-            # regularity score: adjacent spacing CV + row/col direction consistency
-            hs=[]; vs=[]
-            for r in range(rows):
-                for cc in range(cols-1):
-                    hs.append(np.linalg.norm(pts[r,cc+1]-pts[r,cc]))
-            for r in range(rows-1):
-                for cc in range(cols):
-                    vs.append(np.linalg.norm(pts[r+1,cc]-pts[r,cc]))
-            if not hs or not vs: continue
-            mh,mv=float(np.mean(hs)),float(np.mean(vs))
-            cvh=float(np.std(hs)/mh) if mh>1e-9 else 999
-            cvv=float(np.std(vs)/mv) if mv>1e-9 else 999
-            score=cvh+cvv
-            out.append((score,cols,rows,pts))
-    out.sort(key=lambda x:(x[0],-(x[1]*x[2])))
-    return out
+def aruco_dicts():
+    # The printed target's dictionary was not recorded. Sweep common dictionaries,
+    # then demand cross-frame consistency instead of choosing a dictionary by desired focal.
+    names=[
+      "DICT_4X4_50","DICT_4X4_100","DICT_4X4_250","DICT_4X4_1000",
+      "DICT_5X5_50","DICT_5X5_100","DICT_5X5_250","DICT_5X5_1000",
+      "DICT_6X6_50","DICT_6X6_100","DICT_6X6_250","DICT_6X6_1000",
+      "DICT_7X7_50","DICT_7X7_100","DICT_7X7_250","DICT_7X7_1000",
+      "DICT_ARUCO_ORIGINAL"
+    ]
+    return [(n,cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco,n))) for n in names]
 
-def analyze_grid(pts,cols,rows,square_mm,physical_h):
-    # Adjacent spans in pixels, robust medians.
-    hsp=[float(np.linalg.norm(pts[r,c+1]-pts[r,c])) for r in range(rows) for c in range(cols-1)]
-    vsp=[float(np.linalg.norm(pts[r+1,c]-pts[r,c])) for r in range(rows-1) for c in range(cols)]
-    med_h=statistics.median(hsp); med_v=statistics.median(vsp)
-
-    # First-order local effective focal estimates from physical square scale.
-    fx_eff=med_h*physical_h/square_mm
-    fy_eff=med_v*physical_h/square_mm
-
-    # Undistort corner coordinates and recompute local spacing in normalized-pixel coordinates.
-    flat=pts.reshape(-1,1,2).astype(np.float64)
-    und=cv2.undistortPoints(flat,K,D,P=K).reshape(rows,cols,2)
-    uh=[float(np.linalg.norm(und[r,c+1]-und[r,c])) for r in range(rows) for c in range(cols-1)]
-    uv=[float(np.linalg.norm(und[r+1,c]-und[r,c])) for r in range(rows-1) for c in range(cols)]
-    med_uh=statistics.median(uh); med_uv=statistics.median(uv)
-    fx_eff_u=med_uh*physical_h/square_mm
-    fy_eff_u=med_uv*physical_h/square_mm
-
-    # Homography regularity / projective tilt proxy.
-    obj=np.array([[c*square_mm,r*square_mm] for r in range(rows) for c in range(cols)],dtype=np.float64)
-    img=pts.reshape(-1,2).astype(np.float64)
-    H,mask=cv2.findHomography(obj,img,0)
-    if H is None:
-        reproj=float("nan")
+def detect(gray,dic):
+    if hasattr(cv2.aruco,"ArucoDetector"):
+        det=cv2.aruco.ArucoDetector(dic,cv2.aruco.DetectorParameters())
+        corners,ids,_=det.detectMarkers(gray)
     else:
-        homog=np.c_[obj,np.ones(len(obj))]
-        q=(H@homog.T).T
-        q=q[:,:2]/q[:,2:3]
-        reproj=math.sqrt(float(np.mean(np.sum((q-img)**2,axis=1))))
+        corners,ids,_=cv2.aruco.detectMarkers(gray,dic)
+    if ids is None: return []
+    return [(int(i),c.reshape(4,2).astype(np.float64)) for i,c in zip(ids.flatten(),corners)]
 
-    return dict(
-        med_h=med_h,med_v=med_v,fx_eff=fx_eff,fy_eff=fy_eff,
-        med_uh=med_uh,med_uv=med_uv,fx_eff_u=fx_eff_u,fy_eff_u=fy_eff_u,
-        reproj=reproj
-    )
+def side_lengths(c):
+    return [float(np.linalg.norm(c[(i+1)%4]-c[i])) for i in range(4)]
 
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--glob",default=str(Path.home()/"v44_4_ov9281_*.jpg"))
-    ap.add_argument("--square-mm",type=float,required=True)
+    ap.add_argument("--marker-mm",type=float,required=True,
+                    help="actual physical OUTER black-square side of one ArUco marker")
     ap.add_argument("--physical-height-mm",type=float,default=185.5)
-    ap.add_argument("--max-regularity-cv",type=float,default=0.20)
     a=ap.parse_args()
-
     files=sorted(glob.glob(a.glob))
     if not files: raise SystemExit("no images matched")
+    if not hasattr(cv2,"aruco"):
+        raise SystemExit("cv2.aruco unavailable")
 
-    print("="*120)
-    print("V44.4b — ROBUST GRID LOCAL-SCALE / EFFECTIVE-FOCAL CHECK")
-    print("="*120)
-    print(f"images={len(files)} square={a.square_mm:.3f}mm physical_h={a.physical_height_mm:.2f}mm")
-    print(f"stored fx/fy={FX:.3f}/{FY:.3f}px")
-    print("NOTE: prior V44.4 PnP output was invalid because checker autodetection produced false grids with huge reprojection errors.")
-    print()
-
-    good=[]
+    frames=[]
     for fn in files:
         im=cv2.imread(fn,cv2.IMREAD_GRAYSCALE)
-        if im is None:
-            print(f"{Path(fn).name}: READ FAIL"); continue
-        cand=find_candidates(im)
-        if not cand:
-            print(f"{Path(fn).name}: NO GRID"); continue
-        score,cols,rows,pts=cand[0]
-        if score>a.max_regularity_cv:
-            print(f"{Path(fn).name}: REJECT irregular candidate {cols}x{rows} regularity={score:.3f}")
-            continue
-        m=analyze_grid(pts,cols,rows,a.square_mm,a.physical_height_mm)
-        good.append((cols,rows,score,m))
-        print(f"{Path(fn).name}: {cols}x{rows} reg={score:.3f} "
-              f"raw_spacing={m['med_h']:.2f}/{m['med_v']:.2f}px "
-              f"undist={m['med_uh']:.2f}/{m['med_uv']:.2f}px "
-              f"fx/fy_eff_u={m['fx_eff_u']:.1f}/{m['fy_eff_u']:.1f}px "
-              f"H_rms={m['reproj']:.2f}px")
-
+        if im is not None: frames.append((fn,im))
+    print("="*116)
+    print("V44.5 — ARUCO-DIRECT EFFECTIVE FOCAL DISCRIMINATOR")
+    print("="*116)
+    print(f"images={len(frames)} marker_outer_side={a.marker_mm:.3f}mm physical sensor-plane height={a.physical_height_mm:.2f}mm")
+    print(f"stored fx/fy={FX:.3f}/{FY:.3f}px; motion residual target k~=1.068 at h~=185mm")
     print()
-    print("SUMMARY")
-    print("-"*120)
-    if not good:
-        print("usable=0")
-        print("VERDICT: current ArUco/checker artwork is not reliably detectable as one regular checkerboard.")
-        print("NEXT: use ArUco/ChArUco marker geometry directly or provide explicit pixel endpoints for the measured 80.77mm span.")
-        print("="*120)
+
+    scored=[]
+    for name,dic in aruco_dicts():
+        per=[]
+        ids_seen=[]
+        for fn,gray in frames:
+            ds=detect(gray,dic)
+            if not ds: continue
+            vals=[]
+            for mid,c in ds:
+                und=cv2.undistortPoints(c.reshape(-1,1,2),K,D,P=K).reshape(4,2)
+                sl=side_lengths(und)
+                # perspective-safe local scale: geometric mean of opposite-pair means
+                horiz=(sl[0]+sl[2])/2
+                vert=(sl[1]+sl[3])/2
+                fxeff=horiz*a.physical_height_mm/a.marker_mm
+                fyeff=vert*a.physical_height_mm/a.marker_mm
+                vals.append((mid,fxeff,fyeff))
+                ids_seen.append(mid)
+            if vals:
+                per.append((Path(fn).name,vals))
+        ndet=sum(len(v) for _,v in per)
+        nframes=len(per)
+        if ndet:
+            scored.append((nframes,ndet,name,per,ids_seen))
+
+    if not scored:
+        print("No ArUco detections with common OpenCV dictionaries.")
+        print("NEXT: identify the target dictionary or use an explicit measured pixel segment.")
         return
 
-    fxe=[x[3]["fx_eff_u"] for x in good]; fye=[x[3]["fy_eff_u"] for x in good]
-    kmx=statistics.median(fxe)/FX; kmy=statistics.median(fye)/FY
-    print(f"usable={len(good)}/{len(files)}")
-    print(f"median effective fx/fy={statistics.median(fxe):.2f}/{statistics.median(fye):.2f}px")
-    print(f"median focal multipliers kx/ky={kmx:.5f}/{kmy:.5f}")
-    print("V44 motion-scale residual requires isotropic focal_k ~= 1.068 at h=185mm after rotation correction.")
-    kval=(kmx+kmy)/2
-    if abs(kval-1.068)<=0.02:
-        print("VERDICT: SUPPORTS effective focal/runtime projection-scale mismatch.")
-    elif abs(kval-1.0)<=0.02:
-        print("VERDICT: SUPPORTS stored focal scale; remaining motion error lies elsewhere.")
-    else:
-        print("VERDICT: DOES NOT CLEANLY MATCH either hypothesis; inspect target geometry/perspective/anisotropy.")
-    print("="*120)
+    scored.sort(reverse=True)
+    print("DICTIONARY SWEEP")
+    print("-"*116)
+    for nf,nd,n,per,ids in scored[:8]:
+        print(f"{n:20s}: frames={nf:2d}/{len(frames)} markers={nd:3d} unique_ids={len(set(ids)):2d}")
+    best=scored[0]
+    nf,nd,name,per,ids=best
+    # Require meaningful repeatability before interpreting geometry.
+    if nf < max(3,len(frames)//2):
+        print()
+        print(f"STOP: best dictionary {name} detects markers in only {nf}/{len(frames)} frames.")
+        print("Dictionary is not established reliably; do not infer focal.")
+        return
+
+    fxs=[]; fys=[]
+    print()
+    print(f"SELECTED BY DETECTION CONSISTENCY: {name}")
+    print("-"*116)
+    for fn,vals in per:
+        fx=[x[1] for x in vals]; fy=[x[2] for x in vals]
+        fxs.extend(fx); fys.extend(fy)
+        print(f"{fn}: markers={len(vals):2d} ids={','.join(str(x[0]) for x in vals)} "
+              f"fx_eff_med={statistics.median(fx):7.2f} fy_eff_med={statistics.median(fy):7.2f}")
+
+    mx=statistics.median(fxs); my=statistics.median(fys)
+    kx=mx/FX; ky=my/FY
+    print()
+    print("SUMMARY")
+    print("-"*116)
+    print(f"detections={len(fxs)} across {nf}/{len(frames)} frames")
+    print(f"effective focal medians fx/fy={mx:.2f}/{my:.2f}px")
+    print(f"focal multipliers kx/ky={kx:.5f}/{ky:.5f}; mean={(kx+ky)/2:.5f}")
+    print()
+    print("CAUTION: marker side must be the actual OUTER black-square side. This direct local-scale estimate")
+    print("also assumes the target plane is approximately parallel to the sensor plane. It is a discriminator,")
+    print("not a replacement for full planar pose estimation.")
+    print("="*116)
 
 if __name__=="__main__":
     main()

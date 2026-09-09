@@ -128,6 +128,25 @@
     #ifdef JTZERO_V42_DIRECT_LUNA
     gV41Cam.stopDirectRange();
 #endif
+#ifdef JTZERO_CLEAN01
+    {
+      std::ofstream mj(kV11MjpegPath,std::ios::binary|std::ios::trunc);
+      std::ofstream ix("/home/vio/jtzero_clean01_selected_frames.csv",std::ios::trunc);
+      uint64_t off=0;
+      if(mj&&ix){
+        ix<<"sequence,timestamp_ns,offset,bytes\n";
+        for(const auto& r:gClean01Frames){
+          mj.write(reinterpret_cast<const char*>(r.jpeg.data()),static_cast<std::streamsize>(r.jpeg.size()));
+          ix<<r.sequence<<','<<r.timestamp_ns<<','<<off<<','<<r.jpeg.size()<<'\n';
+          off+=r.jpeg.size();
+        }
+        std::cout<<"[CLEAN01] сохранено выбранных кадров: "<<gClean01Frames.size()
+                 <<" байт: "<<off<<"\n";
+      }else{
+        std::cerr<<"[CLEAN01] ОШИБКА: не удалось открыть архив выбранных кадров\n";
+      }
+    }
+#endif
     std::this_thread::sleep_for(std::chrono::milliseconds(500));pipeline->shutdown();if(pipeline_thread.joinable())pipeline_thread.join();pipeline_started=false;cv::destroyAllWindows();const auto states=pipeline->states();
     const auto frontend_states=pipeline->frontendStates();
     {

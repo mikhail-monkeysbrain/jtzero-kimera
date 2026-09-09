@@ -511,3 +511,13 @@ Stopped extending the V44 forensic chain as the primary development loop. Starte
 OV9281 optical flow + TF-Luna height + FC gyro/attitude -> metric Vx,Vy -> integration/fusion.
 
 Step counter is fixed in `docs/OF_NAV_IMPROVEMENT_PLAN.md`. Step 1/8 audits whether existing archived runs contain enough data for deterministic offline replay, so the first algorithm iterations can avoid new physical passes. The plan has a stop-rule at step 5: if repeatable improvement is not demonstrated, switch to additional hardware rather than continuing tuning indefinitely.
+
+
+### OF navigation improvement — step 1/8 PASS, step 2/8 started
+
+Step 1 confirms the clean 20260909_141831 archive contains camera forensic motion, logged height, frontend PIM/rotation evidence, backend and leg bounds. Raw OV9281 frame references are not archived, so the first offline estimator will reuse the already-computed median pixel flow rather than pretend to re-run a new pixel tracker.
+
+Step 2 adds a production-candidate offline estimator independent of Kimera backend state:
+median OV9281 flow -> subtract FC-attitude-predicted rotational image flow -> scale every sample by TF-Luna height -> integrate metric XY.
+
+The same script also reports affine, uncorrected median-flow, rotation-corrected dynamic-height, and fixed physical-height variants in one execution. This follows the project rule of testing maximum relevant hypotheses per run. No empirical 500-mm correction coefficient is applied.

@@ -104,91 +104,108 @@ def project_iso(x, y, z, scale, ox, oy):
     )
 
 
-def render(rows, w=1280, h=720):
+def render(rows, w=960, h=540):
     img = np.full((h, w, 3), 18, dtype=np.uint8)
-    cv2.putText(img, "JT-ZERO — 3D МАРШРУТ — БЫСТРЫЙ РЕЖИМ", (24,40),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.82, (245,245,245), 2, cv2.LINE_AA)
+    cv2.putText(img, "JT-ZERO 3D ROUTE - FAST", (20,34),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.78, (245,245,245), 2, cv2.LINE_AA)
 
     if not rows:
-        cv2.putText(img, "ОЖИДАНИЕ ДАННЫХ", (36,95),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.72, (0,210,255), 2, cv2.LINE_AA)
+        cv2.putText(img, "WAITING FOR DATA", (28,78),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.68, (0,210,255), 2, cv2.LINE_AA)
         return img
 
     rows = clean_height(trim_idle(rows))
     h0 = rows[0]["h"]
     pts = [(r["x"], r["y"], r["h"]-h0) for r in rows]
-    xs=[p[0] for p in pts]; ys=[p[1] for p in pts]; zs=[p[2] for p in pts]
 
-    span=max(max(xs)-min(xs) if len(xs)>1 else 0,
-             max(ys)-min(ys) if len(ys)>1 else 0,
-             max(zs)-min(zs) if len(zs)>1 else 0, 0.10)
-    scale=min(700.0/span, 1600.0)
-    ox,oy=560,430
+    # Raw isometric coordinates, before screen scale/translation.
+    raw = [(0.866*x - 0.866*y, 0.50*x + 0.50*y - z) for x,y,z in pts]
+    us=[p[0] for p in raw]; vs=[p[1] for p in raw]
 
-    # lightweight grid
-    grid=max(0.10,min(0.50,span))
-    step=grid/4
-    for i in range(-4,5):
-        a=project_iso(i*step,-4*step,0,scale,ox,oy); b=project_iso(i*step,4*step,0,scale,ox,oy)
-        cv2.line(img,a,b,(42,42,42),1,cv2.LINE_AA)
-        a=project_iso(-4*step,i*step,0,scale,ox,oy); b=project_iso(4*step,i*step,0,scale,ox,oy)
-        cv2.line(img,a,b,(42,42,42),1,cv2.LINE_AA)
+    # Dedicated plot area leaves room for stats on the right.
+    left, top, right, bottom = 28, 65, 700, 510
+    pw, ph = right-left, bottom-top
+    umin,umax=min(us),max(us); vmin,vmax=min(vs),max(vs)
+    du=max(umax-umin,0.08); dv=max(vmax-vmin,0.08)
 
-    # At most 800 segments for display.
-    stride=max(1,len(pts)//800)
-    draw_pts=pts[::stride]
-    if draw_pts[-1] != pts[-1]:
-        draw_pts.append(pts[-1])
-    pix=[project_iso(*p,scale,ox,oy) for p in draw_pts]
+    # Fit the ACTUAL projected route to the viewport with 12% margins.
+    scale=min(pw/(du*1.24), ph/(dv*1.24), 2200.0)
+    uc=(umin+umax)*0.5; vc=(vmin+vmax)*0.5
+    ox=(left+right)*0.5 - scale*uc
+    oy=(top+bottom)*0.5 - scale*vc
+
+    def pp(p):
+        return (int(round(ox+scale*p[0])), int(round(oy+scale*p[1])))
+
+    # Compact background grid centered on route bounds.
+    grid_col=(42,42,42)
+    for frac in (-0.5,-0.25,0,0.25,0.5):
+        y=int(round((top+bottom)*0.5 + frac*ph*0.9))
+        cv2.line(img,(left,y),(right,y),grid_col,1,cv2.LINE_AA)
+        x=int(round((left+right)*0.5 + frac*pw*0.9))
+        cv2.line(img,(x,top),(x,bottom),grid_col,1,cv2.LINE_AA)
+
+    # Bound drawing work.
+    stride=max(1,len(raw)//700)
+    raw_draw=raw[::stride]
+    if raw_draw[-1] != raw[-1]:
+        raw_draw.append(raw[-1])
+    pix=[pp(p) for p in raw_draw]
+
     if len(pix)>1:
         cv2.polylines(img,[np.asarray(pix,np.int32)],False,(90,190,255),2,cv2.LINE_AA)
     cv2.circle(img,pix[0],6,(255,180,80),-1,cv2.LINE_AA)
     cv2.circle(img,pix[-1],7,(80,220,120),-1,cv2.LINE_AA)
 
-    dx=rows[-1]["x"]-rows[0]["x"]; dy=rows[-1]["y"]-rows[0]["y"]
+    dx=rows[-1]["x"]-rows[0]["x"]
+    dy=rows[-1]["y"]-rows[0]["y"]
     dz=rows[-1]["h"]-rows[0]["h"]
-    netxy=math.hypot(dx,dy); net3=math.sqrt(dx*dx+dy*dy+dz*dz)
+    netxy=math.hypot(dx,dy)
+    net3=math.sqrt(dx*dx+dy*dy+dz*dz)
     path=rows[-1]["path"]-rows[0]["path"]
     hmin=min(r["h"] for r in rows); hmax=max(r["h"] for r in rows)
 
     stats=[
-        f"NET XY: {netxy*1000:.1f} мм",
-        f"NET 3D: {net3*1000:.1f} мм",
-        f"Путь XY: {path*1000:.1f} мм",
-        f"Высота: {hmin*1000:.0f}...{hmax*1000:.0f} мм",
-        f"Точек: {len(rows)}",
+        f"NET XY: {netxy*1000:.1f} mm",
+        f"NET 3D: {net3*1000:.1f} mm",
+        f"PATH XY: {path*1000:.1f} mm",
+        f"HEIGHT: {hmin*1000:.0f}..{hmax*1000:.0f} mm",
+        f"POINTS: {len(rows)}",
     ]
     for i,s in enumerate(stats):
-        cv2.putText(img,s,(935,115+i*42),cv2.FONT_HERSHEY_SIMPLEX,0.62,(230,230,230),1,cv2.LINE_AA)
-    cv2.putText(img,"Q / ESC — ВЫХОД",(935,675),cv2.FONT_HERSHEY_SIMPLEX,0.52,(190,190,190),1,cv2.LINE_AA)
+        cv2.putText(img,s,(725,105+i*37),
+                    cv2.FONT_HERSHEY_SIMPLEX,0.48,(230,230,230),1,cv2.LINE_AA)
+    cv2.putText(img,"Q / ESC - EXIT",(725,505),
+                cv2.FONT_HERSHEY_SIMPLEX,0.46,(190,190,190),1,cv2.LINE_AA)
     return img
-
 
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("csv")
     ap.add_argument("--live",action="store_true")
-    ap.add_argument("--fps",type=float,default=15.0)
+    ap.add_argument("--fps",type=float,default=20.0)
     args=ap.parse_args()
 
     tail=CsvTail(args.csv)
     cv2.namedWindow(WIN,cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WIN,1280,720)
+    cv2.resizeWindow(WIN,960,540)
     cv2.moveWindow(WIN,0,0)
 
     period=1.0/max(1.0,min(args.fps,30.0))
+    last_count=-1
+    last_img=None
     while True:
         t0=time.monotonic()
         tail.update()
-        cv2.imshow(WIN,render(tail.rows))
+        if len(tail.rows)!=last_count or last_img is None:
+            last_img=render(tail.rows)
+            last_count=len(tail.rows)
+        cv2.imshow(WIN,last_img)
         k=cv2.waitKey(1)
         if k in (27,ord("q"),ord("Q")): break
         if cv2.getWindowProperty(WIN,cv2.WND_PROP_VISIBLE)<1: break
-        if not args.live:
-            time.sleep(0.03)
-        else:
-            dt=time.monotonic()-t0
-            if dt<period: time.sleep(period-dt)
+        dt=time.monotonic()-t0
+        if dt<period: time.sleep(period-dt)
 
     cv2.destroyAllWindows()
 

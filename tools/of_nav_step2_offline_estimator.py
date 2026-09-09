@@ -15,7 +15,7 @@ FY=569.68005562865858
 CX=315.98271077441063
 CY=239.88148589100641
 
-# Active camera->body rotation from the current JTZeroMonoFLU configuration.
+# LEGACY camera->body rotation retained only for Step-2 reproducibility.\n# Step 3 audits this against the current LeftCameraParams.yaml; do not treat it as current production geometry.
 RBC=[
  [0.012724080, 0.995473080, 0.094188300],
  [0.998083560,-0.006939440,-0.061490300],

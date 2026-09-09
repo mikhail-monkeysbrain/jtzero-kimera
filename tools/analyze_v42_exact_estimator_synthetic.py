@@ -57,6 +57,13 @@ def run(proj_x, proj_y, dy_frac):
     pts=und.copy(); net=np.zeros(2)
     for _ in range(steps):
         # ideal next undistorted pixel coordinates: translation plus weak projective warp
+        # IMPORTANT: pts are UNDISTORTED coordinates of the same physical
+        # features in the current frame.  A camera translation changes their
+        # image coordinates for this frame, but the feature set must not be
+        # propagated by repeatedly adding the previous optical-flow shift.
+        # The old version did that, effectively moving the synthetic scene
+        # through the FOV every iteration and produced the impossible 1808 mm
+        # "pure translation" result.
         q=pts.copy()
         q[:,0]+=base_px
         q[:,1]+=base_px*dy_frac
@@ -68,7 +75,8 @@ def run(proj_x, proj_y, dy_frac):
         b=distort(q)-np.array([cx,cy])
         al,be,tx,ty=simfit(a,b)
         net += np.array([-tx*h/fx,-ty*h/fy])
-        pts=q
+        # Do NOT assign pts=q here: each iteration is an independent
+        # local frame-to-frame sample around the same feature distribution.
     return np.linalg.norm(net)*1000
 
 cases=[]

@@ -200,3 +200,16 @@ If the artwork is not detectable as one regular checker grid, next discriminator
 V44.4b rejected all 20 frames (regularity 0.345-1.742, threshold 0.20). Therefore the printed ArUco/checker artwork must not be treated as a conventional checkerboard. This confirms the first V44.4 focal result was an artifact of false checker detections.
 
 Next static discriminator is V44.5: detect ArUco markers directly. The analyzer sweeps common OpenCV ArUco dictionaries only because the target dictionary has not yet been recorded; dictionary selection is based on detection consistency across the 20 existing frames, never proximity to the desired focal. A physical measurement of one marker's outer black-square side is required. No new A->B motion run is required.
+
+
+## 2026-09-09 — V44.5 ArUco detection succeeds; metric interpretation pending real marker size
+
+Direct ArUco detection is robust: 20/20 frames, 274 detections, 14 unique IDs. Common DICT_4X4 variants decode the same first 50 IDs, so detection consistency is strong but dictionary family is not uniquely identified; this does not affect corner geometry.
+
+The run used `--marker-mm 24.35`, which had previously been given only as an example and was not independently confirmed as the real outer black-square side. Therefore the reported effective focal ~487/486 px and k~0.855 MUST NOT yet be interpreted as camera geometry.
+
+The analyzer now reports the physical marker side implied by two competing hypotheses using the observed pixel geometry:
+- side required for stored focal k=1.000;
+- side required for the V44 motion residual focal hypothesis k=1.068.
+
+Next discriminator: caliper-measure the actual outer black-square side of one marker and compare to those two predicted physical sizes. No new camera capture or A->B run is needed.

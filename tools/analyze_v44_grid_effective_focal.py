@@ -122,7 +122,18 @@ def main():
     print("-"*116)
     print(f"detections={len(fxs)} across {nf}/{len(frames)} frames")
     print(f"effective focal medians fx/fy={mx:.2f}/{my:.2f}px")
-    print(f"focal multipliers kx/ky={kx:.5f}/{ky:.5f}; mean={(kx+ky)/2:.5f}")
+    kval=(kx+ky)/2
+    print(f"focal multipliers kx/ky={kx:.5f}/{ky:.5f}; mean={kval:.5f}")
+    # Convert the observed pixel scale into the physical marker side required by two competing hypotheses.
+    # Because fx_eff = pixel_side * h / marker_side, marker_side scales inversely with focal multiplier.
+    req_marker_stored=a.marker_mm*kval
+    req_marker_motion=a.marker_mm*kval/1.068
+    print()
+    print("PHYSICAL MARKER-SIDE DISCRIMINATOR")
+    print("-"*116)
+    print(f"outer black-square side required if stored focal is correct (k=1.000): {req_marker_stored:.3f} mm")
+    print(f"outer black-square side required if motion residual focal hypothesis is correct (k=1.068): {req_marker_motion:.3f} mm")
+    print("Measure ONE marker outer black-square side with calipers and compare directly. This is the next discriminator.")
     print()
     print("CAUTION: marker side must be the actual OUTER black-square side. This direct local-scale estimate")
     print("also assumes the target plane is approximately parallel to the sensor plane. It is a discriminator,")

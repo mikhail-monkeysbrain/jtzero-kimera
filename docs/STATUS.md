@@ -314,3 +314,17 @@ Added V44.10 start-board anchored one-pass protocol:
 - also compares affine-net and median-flow estimates under the same anchor to test whether the correction transfers from static board geometry to real translation.
 
 This directly tests whether the start-board projection-scale discrepancy is causal for the 500 mm motion error without requiring the board along the route or changing stand height.
+
+
+## 2026-09-09 — V44.10 result separates camera-scale improvement from Kimera regression
+
+Current V44.10 physical pass archive: `20260909_133245_v43_CAMERA_AFFINE_FORENSIC`.
+
+Observed:
+- Kimera horizontal = 417.59 mm (scale 0.8352), worse than the recent ~500 mm-class runs;
+- camera-only in the same pass remains high with stored focal (~538.5 mm raw / ~532.9 mm after FC rotation);
+- applying the independently measured start ChArUco anchor k=1.1025 brings camera-only to ~488.5 mm raw, ~483.3 mm after rotation, and affine net ~490.6 mm.
+
+Therefore the 417.6 mm regression is NOT caused by applying the ChArUco focal correction to Kimera: production Kimera parameters were not changed by V44.10. The camera-only correction actually moves the independent visual displacement toward 500 mm, while Kimera independently underestimates the same pass.
+
+Added `tools/analyze_v44_11_kimera_regression_crossrun.py` to compare the current bad run against a prior reference run using the already archived data only. It jointly screens camera pixel motion, frontend validity/inliers/tracks, raw IMU excitation/attitude span, backend endpoint components, and final Kimera scale. No new physical run is required.

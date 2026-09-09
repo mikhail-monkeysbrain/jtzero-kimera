@@ -116,6 +116,10 @@ def run_case(frames,mj,att,rng,K,D,RBC,t0,t1,period_ns,height_mode):
             h0=h1=height_mode
         elif height_mode=="luna":
             h0=range_m(rng,ta); h1=range_m(rng,tb)
+        elif isinstance(height_mode,tuple) and height_mode[0]=="luna_offset":
+            off=float(height_mode[1])
+            h0=max(0.05,range_m(rng,ta)+off)
+            h1=max(0.05,range_m(rng,tb)+off)
         else:
             raise RuntimeError("bad height mode")
         z=pair_motion(prev,im,K,D,R0,R1,h0,h1)
@@ -149,6 +153,8 @@ def main():
       ("stored K, H=170.2mm (R9)",1.0,0.1702),
       ("stored K, H=185.5mm",1.0,0.1855),
       ("stored K, raw Luna H",1.0,"luna"),
+      ("stored K, Luna-20mm (production)",1.0,("luna_offset",-0.020)),
+      ("stored K, Luna-16.36mm",1.0,("luna_offset",-0.01636)),
       ("R1 Kx1.0925, H=185.5mm",1.0925,0.1855),
       ("MOVE Kx1.10561, H=185.5mm",1.10561,0.1855),
     ]

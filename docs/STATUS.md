@@ -428,3 +428,22 @@ no `[JTZERO-MONO-POSE-GATE]` rejection marker. The gated archive still enters LO
 Do not run another physical 500mm pass yet. V44.19 records the archive-only causal distinction. The next runtime change
 must add persistent gate counters/summary (evaluated/rejected/max jump/max tilt), so a future run can prove whether the gate
 actually evaluated and rejected a pose even if no transient rejection line is noticed.
+
+
+### V44.20 — persistent runtime gate evidence
+
+V44.19 confirms that archive geometry alone cannot prove that the V44.17d runtime gate fired. The first gated archive has no
+large VALID pose discontinuity, but it also has no captured `[JTZERO-MONO-POSE-GATE]` rejection line and still develops a
+LOW_DISPARITY tail.
+
+Added persistent gate instrumentation to the local Kimera patch path:
+- `evaluated`: number of VALID mono poses examined while the gate is enabled;
+- `rejected`: number actually converted to INVALID before backend fusion;
+- `max_jump_deg`: largest previous-good to current translation-direction jump observed;
+- `max_tilt_deg`: largest out-of-plane translation tilt observed.
+
+A shared stats object prints one `[JTZERO-MONO-POSE-GATE-SUMMARY]` line when the callback is destroyed, including when
+`rejected=0`. The V44.20 runner captures the full terminal log and refuses to treat a run as gate evidence if this summary
+is absent.
+
+Do not run another physical pass until `tools/install_v44_20_gate_counters.sh` builds successfully.

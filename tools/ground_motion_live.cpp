@@ -17,6 +17,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
+#include <csignal>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
@@ -34,6 +35,7 @@ constexpr int kExposureAbsolute=50, kGain=0;
 constexpr const char* kWindow="JT-ZERO — ОЦЕНКА ДВИЖЕНИЯ ПО ЗЕМЛЕ";
 constexpr double kPi=3.14159265358979323846;
 std::atomic<bool> g_running{true};
+void onSignal(int){ g_running=false; }
 
 int64_t monoNs(){timespec t{};if(clock_gettime(CLOCK_MONOTONIC,&t)!=0)throw std::runtime_error("clock_gettime");return (int64_t)t.tv_sec*1000000000LL+t.tv_nsec;}
 void fail(const std::string&s){throw std::runtime_error(s+": "+std::strerror(errno));}
@@ -114,7 +116,14 @@ int main(int argc,char**argv){
   try{
     const CameraCalib calib=loadCameraCalib(camera_yaml);
     Camera cam;cam.openDev(camdev);LunaReader luna;luna.start(lunadev);FcReader fc;fc.start(fcdev);std::ofstream csv(csvpath,std::ios::trunc);csv<<"mono_ns,frame,height_m,x_m,y_m,vx_mps,vy_mps,path_m,inliers,roll,pitch,yaw\n";
-    cv::setNumThreads(1);cv::namedWindow(kWindow,cv::WINDOW_NORMAL);cv::setWindowProperty(kWindow,cv::WND_PROP_FULLSCREEN,cv::WINDOW_FULLSCREEN);
+    cv::setNumThreads(1);
+    std::signal(SIGINT,onSignal);
+    std::signal(SIGTERM,onSignal);
+    cv::namedWindow(kWindow,cv::WINDOW_NORMAL);
+    // Обычное максимизируемое окно: остаётся системная рамка с кнопками
+    // свернуть/развернуть/закрыть. Не использовать WINDOW_FULLSCREEN.
+    cv::resizeWindow(kWindow,1280,720);
+    cv::moveWindow(kWindow,0,0);
     cv::Mat prev;Attitude prev_att{};int64_t prev_ns=0;Estimate est;bool reset_pending=true;enum class TestState{READY,MOVING,DONE};TestState test_state=TestState::READY;uint64_t frame_id=0;double result_x=0,result_y=0,result_path=0;
     while(g_running){
       pollfd p{cam.fd,POLLIN,0};int pr=poll(&p,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0)continue;
@@ -150,10 +159,14 @@ int main(int argc,char**argv){
         const char* next_text=test_state==TestState::READY?"ДАЛЬШЕ: ПРОБЕЛ — СТАРТ":test_state==TestState::MOVING?"В ТОЧКЕ B: ПРОБЕЛ — СТОП":"Q / ESC — ВЫХОД";
         ru(panel,now_text,{18,105},13,{255,255,255},cv::QT_FONT_BOLD);
         ru(panel,next_text,{18,145},12,{235,235,235},cv::QT_FONT_BOLD);
-        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Геом. точек: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Крен/тангаж: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});if(test_state==TestState::DONE){snprintf(z,sizeof(z),"ИТОГ NET: %.1f мм",std::hypot(result_x,result_y)*1000);ru(panel,z,{18,635},13,{245,245,245},cv::QT_FONT_BOLD);}ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);int k=cv::waitKey(1);if(k==' '&&sensors_ok){if(test_state==TestState::READY){reset_pending=true;test_state=TestState::MOVING;}else if(test_state==TestState::MOVING){result_x=est.x;result_y=est.y;result_path=est.path;test_state=TestState::DONE;est.vx=0;est.vy=0;}}if(k=='q'||k=='Q'||k==27)g_running=false;
+        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Геом. точек: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Крен/тангаж: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});if(test_state==TestState::DONE){snprintf(z,sizeof(z),"ИТОГ NET: %.1f мм",std::hypot(result_x,result_y)*1000);ru(panel,z,{18,635},13,{245,245,245},cv::QT_FONT_BOLD);}ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);
+        int k=cv::waitKey(1);
+        // Крестик окна должен завершать процесс даже без фокуса клавиатуры.
+        if(cv::getWindowProperty(kWindow,cv::WND_PROP_VISIBLE)<1){g_running=false;break;}if(k==' '&&sensors_ok){if(test_state==TestState::READY){reset_pending=true;test_state=TestState::MOVING;}else if(test_state==TestState::MOVING){result_x=est.x;result_y=est.y;result_path=est.path;test_state=TestState::DONE;est.vx=0;est.vy=0;}}if(k=='q'||k=='Q'||k==27)g_running=false;
         if(csv&&sensors_ok)csv<<now<<','<<frame_id<<','<<std::fixed<<std::setprecision(6)<<h<<','<<est.x<<','<<est.y<<','<<est.vx<<','<<est.vy<<','<<est.path<<','<<est.inliers<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<'\n';
       }
     }
+    cv::destroyAllWindows();
     return 0;
   }catch(const std::exception&e){std::cerr<<"GROUND MOTION LIVE FAIL: "<<e.what()<<"\n";return 1;}
 }

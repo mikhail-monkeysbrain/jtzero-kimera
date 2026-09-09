@@ -269,3 +269,23 @@ Added `tools/analyze_v44_charuco_known_board.py` (V44.8):
 - explicitly reports stored K (1.0), motion k (1.068), and local-naive k.
 
 No new image or A->B run is required.
+
+
+## 2026-09-09 — V44.8 result: static geometry requires k ~= 1.11
+
+V44.8 used the known ChArUco 7x5 layout and the physically measured printed square 26.47 mm. The marker side was correctly derived from the board ratio 22/30 as 19.411 mm. Detection was strong: all 20 frames produced 12–16 ChArUco corners from 13–14 markers, with 16 stable corners used for pose fitting.
+
+Key results:
+- stored K (k=1.000, distortion scale 0): reprojection RMS 0.909 px, recovered height 167.13 mm, height error -9.90%;
+- motion hypothesis (nearest grid k=1.0675, distortion scale 0): RMS 0.906 px, height 178.31 mm, error -3.88%;
+- best joint low-RMS + physical-height candidate: k=1.1100, distortion scale 0.10, RMS 0.913 px, height 185.52 mm, error +0.01%, tilt 4.53 deg;
+- with distortion disabled, k=1.1100 still gives RMS 0.905 px and height 185.34 mm (-0.09%), so the conclusion does not depend on tuning distortion.
+
+Interpretation:
+1. The old stored focal scale is independently inconsistent with the measured 185.5 mm camera-to-plane height by about 10%.
+2. The earlier k~=1.068 motion-scale hypothesis moves in the correct direction but is insufficient; static target geometry points to k~=1.11.
+3. Reprojection RMS alone is almost flat versus focal scale (~0.90 px), so focal scale is weakly observable from a single near-frontoparallel planar view. The independent physical height is what discriminates k.
+4. Do not overwrite production intrinsics yet. Next discriminator must use the same camera/format with several independently measured camera-to-board heights and preferably deliberate board tilt, fitting one common focal scale across all captures. This separates focal scale from distance/planar-pose ambiguity.
+5. Existing V44.4 frames are near-static duplicates and therefore must not be treated as 20 independent geometry experiments.
+
+No new A->B motion run should be performed before the multi-height static validation.

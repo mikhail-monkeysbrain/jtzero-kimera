@@ -28,12 +28,15 @@ echo; echo "===== CRASH-SAFE GATE STATS ====="
 if [[ -f "$STATS" ]]; then cat "$STATS"; else echo "ERROR: STATS FILE MISSING"; exit 2; fi
 
 line=$(tail -n 1 "$STATS")
-keyframes=$(sed -n 's/.*keyframes_seen=\([0-9][0-9]*\).*/\1/p' <<<"$line")
-valid=$(sed -n 's/.*valid_seen=\([0-9][0-9]*\).*/\1/p' <<<"$line")
-evaluated=$(sed -n 's/.*evaluated=\([0-9][0-9]*\).*/\1/p' <<<"$line")
-rejected=$(sed -n 's/.*rejected=\([0-9][0-9]*\).*/\1/p' <<<"$line")
-max_jump=$(sed -n 's/.*max_jump_deg=\([^ ]*\).*/\1/p' <<<"$line")
-max_tilt=$(sed -n 's/.*max_tilt_deg=\([^ ]*\).*/\1/p' <<<"$line")
+get_field() {
+  tr ' ' '\n' <<<"$line" | awk -F= -v key="$1" '$1 == key {print $2; exit}'
+}
+keyframes=$(get_field keyframes_seen)
+valid=$(get_field valid_seen)
+evaluated=$(get_field evaluated)
+rejected=$(get_field rejected)
+max_jump=$(get_field max_jump_deg)
+max_tilt=$(get_field max_tilt_deg)
 
 echo; echo "===== V44.23 DISCRIMINATOR ====="
 echo "keyframes_seen=${keyframes:-?} valid_seen=${valid:-?} evaluated=${evaluated:-?} rejected=${rejected:-?}"

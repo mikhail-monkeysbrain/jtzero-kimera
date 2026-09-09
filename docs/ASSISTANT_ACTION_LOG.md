@@ -2978,3 +2978,21 @@ Therefore height-scale mismatch alone is insufficient. Next offline discriminato
 Added `tools/analyze_v42_rot_projective_screen.py`.
 **Physical test:** none.
 **Status:** HEIGHT-ONLY EXPLANATION REJECTED AS SUFFICIENT; next screen rotational/projective contamination of CAMERA-ONLY.
+
+
+## 2026-09-09 — V42 rotation correlation not supported; test lens-distortion scale bound
+
+V42 rotational/projective screen on 26 valid mono intervals:
+- out-of-plane translation tilt mean 5.30°, p90 6.62°, max 13.61°;
+- relative visual rotation mean 0.10°, p90 0.15°, max 0.17°;
+- corr(rotation magnitude, translation tilt) = -0.494;
+- high-rotation quartile had LOWER mean tilt by 1.80° than low-rotation quartile.
+
+Therefore the specific hypothesis 'larger frame-to-frame visual rotation drives larger out-of-plane translation contamination' is not supported by this run. This does not exclude projective/model error generally.
+
+Next candidate is raw-pixel lens-distortion scale because V42 camera-only runs optical flow and affine estimation directly on distorted OV9281 pixels, then converts tx/ty with pinhole fx/fy. Actual calibration has non-zero radial/tangential distortion.
+
+Added `tools/analyze_v42_distortion_scale_bound.py`. It reads the actual LeftCameraParams.yaml, samples the distortion Jacobian across 640x480, and compares its local scale range with the +10.26% residual camera-only scale after using direct TF-Luna height.
+
+**Physical test:** none.
+**Status:** ROTATION-CORRELATED CONTAMINATION NOT SUPPORTED; NEXT = DISTORTION SCALE ORDER-OF-MAGNITUDE SCREEN.

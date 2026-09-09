@@ -35,6 +35,7 @@ struct FrameRec {
 };
 struct ImuRec {
   int64_t ts=0;
+  uint64_t fc_us=0;
   double ax=0,ay=0,az=0,gx=0,gy=0,gz=0;
 };
 struct OutState {
@@ -61,11 +62,74 @@ std::vector<ImuRec> loadImu(const std::string& path){
   std::string line;std::getline(f,line);std::vector<ImuRec> out;
   while(std::getline(f,line)){
     if(line.empty())continue;auto v=split(line,',');if(v.size()<15)continue;
-    ImuRec r;r.ts=std::stoll(v[1]);
+    ImuRec r;r.ts=std::stoll(v[1]);r.fc_us=std::stoull(v[2]);
     r.ax=std::stod(v[9]);r.ay=std::stod(v[10]);r.az=std::stod(v[11]);
     r.gx=std::stod(v[12]);r.gy=std::stod(v[13]);r.gz=std::stod(v[14]);out.push_back(r);
   }
   return out;
+}
+
+
+constexpr double kStartupStaticSec = 3.0;
+constexpr size_t kStartupMinSamples = 450;
+constexpr double kStartupMaxMeanGyroRadS = 0.010;
+constexpr double kStartupMaxGyroStdRadS = 0.005;
+constexpr double kStartupMinAccelNorm = 9.60;
+constexpr double kStartupMaxAccelNorm = 10.00;
+constexpr double kStartupMaxAccelNormStd = 0.080;
+
+struct StartupStaticGate {
+  uint64_t first_us=0,last_us=0;
+  size_t n=0;
+  double sgx=0,sgy=0,sgz=0,sgx2=0,sgy2=0,sgz2=0;
+  double san=0,san2=0;
+
+  void reset(){
+    first_us=last_us=0;n=0;
+    sgx=sgy=sgz=sgx2=sgy2=sgz2=0;
+    san=san2=0;
+  }
+
+  bool add(const ImuRec& r){
+    if(first_us==0)first_us=r.fc_us;
+    last_us=r.fc_us;++n;
+    sgx+=r.gx;sgy+=r.gy;sgz+=r.gz;
+    sgx2+=r.gx*r.gx;sgy2+=r.gy*r.gy;sgz2+=r.gz*r.gz;
+    const double an=std::sqrt(r.ax*r.ax+r.ay*r.ay+r.az*r.az);
+    san+=an;san2+=an*an;
+
+    if(n<kStartupMinSamples)return false;
+    const double elapsed=(last_us>first_us)?(last_us-first_us)*1e-6:0.0;
+    if(elapsed<kStartupStaticSec)return false;
+
+    const double dn=static_cast<double>(n);
+    const double mgx=sgx/dn,mgy=sgy/dn,mgz=sgz/dn;
+    const double mean_g=std::sqrt(mgx*mgx+mgy*mgy+mgz*mgz);
+    const double sx=std::sqrt(std::max(0.0,sgx2/dn-mgx*mgx));
+    const double sy=std::sqrt(std::max(0.0,sgy2/dn-mgy*mgy));
+    const double sz=std::sqrt(std::max(0.0,sgz2/dn-mgz*mgz));
+    const double man=san/dn;
+    const double sanstd=std::sqrt(std::max(0.0,san2/dn-man*man));
+
+    const bool ok=
+      mean_g<=kStartupMaxMeanGyroRadS &&
+      std::max({sx,sy,sz})<=kStartupMaxGyroStdRadS &&
+      man>=kStartupMinAccelNorm &&
+      man<=kStartupMaxAccelNorm &&
+      sanstd<=kStartupMaxAccelNormStd;
+
+    if(ok)return true;
+    reset();
+    return false;
+  }
+};
+
+size_t findLiveFeedStart(const std::vector<ImuRec>& imu){
+  StartupStaticGate gate;
+  for(size_t i=0;i<imu.size();++i){
+    if(gate.add(imu[i]))return i;
+  }
+  throw std::runtime_error("replay could not reproduce CLEAN01 static gate pass");
 }
 
 class ReplayPipeline final:public VIO::MonoImuPipeline{
@@ -93,6 +157,8 @@ int main(int argc,char**argv){
     auto frames=loadFrames(run+"/selected_frames.csv");
     auto imu=loadImu(run+"/imu.csv");
     if(frames.empty()||imu.empty())throw std::runtime_error("empty replay input");
+    const size_t feed_start=findLiveFeedStart(imu);
+    const int64_t feed_start_ts=imu[feed_start].ts;
     std::ifstream mj(run+"/selected.mjpg",std::ios::binary);if(!mj)throw std::runtime_error("cannot open selected.mjpg");
 
     setenv("JTZERO_DIAG_CHAIN_CSV","1",1);
@@ -102,7 +168,7 @@ int main(int argc,char**argv){
     ReplayPipeline pipe(vp);pipe.install();
     std::thread th([&](){pipe.spin();});
 
-    size_t ii=0;VIO::FrameId fid=0;
+    size_t ii=feed_start;VIO::FrameId fid=0;
     for(const auto&fr:frames){
       while(ii<imu.size()&&imu[ii].ts<=fr.ts){
         VIO::ImuAccGyr d;d<<imu[ii].ax,imu[ii].ay,imu[ii].az,imu[ii].gx,imu[ii].gy,imu[ii].gz;
@@ -130,7 +196,14 @@ int main(int argc,char**argv){
     fo.setf(std::ios::fixed);fo.precision(9);
     for(const auto&s:pipe.out_)fo<<s.ts<<','<<s.kf<<','<<s.px<<','<<s.py<<','<<s.pz<<','<<s.vx<<','<<s.vy<<','<<s.vz<<'\n';
 
-    std::cout<<"CLEAN01_REPLAY frames="<<frames.size()<<" imu="<<imu.size()<<" backend="<<pipe.out_.size()<<"\n";
+    std::cout<<"CLEAN01_REPLAY frames="<<frames.size()
+             <<" imu_total="<<imu.size()
+             <<" imu_feed_start_index="<<feed_start
+             <<" imu_fed="<<(imu.size()-feed_start)
+             <<" feed_start_ts="<<feed_start_ts
+             <<" first_frame_ts="<<frames.front().ts
+             <<" lead_ms="<<(frames.front().ts-feed_start_ts)/1e6
+             <<" backend="<<pipe.out_.size()<<"\n";
     std::cout<<"CHAIN_CSV=/home/vio/jtzero_kimera_chain.csv\n";
     std::cout<<"REPLAY_OUTPUT="<<run<<"/replay_output.csv\n";
     return pipe.out_.empty()?1:0;

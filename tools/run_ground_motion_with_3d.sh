@@ -60,7 +60,21 @@ if [[ ! -s "$OUT" ]]; then
   exit 1
 fi
 
-python3 "$ROOT/tools/visualize_ground_motion_3d.py"   "$OUT"   --live   --refresh-ms "$REFRESH" &
+VIS_MODE="${JTZERO_GM_3D_MODE:-fast}"
+
+echo "3D режим: $VIS_MODE"
+
+if [[ "$VIS_MODE" == "matplotlib" ]]; then
+  python3 "$ROOT/tools/visualize_ground_motion_3d.py" \
+    "$OUT" \
+    --live \
+    --refresh-ms "$REFRESH" &
+else
+  python3 "$ROOT/tools/visualize_ground_motion_3d_fast.py" \
+    "$OUT" \
+    --live \
+    --fps 15 &
+fi
 VIS_PID=$!
 
 echo "Ground Motion PID: $EST_PID"

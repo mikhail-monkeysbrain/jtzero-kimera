@@ -3092,3 +3092,11 @@ Operational consequences:
 - Every proposed run should state which hypotheses it tests and why another physical run is actually necessary.
 
 Goal: minimize operator time, mechanical variability, and run-to-run confounding while maximizing information gained per physical experiment.
+
+
+## 2026-09-09 — V44 physical height measured; height closure rejected
+
+User measured working surface -> OV9281 sensor plane as **185–186 mm**.
+The V44 same-run closure required ~173.2 mm after rotation compensation, therefore height geometry alone cannot explain the camera-only scale.
+Do not tune the camera height to ~173 mm.
+Next: static runtime OV9281 geometry audit with `tools/analyze_v44_runtime_camera_geometry.py`; if runtime remains 640x480 as calibrated, perform one independent planar-target effective-focal measurement. No 500-mm A->B pass is requested.

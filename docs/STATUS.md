@@ -245,3 +245,10 @@ Added `tools/analyze_v44_fullboard_geometry.py` to use the SAME 20 static OV9281
 - sensor-plane to working-plane height = 185.5 mm nominal.
 
 The analyzer derives a consistent marker-center lattice from stable ArUco IDs, builds full 3-D planar marker-corner coordinates, and sweeps shared focal multiplier k plus distortion-strength scale. For every model it solves board pose and reports reprojection RMS, recovered perpendicular camera-plane height, and tilt. It explicitly compares stored K (k=1), motion hypothesis (k=1.068), and the naive local-scale k~0.7866. No new image or A->B run is needed.
+
+
+## 2026-09-09 — V44.6 full-board lattice inference invalid
+
+V44.6 produced ~66.5 px reprojection RMS and recovered plane heights 381-611 mm for all focal hypotheses, despite the independently measured 185.5 mm physical height. The inferred marker lattice coordinates are therefore wrong; this is not evidence about focal length. Do not use V44.6 to tune K.
+
+A stronger same-data discriminator avoids board-layout inference entirely: every detected ArUco marker is itself an independent metric square of measured outer side 26.47 mm. Added `tools/analyze_v44_marker_pose_height.py` (V44.7), which solves a planar pose independently for every marker across the same 20 frames while sweeping focal multiplier and distortion strength. It compares median recovered camera-to-plane distance and marker-to-marker height MAD against the physical 185.5 mm. This checks stored K vs k=1.068 without requiring any board-ID layout, new image, or A->B run.

@@ -29,6 +29,9 @@ constexpr const char* kV11CameraPath = "/home/vio/jtzero_clean01_camera.csv";
 constexpr const char* kV11MjpegPath = "/home/vio/jtzero_clean01_selected.mjpg";
 constexpr const char* kV11AttitudePath = "/home/vio/jtzero_clean01_attitude.csv";
 constexpr const char* kV12RangePath = "/home/vio/jtzero_clean01_range.csv";
+constexpr const char* kBackendPath = "/home/vio/jtzero_clean01_backend.csv";
+constexpr const char* kFrontendPath = "/home/vio/jtzero_clean01_frontend.csv";
+constexpr const char* kEventsPath = "/home/vio/jtzero_clean01_events.csv";
 constexpr const char* kV8WindowName = "JT-ZERO — ЧИСТЫЙ ТЕСТ 01 — 500 ММ";
 #else
 constexpr const char* kV8CsvPath = "/home/vio/jtzero_500mm_v25_legs.csv";
@@ -37,6 +40,9 @@ constexpr const char* kV11CameraPath = "/home/vio/jtzero_500mm_v25_camera.csv";
 constexpr const char* kV11MjpegPath = "/home/vio/jtzero_500mm_v25.mjpg";
 constexpr const char* kV11AttitudePath = "/home/vio/jtzero_500mm_v25_attitude.csv";
 constexpr const char* kV12RangePath = "/home/vio/jtzero_500mm_v25_range.csv";
+constexpr const char* kBackendPath = "/home/vio/jtzero_500mm_v25_backend.csv";
+constexpr const char* kFrontendPath = "/home/vio/jtzero_500mm_v25_frontend.csv";
+constexpr const char* kEventsPath = "/home/vio/jtzero_500mm_v25_events.csv";
 constexpr const char* kV8WindowName = "JT-ZERO 500 мм A-B-A x2 v25 — closure test";
 #endif
 constexpr double kTruth500M = 0.500;

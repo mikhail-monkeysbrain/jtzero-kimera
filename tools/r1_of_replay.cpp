@@ -88,11 +88,17 @@ int main(int argc,char**argv){
   pairs<<"pair_id,frame0_id,frame1_id,t0_ns,t1_ns,dt_ms,tracks,median_res_dx_px,median_res_dy_px,median_metric_x_mm,median_metric_y_mm,range_cm,range_dt_ms,att0_dt_ms,att1_dt_ms\n";
   tracks<<std::fixed<<std::setprecision(6);pairs<<std::fixed<<std::setprecision(6);
 
-  uint64_t pairId=0,skippedGap=0,decodedPairs=0,totalTracks=0,digest=1469598103934665603ULL;
+  uint64_t pairId=0,skippedGap=0,skippedOutsideSync=0,skippedSyncDt=0,decodedPairs=0,totalTracks=0,digest=1469598103934665603ULL;
   double netx=0,nety=0,path=0,maxRangeDt=0,maxAttDt=0;
+  const uint64_t syncBegin=std::max(R.front().recv,A.front().recv);
+  const uint64_t syncEnd=std::min(R.back().recv,A.back().recv);
+  if(syncEnd<=syncBegin) throw std::runtime_error("no common range/attitude time overlap");
+  constexpr double kMaxRangeDtMs=15.0;
+  constexpr double kMaxAttDtMs=30.0;
   for(size_t i=0;i+(size_t)stride<F.size();i+=stride){
     const Frame& f0=F[i];const Frame& f1=F[i+stride];
     if(f1.seq!=f0.seq+(uint64_t)stride){skippedGap++;continue;}
+    if(f0.recv<syncBegin || f1.recv>syncEnd){skippedOutsideSync++;continue;}
     cv::Mat a=decode(mj,f0),b=decode(mj,f1);decodedPairs++;
     std::vector<cv::Point2f> p0,p1,p0back;
     cv::goodFeaturesToTrack(a,p0,350,0.01,8.0,cv::noArray(),7,false,0.04);
@@ -106,6 +112,7 @@ int main(int argc,char**argv){
     const double ad0=std::abs((double)((int64_t)at0.recv-(int64_t)f0.recv)/1e6),ad1=std::abs((double)((int64_t)at1.recv-(int64_t)f1.recv)/1e6);
     maxRangeDt=std::max(maxRangeDt,rd);maxAttDt=std::max(maxAttDt,std::max(ad0,ad1));
     if(!rg.valid)continue;
+    if(rd>kMaxRangeDtMs || ad0>kMaxAttDtMs || ad1>kMaxAttDtMs){skippedSyncDt++;continue;}
     const cv::Matx33d Rw0=rpy(at0.r,at0.p,at0.y),Rw1=rpy(at1.r,at1.p,at1.y);
     const cv::Matx33d Rc10=Rbc.t()*Rw1.t()*Rw0*Rbc;
 
@@ -135,14 +142,14 @@ int main(int argc,char**argv){
   const double net=std::hypot(netx,nety);
   std::ofstream summary(out+"/summary.txt");
   summary<<std::fixed<<std::setprecision(6)
-         <<"pairs="<<pairId<<"\ndecoded_pairs="<<decodedPairs<<"\nskipped_sequence_gap="<<skippedGap<<"\ntracks="<<totalTracks
+         <<"pairs="<<pairId<<"\ndecoded_pairs="<<decodedPairs<<"\nskipped_sequence_gap="<<skippedGap<<"\nskipped_outside_sync="<<skippedOutsideSync<<"\nskipped_sync_dt="<<skippedSyncDt<<"\ntracks="<<totalTracks
          <<"\nnet_x_mm="<<netx<<"\nnet_y_mm="<<nety<<"\nnet_mm="<<net<<"\npath_mm="<<path
          <<"\nmax_range_dt_ms="<<maxRangeDt<<"\nmax_att_dt_ms="<<maxAttDt<<"\ndigest="<<hex64(digest)<<"\n";
   summary.close();
   std::cout<<std::fixed<<std::setprecision(3)
            <<"R1 6/6 — STANDALONE PIXEL OF REPLAY\n"
            <<"dataset="<<dir<<" stride="<<stride<<"\n"
-           <<"pairs="<<pairId<<" decoded="<<decodedPairs<<" skipped_sequence_gap="<<skippedGap<<" tracks="<<totalTracks<<"\n"
+           <<"pairs="<<pairId<<" decoded="<<decodedPairs<<" skipped_sequence_gap="<<skippedGap<<" skipped_outside_sync="<<skippedOutsideSync<<" skipped_sync_dt="<<skippedSyncDt<<" tracks="<<totalTracks<<"\n"
            <<"net=("<<netx<<","<<nety<<") mm net="<<net<<" mm path="<<path<<" mm\n"
            <<"max_range_dt="<<maxRangeDt<<" ms max_att_dt="<<maxAttDt<<" ms\n"
            <<"digest="<<hex64(digest)<<"\n"

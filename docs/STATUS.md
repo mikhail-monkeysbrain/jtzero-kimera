@@ -502,3 +502,12 @@ The 417.6 mm run remains a transient accepted-pose/front-end/backend failure cas
 Reference/current endpoints remain close (486.07/482.11 mm; mean 484.09 mm, spread 3.97 mm), confirming a repeatable clean-run endpoint shortfall near 3%. However their keyframe-count-normalized cumulative trajectories are not close through the middle: current-reference reaches roughly +35 mm around 45–65% before converging to -4 mm at the endpoint. Therefore V44.25 does **not** justify applying 500/484 as a production scale coefficient. The progress axis is confounded by different keyframe timing/count (33 vs 31 backend rows and different motion duration).
 
 V44.26 re-normalizes the two clean runs by observed camera-only cumulative progress and interpolates backend displacement at equal camera progress. This tests whether the mid-run shape disagreement is mostly a time/keyframe-normalization artifact and whether the remaining endpoint residual is genuinely downstream of raw image displacement.
+
+
+## 2026-09-09 — New direction: OF navigation improvement, step 1/8
+
+Stopped extending the V44 forensic chain as the primary development loop. Started an explicit 8-step improvement plan aimed at a potentially production-capable local navigation architecture:
+
+OV9281 optical flow + TF-Luna height + FC gyro/attitude -> metric Vx,Vy -> integration/fusion.
+
+Step counter is fixed in `docs/OF_NAV_IMPROVEMENT_PLAN.md`. Step 1/8 audits whether existing archived runs contain enough data for deterministic offline replay, so the first algorithm iterations can avoid new physical passes. The plan has a stop-rule at step 5: if repeatable improvement is not demonstrated, switch to additional hardware rather than continuing tuning indefinitely.

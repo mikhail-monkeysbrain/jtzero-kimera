@@ -62,6 +62,17 @@ constexpr int64_t kHudPeriodNs = 100000000LL;
 constexpr int64_t kBackendReadyAgeNs = 500000000LL;
 constexpr int64_t kSelectedPeriodNs = 1000000000LL / kVioFps;
 constexpr int64_t kFinalHoldNs = 3000000000LL;
+constexpr double kStartupStaticSec = 3.0;
+constexpr size_t kStartupMinSamples = 450;
+constexpr double kStartupMaxMeanGyroRadS = 0.010;
+constexpr double kStartupMaxGyroStdRadS = 0.005;
+constexpr double kStartupMinAccelNorm = 9.60;
+constexpr double kStartupMaxAccelNorm = 10.00;
+constexpr double kStartupMaxAccelNormStd = 0.080;
+constexpr double kWarmupSec = 12.0;
+constexpr int kWarmupStableStatesNeeded = 8;
+constexpr double kWarmupMaxSpeedMps = 0.020;
+constexpr double kWarmupMaxSpanM = 0.008;
 constexpr double kMaxTimesyncRttMs = 10.0;
 constexpr double kPi = 3.14159265358979323846;
 constexpr const char* kWindow = "JT-ZERO — CLEAN-01 STANDALONE";
@@ -145,7 +156,88 @@ struct EventRow {
   double px=0,py=0,pz=0;
 };
 
-enum class Phase { INITIALIZING, READY_A, MOVING, HOLD_B, DONE, ABORTED };
+
+struct StartupStaticGate {
+  bool passed=false;
+  uint64_t first_us=0,last_us=0;
+  size_t n=0;
+  double sgx=0,sgy=0,sgz=0,sgx2=0,sgy2=0,sgz2=0;
+  double sax=0,say=0,saz=0,san=0,san2=0;
+
+  void reset(){
+    first_us=last_us=0;n=0;
+    sgx=sgy=sgz=sgx2=sgy2=sgz2=0;
+    sax=say=saz=san=san2=0;
+  }
+  bool add(uint64_t us,double ax,double ay,double az,double gx,double gy,double gz){
+    if(passed)return true;
+    if(first_us==0)first_us=us;
+    last_us=us;++n;
+    sgx+=gx;sgy+=gy;sgz+=gz;sgx2+=gx*gx;sgy2+=gy*gy;sgz2+=gz*gz;
+    sax+=ax;say+=ay;saz+=az;
+    const double an=std::sqrt(ax*ax+ay*ay+az*az);san+=an;san2+=an*an;
+    if(n<kStartupMinSamples)return false;
+    const double elapsed=(last_us>first_us)?(last_us-first_us)*1e-6:0.0;
+    if(elapsed<kStartupStaticSec)return false;
+    const double dn=static_cast<double>(n);
+    const double mgx=sgx/dn,mgy=sgy/dn,mgz=sgz/dn;
+    const double gnorm=std::sqrt(mgx*mgx+mgy*mgy+mgz*mgz);
+    const double sx=std::sqrt(std::max(0.0,sgx2/dn-mgx*mgx));
+    const double sy=std::sqrt(std::max(0.0,sgy2/dn-mgy*mgy));
+    const double sz=std::sqrt(std::max(0.0,sgz2/dn-mgz*mgz));
+    const double man=san/dn;
+    const double sanstd=std::sqrt(std::max(0.0,san2/dn-man*man));
+    const bool ok=gnorm<=kStartupMaxMeanGyroRadS &&
+                  std::max({sx,sy,sz})<=kStartupMaxGyroStdRadS &&
+                  man>=kStartupMinAccelNorm && man<=kStartupMaxAccelNorm &&
+                  sanstd<=kStartupMaxAccelNormStd;
+    if(ok){passed=true;return true;}
+    reset();return false;
+  }
+  double elapsedSec()const{
+    return (first_us&&last_us>first_us)?(last_us-first_us)*1e-6:0.0;
+  }
+};
+
+struct WarmupGate {
+  bool started=false,passed=false;
+  int64_t start_wall_ns=0,last_kf=-1;
+  std::vector<VioState> stable;
+  void start(int64_t now){started=true;passed=false;start_wall_ns=now;last_kf=-1;stable.clear();}
+  double elapsed(int64_t now)const{return started?(now-start_wall_ns)*1e-9:0.0;}
+  double speed(const VioState&s)const{return std::sqrt(s.vx*s.vx+s.vy*s.vy+s.vz*s.vz);}
+  double span()const{
+    if(stable.empty())return 0.0;
+    const auto&a=stable.front();double m=0;
+    for(const auto&s:stable){
+      const double dx=s.px-a.px,dy=s.py-a.py,dz=s.pz-a.pz;
+      m=std::max(m,std::sqrt(dx*dx+dy*dy+dz*dz));
+    }
+    return m;
+  }
+  bool update(const VioState&s,int64_t now){
+    if(passed)return true;
+    if(s.keyframe==last_kf)return false;
+    last_kf=s.keyframe;
+    if(speed(s)>kWarmupMaxSpeedMps){stable.clear();}
+    else{
+      if(!stable.empty()){
+        const auto&a=stable.front();
+        const double dx=s.px-a.px,dy=s.py-a.py,dz=s.pz-a.pz;
+        if(std::sqrt(dx*dx+dy*dy+dz*dz)>kWarmupMaxSpanM)stable.clear();
+      }
+      stable.push_back(s);
+      if(static_cast<int>(stable.size())>kWarmupStableStatesNeeded)stable.erase(stable.begin());
+    }
+    if(elapsed(now)>=kWarmupSec &&
+       static_cast<int>(stable.size())>=kWarmupStableStatesNeeded &&
+       span()<=kWarmupMaxSpanM)passed=true;
+    return passed;
+  }
+};
+
+enum class Phase { STATIC_CHECK, WARMUP, READY_A, MOVING, HOLD_B, DONE, ABORTED };
+
 
 [[noreturn]] void fail(const std::string& what) {
   throw std::runtime_error(what + ": " + std::strerror(errno));
@@ -329,7 +421,8 @@ class CleanPipeline final : public VIO::MonoImuPipeline {
 
 std::string phaseName(Phase p){
   switch(p){
-    case Phase::INITIALIZING:return"ИНИЦИАЛИЗАЦИЯ";
+    case Phase::STATIC_CHECK:return"ПРОВЕРКА НЕПОДВИЖНОСТИ";
+    case Phase::WARMUP:return"ПРОГРЕВ VIO";
     case Phase::READY_A:return"ГОТОВ К ТОЧКЕ A";
     case Phase::MOVING:return"ДВИЖЕНИЕ A → B";
     case Phase::HOLD_B:return"ФИКСАЦИЯ ТОЧКИ B";
@@ -340,7 +433,8 @@ std::string phaseName(Phase p){
 }
 void actions(Phase p,std::string* now,std::string* next){
   switch(p){
-    case Phase::INITIALIZING:*now="СЕЙЧАС: НЕ ДВИГАТЬ";*next="ДАЛЬШЕ: ДОЖДИТЕСЬ ГОТОВНОСТИ";break;
+    case Phase::STATIC_CHECK:*now="СЕЙЧАС: НЕ ДВИГАТЬ";*next="ДАЛЬШЕ: ПРОГРЕВ VIO 12 С";break;
+    case Phase::WARMUP:*now="СЕЙЧАС: НЕ ДВИГАТЬ";*next="ДАЛЬШЕ: ТОЧКА A → ПРОБЕЛ";break;
     case Phase::READY_A:*now="СЕЙЧАС: ТОЧКА A → ПРОБЕЛ";*next="ДАЛЬШЕ: ДВИГАЙТЕ A → B";break;
     case Phase::MOVING:*now="СЕЙЧАС: ДВИГАЙТЕ A → B";*next="ДАЛЬШЕ: НА B → СТОП → ПРОБЕЛ";break;
     case Phase::HOLD_B:*now="СЕЙЧАС: НЕ ДВИГАТЬ";*next="ДАЛЬШЕ: ЖДИТЕ СОХРАНЕНИЯ";break;
@@ -351,7 +445,8 @@ void actions(Phase p,std::string* now,std::string* next){
 
 void drawGui(const cv::Mat& gray,Phase phase,const CleanPipeline& pipe,
              bool mapping_valid,double drift_ppm,size_t imu_fed,size_t frames_fed,
-             int64_t hold_started) {
+             int64_t hold_started,const StartupStaticGate& static_gate,
+             const WarmupGate& warmup) {
   cv::Mat bgr,video;cv::cvtColor(gray,bgr,cv::COLOR_GRAY2BGR);
   cv::resize(bgr,video,{900,675},0,0,cv::INTER_NEAREST);
   cv::Mat canvas(720,1280,CV_8UC3,cv::Scalar(12,12,12));
@@ -373,14 +468,23 @@ void drawGui(const cv::Mat& gray,Phase phase,const CleanPipeline& pipe,
   std::snprintf(b,sizeof(b),"дрейф часов: %+.2f ppm",drift_ppm);ru(panel,b,{18,402},11,{200,200,200});
   std::snprintf(b,sizeof(b),"IMU подано: %zu",imu_fed);ru(panel,b,{18,434},11,{200,200,200});
   std::snprintf(b,sizeof(b),"кадров VIO: %zu",frames_fed);ru(panel,b,{18,466},11,{200,200,200});
+  if(phase==Phase::STATIC_CHECK){
+    std::snprintf(b,sizeof(b),"статика: %.1f / %.0f с",static_gate.elapsedSec(),kStartupStaticSec);
+    ru(panel,b,{18,498},11,{245,245,245},cv::QT_FONT_BOLD);
+  } else if(phase==Phase::WARMUP){
+    std::snprintf(b,sizeof(b),"прогрев: %.1f / %.0f с",warmup.elapsed(monoNs()),kWarmupSec);
+    ru(panel,b,{18,498},11,{245,245,245},cv::QT_FONT_BOLD);
+    std::snprintf(b,sizeof(b),"стабильных KF: %zu / %d",warmup.stable.size(),kWarmupStableStatesNeeded);
+    ru(panel,b,{18,526},11,{245,245,245},cv::QT_FONT_BOLD);
+  }
 
   VioState s;
   if(pipe.latest(&s)){
-    std::snprintf(b,sizeof(b),"VIO KF: %lld",(long long)s.keyframe);ru(panel,b,{18,510},12,{220,220,220});
-    std::snprintf(b,sizeof(b),"P: %.3f  %.3f  %.3f м",s.px,s.py,s.pz);ru(panel,b,{18,542},11,{220,220,220});
-    std::snprintf(b,sizeof(b),"|V|: %.1f мм/с",1000.0*std::sqrt(s.vx*s.vx+s.vy*s.vy+s.vz*s.vz));ru(panel,b,{18,574},11,{220,220,220});
+    std::snprintf(b,sizeof(b),"VIO KF: %lld",(long long)s.keyframe);ru(panel,b,{18,558},12,{220,220,220});
+    std::snprintf(b,sizeof(b),"P: %.3f  %.3f  %.3f м",s.px,s.py,s.pz);ru(panel,b,{18,590},11,{220,220,220});
+    std::snprintf(b,sizeof(b),"|V|: %.1f мм/с",1000.0*std::sqrt(s.vx*s.vx+s.vy*s.vy+s.vz*s.vz));ru(panel,b,{18,622},11,{220,220,220});
   } else {
-    ru(panel,"VIO: ЖДИТЕ ПЕРВОГО СОСТОЯНИЯ",{18,530},11,{0,210,255});
+    ru(panel,"VIO: ЖДИТЕ ПЕРВОГО СОСТОЯНИЯ",{18,575},11,{0,210,255});
   }
 
   if(phase==Phase::HOLD_B&&hold_started>0){
@@ -443,7 +547,8 @@ int main(int argc,char** argv) {
   int cfd=-1,sfd=-1;bool streaming=false;std::vector<CameraBuffer> bufs;
   std::shared_ptr<CleanPipeline> pipe;std::thread pipe_thread;
   uint8_t sys=0,comp=0;bool rates=false;
-  Phase phase=Phase::INITIALIZING;int64_t hold_started=0;
+  Phase phase=Phase::STATIC_CHECK;int64_t hold_started=0;
+  StartupStaticGate static_gate;WarmupGate warmup;bool vio_feed_enabled=false;
   std::vector<TimeSyncSample> sync;ClockMapping mapping;int64_t pending=0,next_sync=0;
   std::vector<ImuRow> imurows;std::vector<AttRow> attrows;std::vector<RangeRow> rangerows;
   std::vector<SelectedFrame> selected;std::vector<EventRow> events;
@@ -512,6 +617,16 @@ int main(int argc,char** argv) {
                 r.raw_ax=m.xacc;r.raw_ay=m.yacc;r.raw_az=m.zacc;r.raw_gx=m.xgyro;r.raw_gy=m.ygyro;r.raw_gz=m.zgyro;
                 r.flu_ax=m.xacc;r.flu_ay=-m.yacc;r.flu_az=-m.zacc;r.flu_gx=m.xgyro;r.flu_gy=-m.ygyro;r.flu_gz=-m.zgyro;
                 imurows.push_back(r);
+                if(!vio_feed_enabled){
+                  if(static_gate.add(m.time_usec,r.flu_ax,r.flu_ay,r.flu_az,r.flu_gx,r.flu_gy,r.flu_gz)){
+                    vio_feed_enabled=true;
+                    warmup.start(monoNs());
+                    phase=Phase::WARMUP;
+                    std::cout<<"[CLEAN01] STATIC CHECK PASS — VIO FEED STARTED; 12 s WARMUP\n";
+                  } else {
+                    continue;
+                  }
+                }
                 VIO::ImuAccGyr d;d<<r.flu_ax,r.flu_ay,r.flu_az,r.flu_gx,r.flu_gy,r.flu_gz;
                 pipe->fillSingleImuQueue(VIO::ImuMeasurement(r.mapped_ns,d));++imu_fed;
               }
@@ -533,7 +648,7 @@ int main(int argc,char** argv) {
           const int64_t ts=jtzero::timesync::correctCameraTimestampNs(timevalNs(b.timestamp));
           std::vector<unsigned char> jpg(b.bytesused);std::memcpy(jpg.data(),bufs[b.index].start,b.bytesused);
           if(xioctl(cfd,VIDIOC_QBUF,&b)==-1)fail("VIDIOC_QBUF");
-          if(last_selected==0||ts-last_selected>=kSelectedPeriodNs){
+          if(vio_feed_enabled&&(last_selected==0||ts-last_selected>=kSelectedPeriodNs)){
             cv::Mat g=cv::imdecode(jpg,cv::IMREAD_GRAYSCALE);
             if(!g.empty()&&g.cols==kWidth&&g.rows==kHeight){
               last_gray=g;last_selected=ts;
@@ -547,15 +662,20 @@ int main(int argc,char** argv) {
 
       VioState latest;
       const bool have=pipe->latest(&latest);
-      const bool ready=mapping.valid&&have&&(monoNs()-latest.callback_wall_ns<kBackendReadyAgeNs)&&imu_fed>100&&frames_fed>30;
-      if(phase==Phase::INITIALIZING&&ready)phase=Phase::READY_A;
+      if(phase==Phase::WARMUP&&mapping.valid&&have&&
+         (monoNs()-latest.callback_wall_ns<kBackendReadyAgeNs)){
+        if(warmup.update(latest,monoNs())){
+          phase=Phase::READY_A;
+          std::cout<<"[CLEAN01] WARMUP PASS — MOVEMENT ENABLED\n";
+        }
+      }
 
       if(phase==Phase::HOLD_B&&hold_started>0&&monoNs()-hold_started>=kFinalHoldNs){
         phase=Phase::DONE;
       }
 
       if(now>=next_hud){
-        drawGui(last_gray,phase,*pipe,mapping.valid,mapping.drift_ppm,imu_fed,frames_fed,hold_started);
+        drawGui(last_gray,phase,*pipe,mapping.valid,mapping.drift_ppm,imu_fed,frames_fed,hold_started,static_gate,warmup);
         next_hud=now+kHudPeriodNs;
       }
       int key=cv::waitKey(1)&0xff;

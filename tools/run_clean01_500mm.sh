@@ -47,9 +47,11 @@ unset JTZERO_V25_BIN
 unset JTZERO_V25_PARAMS
 unset JTZERO_V25_EXTRA_CXXFLAGS
 
-export JTZERO_GRAVITY_ALIGNED_IMU_INIT=1
-export JTZERO_DIAG_IMU_INIT=1
-export JTZERO_STAGED_ZUPT=1
+unset JTZERO_GRAVITY_ALIGNED_IMU_INIT
+unset JTZERO_DIAG_IMU_INIT
+unset JTZERO_STAGED_ZUPT
+unset JTZERO_V26_TARGET_SEC
+unset JTZERO_V26_TOLERANCE_SEC
 export LD_LIBRARY_PATH="$KIMERA_ROOT/build:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 CAMERA="$(find_camera || true)"
@@ -64,6 +66,8 @@ echo "JT-ZERO CLEAN-01 — ПРЕДПОЛЁТНАЯ ПРОВЕРКА"
 echo "======================================================================"
 echo "Это новый архив. Старые результаты и коэффициенты не читаются."
 echo "Gate: ВЫКЛЮЧЕН"
+echo "Экспериментальная инициализация IMU: ВЫКЛЮЧЕНА"
+echo "Staged ZUPT: ВЫКЛЮЧЕН"
 echo "Legacy camera-only: НЕ СОБИРАЕТСЯ"
 echo "Параметры: $PARAMS"
 echo "Камера: $CAMERA"
@@ -82,6 +86,9 @@ fi
   echo "camera_height_mm=UNSET_OPERATOR_INPUT"
   echo "camera_height_uncertainty_mm=UNSET_OPERATOR_INPUT"
   echo "gate_enabled=0"
+  echo "gravity_aligned_imu_init=0"
+  echo "diag_imu_init=0"
+  echo "staged_zupt=0"
   echo "legacy_camera_only=0"
   echo "camera_device=$CAMERA"
   echo "params_dir=$PARAMS"

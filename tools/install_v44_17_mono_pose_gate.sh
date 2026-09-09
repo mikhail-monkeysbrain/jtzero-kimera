@@ -5,7 +5,7 @@ ROOT="${JTZERO_KIMERA_SRC:-/home/vio/Kimera-VIO}"
 SRC="$ROOT/src/pipeline/MonoImuPipeline.cpp"
 
 echo "======================================================================"
-echo "V44.17b — INSTALL OPT-IN MONO POSE PRE-FUSION GATE"
+echo "V44.17d — INSTALL OPT-IN MONO POSE PRE-FUSION GATE"
 echo "======================================================================"
 echo "Kimera source: $ROOT"
 echo
@@ -27,161 +27,177 @@ import sys
 p = Path(sys.argv[1])
 s = p.read_text()
 
+# 1) Includes: local JT-Zero Kimera already has <cstdlib>.
 inc_old = """#include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <cstdlib>
 #include <string>
 """
 inc_new = """#include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
-#include <optional>
 #include <string>
 """
+if inc_old not in s:
+    raise SystemExit("ERROR: local include anchor not found")
+s = s.replace(inc_old, inc_new, 1)
 
-old = r'''  auto& backend_input_queue = backend_input_queue_;
+# 2) Persistent state must live outside the callback.
+state_anchor = """  auto& backend_input_queue = backend_input_queue_;
   vio_frontend_module_->registerOutputCallback(
       [&backend_input_queue](const FrontendOutputPacketBase::Ptr& output) {
-        auto converted_output =
-            std::dynamic_pointer_cast<MonoFrontendOutput>(output);
-        CHECK(converted_output);
-        if (converted_output->is_keyframe_) {
-          //! Only push to Backend input queue if it is a keyframe!
-          backend_input_queue.push(std::make_unique<BackendInput>(
-              converted_output->frame_lkf_.timestamp_,
-              converted_output->status_mono_measurements_,
-              converted_output->pim_,
-              converted_output->imu_acc_gyrs_,
-              converted_output->body_lkf_OdomPose_body_kf_,
-              converted_output->body_kf_world_OdomVel_body_kf_));
-        } else {
-          VLOG(5)
-              << "Frontend did not output a keyframe, skipping Backend input.";
-        }
-      });
-'''
-new = r'''  // JT-Zero diagnostic gate (OFF by default).
-  //
-  // V44.15/V44.16 isolated one current-only monocular pose discontinuity:
-  // the accepted body-frame translation direction jumped by ~63 deg and
-  // became ~56 deg out of plane while PIM rotation was only ~0.007 deg.
-  // This gate converts ONLY such an anomalous VALID mono update to
-  // LOW_DISPARITY before BackendInput is constructed. PIM/IMU propagation
-  // continues exactly as it does for a naturally occurring LOW_DISPARITY row.
-  //
-  // Enable explicitly:
-  //   JTZERO_MONO_POSE_GATE=1
-  // Optional thresholds:
-  //   JTZERO_MONO_POSE_GATE_JUMP_DEG=30
-  //   JTZERO_MONO_POSE_GATE_TILT_DEG=30
-  const auto env_flag = [](const char* name, bool fallback) {
-    const char* value = std::getenv(name);
-    if (!value) return fallback;
-    return std::string(value) == "1" || std::string(value) == "true" ||
-           std::string(value) == "TRUE" || std::string(value) == "on" ||
-           std::string(value) == "ON";
-  };
-  const auto env_double = [](const char* name, double fallback) {
-    const char* value = std::getenv(name);
-    if (!value) return fallback;
+"""
+state_repl = """  // JT-Zero V44.17 diagnostic gate state (OFF unless env enables it).
+  const auto jtzero_gate_enabled = []() {
+    const char* e = std::getenv("JTZERO_MONO_POSE_GATE");
+    if (!e) return false;
+    const std::string v(e);
+    return v == "1" || v == "true" || v == "TRUE" ||
+           v == "on" || v == "ON";
+  }();
+  const auto jtzero_env_double = [](const char* name, double fallback) {
+    const char* e = std::getenv(name);
+    if (!e) return fallback;
     char* end = nullptr;
-    const double parsed = std::strtod(value, &end);
-    return end != value && std::isfinite(parsed) ? parsed : fallback;
+    const double v = std::strtod(e, &end);
+    return end != e && std::isfinite(v) ? v : fallback;
   };
-  const bool jtzero_pose_gate = env_flag("JTZERO_MONO_POSE_GATE", false);
-  const double jtzero_jump_deg =
-      env_double("JTZERO_MONO_POSE_GATE_JUMP_DEG", 30.0);
-  const double jtzero_tilt_deg =
-      env_double("JTZERO_MONO_POSE_GATE_TILT_DEG", 30.0);
-  auto jtzero_prev_good_body_t =
-      std::make_shared<std::optional<gtsam::Vector3>>();
+  const double jtzero_gate_jump_deg =
+      jtzero_env_double("JTZERO_MONO_POSE_GATE_JUMP_DEG", 30.0);
+  const double jtzero_gate_tilt_deg =
+      jtzero_env_double("JTZERO_MONO_POSE_GATE_TILT_DEG", 30.0);
+  auto jtzero_prev_good_body_t = std::make_shared<gtsam::Vector3>();
+  auto jtzero_have_prev_good_body_t = std::make_shared<bool>(false);
 
   auto& backend_input_queue = backend_input_queue_;
   vio_frontend_module_->registerOutputCallback(
       [&backend_input_queue,
-       jtzero_pose_gate,
-       jtzero_jump_deg,
-       jtzero_tilt_deg,
-       jtzero_prev_good_body_t](const FrontendOutputPacketBase::Ptr& output) {
-        auto converted_output =
-            std::dynamic_pointer_cast<MonoFrontendOutput>(output);
-        CHECK(converted_output);
-        if (converted_output->is_keyframe_) {
-          StatusMonoMeasurementsPtr status_for_backend =
-              converted_output->status_mono_measurements_;
-          bool rejected_by_jtzero_gate = false;
+       jtzero_gate_enabled,
+       jtzero_gate_jump_deg,
+       jtzero_gate_tilt_deg,
+       jtzero_prev_good_body_t,
+       jtzero_have_prev_good_body_t](
+          const FrontendOutputPacketBase::Ptr& output) {
+"""
+if state_anchor not in s:
+    raise SystemExit("ERROR: local callback state anchor not found")
+s = s.replace(state_anchor, state_repl, 1)
 
-          if (jtzero_pose_gate && status_for_backend &&
-              status_for_backend->first.kfTrackingStatus_mono_ ==
+# 3) Insert the gate after the already-existing JTZERO_DIAG_IMU_ONLY logic
+# and before BackendInput construction.
+gate_anchor = """          if (std::getenv("JTZERO_DIAG_IMU_ONLY") &&
+              converted_output->status_mono_measurements_) {
+            jtzero_diag_measurements =
+                std::make_shared<StatusMonoMeasurements>(
+                    *converted_output->status_mono_measurements_);
+            jtzero_diag_measurements->second.clear();
+            // JT-ZERO TRUE IMU-ONLY: disable LOW_DISPARITY backend constraints
+            // Clearing measurements alone is not enough: LOW_DISPARITY in
+            // TrackerStatusSummary makes VioBackend add ZeroVelocityPrior and
+            // NoMotionFactor. Force INVALID only in diagnostic mode so the
+            // backend receives IMU factors without visual/no-motion constraints.
+            jtzero_diag_measurements->first.kfTrackingStatus_mono_ =
+                TrackingStatus::INVALID;
+          }
+
+          //! Only push to Backend input queue if it is a keyframe!
+"""
+gate_repl = """          if (std::getenv("JTZERO_DIAG_IMU_ONLY") &&
+              converted_output->status_mono_measurements_) {
+            jtzero_diag_measurements =
+                std::make_shared<StatusMonoMeasurements>(
+                    *converted_output->status_mono_measurements_);
+            jtzero_diag_measurements->second.clear();
+            // JT-ZERO TRUE IMU-ONLY: disable LOW_DISPARITY backend constraints
+            // Clearing measurements alone is not enough: LOW_DISPARITY in
+            // TrackerStatusSummary makes VioBackend add ZeroVelocityPrior and
+            // NoMotionFactor. Force INVALID only in diagnostic mode so the
+            // backend receives IMU factors without visual/no-motion constraints.
+            jtzero_diag_measurements->first.kfTrackingStatus_mono_ =
+                TrackingStatus::INVALID;
+          }
+
+          // JT-ZERO V44.17: reject a current-only accepted monocular
+          // translation-direction discontinuity before backend fusion.
+          //
+          // IMPORTANT: use INVALID, NOT LOW_DISPARITY. This local Kimera tree
+          // explicitly documents that LOW_DISPARITY creates ZeroVelocityPrior
+          // and NoMotionFactor in the backend. For an anomalous visual pose we
+          // want one IMU-propagated interval with no visual/no-motion factor.
+          if (jtzero_gate_enabled &&
+              !std::getenv("JTZERO_DIAG_IMU_ONLY") &&
+              converted_output->status_mono_measurements_ &&
+              converted_output->status_mono_measurements_
+                      ->first.kfTrackingStatus_mono_ ==
                   TrackingStatus::VALID) {
             const gtsam::Vector3 cam_t =
-                status_for_backend->first.lkf_T_k_mono_.translation();
+                converted_output->status_mono_measurements_
+                    ->first.lkf_T_k_mono_.translation();
             const gtsam::Vector3 body_t =
                 converted_output->b_Pose_cam_rect_.rotation().rotate(cam_t);
-            const double horizontal = std::hypot(body_t.x(), body_t.y());
+
+            const double horizontal =
+                std::hypot(body_t.x(), body_t.y());
             const double tilt_deg =
                 std::atan2(std::abs(body_t.z()), horizontal) *
                 180.0 / 3.14159265358979323846;
 
             double jump_deg = 0.0;
             bool have_jump = false;
-            if (jtzero_prev_good_body_t->has_value()) {
-              const auto& prev = jtzero_prev_good_body_t->value();
-              const double denom = prev.norm() * body_t.norm();
+            if (*jtzero_have_prev_good_body_t) {
+              const double denom =
+                  jtzero_prev_good_body_t->norm() * body_t.norm();
               if (denom > 1e-12) {
-                const double dot =
-                    std::max(-1.0, std::min(1.0, prev.dot(body_t) / denom));
+                const double c =
+                    std::max(-1.0,
+                             std::min(
+                                 1.0,
+                                 jtzero_prev_good_body_t->dot(body_t) /
+                                     denom));
                 jump_deg =
-                    std::acos(dot) * 180.0 / 3.14159265358979323846;
+                    std::acos(c) * 180.0 / 3.14159265358979323846;
                 have_jump = true;
               }
             }
 
-            if (have_jump && jump_deg >= jtzero_jump_deg &&
-                tilt_deg >= jtzero_tilt_deg) {
-              auto gated =
-                  std::make_shared<StatusMonoMeasurements>(*status_for_backend);
-              gated->first.kfTrackingStatus_mono_ =
-                  TrackingStatus::LOW_DISPARITY;
-              gated->first.lkf_T_k_mono_ = gtsam::Pose3();
-              status_for_backend = gated;
-              rejected_by_jtzero_gate = true;
-              LOG(WARNING) << "[JTZERO-MONO-POSE-GATE] reject VALID mono pose"
-                           << " ts=" << converted_output->frame_lkf_.timestamp_
-                           << " jump_deg=" << jump_deg
-                           << " tilt_deg=" << tilt_deg
-                           << " body_t=[" << body_t.transpose() << "]";
-            }
+            const bool reject =
+                have_jump &&
+                jump_deg >= jtzero_gate_jump_deg &&
+                tilt_deg >= jtzero_gate_tilt_deg;
 
-            if (!rejected_by_jtzero_gate) {
+            if (reject) {
+              jtzero_diag_measurements =
+                  std::make_shared<StatusMonoMeasurements>(
+                      *converted_output->status_mono_measurements_);
+              jtzero_diag_measurements->second.clear();
+              jtzero_diag_measurements->first.kfTrackingStatus_mono_ =
+                  TrackingStatus::INVALID;
+              jtzero_diag_measurements->first.lkf_T_k_mono_ =
+                  gtsam::Pose3();
+
+              LOG(WARNING)
+                  << "[JTZERO-MONO-POSE-GATE] reject VALID mono pose"
+                  << " ts=" << converted_output->frame_lkf_.timestamp_
+                  << " jump_deg=" << jump_deg
+                  << " tilt_deg=" << tilt_deg
+                  << " body_t=[" << body_t.transpose() << "]";
+              // Do not update previous-good direction with the rejected pose.
+            } else {
               *jtzero_prev_good_body_t = body_t;
+              *jtzero_have_prev_good_body_t = true;
             }
           }
 
           //! Only push to Backend input queue if it is a keyframe!
-          backend_input_queue.push(std::make_unique<BackendInput>(
-              converted_output->frame_lkf_.timestamp_,
-              status_for_backend,
-              converted_output->pim_,
-              converted_output->imu_acc_gyrs_,
-              converted_output->body_lkf_OdomPose_body_kf_,
-              converted_output->body_kf_world_OdomVel_body_kf_));
-        } else {
-          VLOG(5)
-              << "Frontend did not output a keyframe, skipping Backend input.";
-        }
-      });
-'''
+"""
+if gate_anchor not in s:
+    raise SystemExit("ERROR: local JTZERO_DIAG_IMU_ONLY anchor not found")
+s = s.replace(gate_anchor, gate_repl, 1)
 
-if inc_old not in s:
-    raise SystemExit("ERROR: include anchor not found; source layout differs")
-if old not in s:
-    raise SystemExit("ERROR: backend callback anchor not found; source layout differs")
-
-s = s.replace(inc_old, inc_new, 1)
-s = s.replace(old, new, 1)
 p.write_text(s)
 print("SOURCE PATCH PASS")
 PY
@@ -189,7 +205,7 @@ fi
 
 echo
 echo "===== SOURCE MARKERS ====="
-grep -nE 'JTZERO_MONO_POSE_GATE|JTZERO-MONO-POSE-GATE|status_for_backend' "$SRC"
+grep -nE 'JTZERO_MONO_POSE_GATE|JTZERO-MONO-POSE-GATE|jtzero_gate_enabled|TrackingStatus::INVALID' "$SRC"
 
 echo
 echo "===== BUILD ====="
@@ -197,14 +213,14 @@ cmake --build "$ROOT/build" -j2
 
 echo
 echo "===== RESULT ====="
-echo "Kimera rebuilt with gate support."
+echo "Kimera rebuilt with V44.17d gate support."
 echo "Default remains OFF."
 echo
-echo "Next diagnostic run:"
+echo "For the gated diagnostic run:"
 echo "  export JTZERO_MONO_POSE_GATE=1"
 echo "  export JTZERO_MONO_POSE_GATE_JUMP_DEG=30"
 echo "  export JTZERO_MONO_POSE_GATE_TILT_DEG=30"
 echo
-echo "Rollback source if needed:"
+echo "Rollback if needed:"
 echo "  cp '$SRC.v44_17_pre_gate.bak' '$SRC'"
 echo "  cmake --build '$ROOT/build' -j2"

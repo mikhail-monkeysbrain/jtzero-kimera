@@ -146,7 +146,7 @@ struct V41MetricCamera {
     if(!forensic){
       std::cerr<<"[V43-FORENSIC] ERROR opening /home/vio/jtzero_v43_camera_forensic.csv\n";
     }else{
-      forensic<<"seq,n_tracks,n_inliers,c0x,c0y,c1x,c1y,aff_a,aff_b,aff_scale,aff_rot_deg,tx_px,ty_px,height_m,dx_m,dy_m,step_m,net_x_m,net_y_m\n";
+      forensic<<"seq,n_tracks,n_inliers,c0x,c0y,c1x,c1y,aff_a,aff_b,aff_scale,aff_rot_deg,tx_px,ty_px,height_m,dx_m,dy_m,step_m,net_x_m,net_y_m,med_flow_x_px,med_flow_y_px,med_flow_norm_px,flow_q10_px,flow_q50_px,flow_q90_px,flow_left_px,flow_right_px,flow_top_px,flow_bottom_px\n";
       forensic.flush();
       std::cout<<"[V43-FORENSIC] OPEN OK offset="<<camera_height_offset_m
                <<" camera_height="<<cameraHeight()<<" m\n";
@@ -208,6 +208,31 @@ struct V41MetricCamera {
       }
       c0x/=nin; c0y/=nin; c1x/=nin; c1y/=nin;
     }
+    // Independent flow summaries from the same accepted inliers. These let one physical pass
+    // discriminate similarity-fit bias, spatial/projective nonuniformity, and FOV/crop geometry.
+    std::vector<double> fxsamp,fysamp,fnorm,leftn,rightn,topn,bottomn;
+    fxsamp.reserve(nin); fysamp.reserve(nin); fnorm.reserve(nin);
+    for(size_t i=0;i<a.size();++i){
+      if(!inliers.at<unsigned char>(static_cast<int>(i))) continue;
+      const double ux=b[i].x-a[i].x, uy=b[i].y-a[i].y, un=std::hypot(ux,uy);
+      const double px=a[i].x+cx, py=a[i].y+cy;
+      fxsamp.push_back(ux); fysamp.push_back(uy); fnorm.push_back(un);
+      if(px<320.0) leftn.push_back(un); else rightn.push_back(un);
+      if(py<240.0) topn.push_back(un); else bottomn.push_back(un);
+    }
+    auto med=[](std::vector<double> v)->double{
+      if(v.empty()) return std::numeric_limits<double>::quiet_NaN();
+      const size_t k=v.size()/2; std::nth_element(v.begin(),v.begin()+k,v.end());
+      double x=v[k]; if(v.size()%2==0){std::nth_element(v.begin(),v.begin()+k-1,v.end());x=0.5*(x+v[k-1]);} return x;
+    };
+    auto quant=[](std::vector<double> v,double q)->double{
+      if(v.empty()) return std::numeric_limits<double>::quiet_NaN();
+      const size_t k=static_cast<size_t>(std::round(q*(v.size()-1)));
+      std::nth_element(v.begin(),v.begin()+k,v.end()); return v[k];
+    };
+    const double med_fx=med(fxsamp), med_fy=med(fysamp), med_fn=med(fnorm);
+    const double fq10=quant(fnorm,0.10), fq50=quant(fnorm,0.50), fq90=quant(fnorm,0.90);
+    const double fl=med(leftn), fr=med(rightn), ft=med(topn), fb=med(bottomn);
     const double h=cameraHeight();
     // Ground translation is opposite to image motion. Magnitude is independent of camera/body axis naming.
     const double dx_m=-tx*h/fx;
@@ -220,7 +245,9 @@ struct V41MetricCamera {
     if(forensic){
       forensic<<forensic_seq++<<","<<a.size()<<","<<nin<<","<<c0x<<","<<c0y<<","<<c1x<<","<<c1y<<","
               <<aff_a<<","<<aff_b<<","<<aff_scale<<","<<aff_rot_deg<<","<<tx<<","<<ty<<","<<h<<","
-              <<dx_m<<","<<dy_m<<","<<step<<","<<net_x_m<<","<<net_y_m<<"\n";
+              <<dx_m<<","<<dy_m<<","<<step<<","<<net_x_m<<","<<net_y_m<<","
+              <<med_fx<<","<<med_fy<<","<<med_fn<<","<<fq10<<","<<fq50<<","<<fq90<<","
+              <<fl<<","<<fr<<","<<ft<<","<<fb<<"\n";
       forensic.flush();
     }
 #endif

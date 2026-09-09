@@ -63,7 +63,9 @@ def trim_idle(rows):
             first = max(0, i - 1)
             break
     if first is None:
-        return rows
+        # Пока измерение не началось, не рисуем всю историю прогрева
+        # дальномера. Показываем только текущее положение.
+        return rows[-1:]
 
     last = len(rows) - 1
     for i in range(len(rows) - 1, first, -1):
@@ -77,6 +79,29 @@ def trim_idle(rows):
             last = min(len(rows) - 1, i + 1)
             break
     return rows[first : last + 1]
+
+
+def filter_height_glitches(rows):
+    """Удаляет одиночные скачки TF-Luna, не связанные с реальным движением по Z."""
+    if len(rows) < 3:
+        return rows
+    hs = [r["h"] for r in rows]
+    # Median reference over current route. A single startup/glitch sample like
+    # 0.49 m among ~0.18 m readings must not create a fake vertical trajectory.
+    med = sorted(hs)[len(hs)//2]
+    out = []
+    prev_h = med
+    for r in rows:
+        h = r["h"]
+        # Accept plausible local changes; reject isolated gross jumps.
+        if abs(h - med) > max(0.10, 0.50 * max(med, 0.05)):
+            q = dict(r)
+            q["h"] = prev_h
+            out.append(q)
+        else:
+            out.append(r)
+            prev_h = h
+    return out
 
 
 def equal_3d_axes(ax, xs, ys, zs):
@@ -124,7 +149,7 @@ def draw(ax, rows, absolute_height):
     ax.set_xlabel("X, м")
     ax.set_ylabel("Y, м")
     ax.set_zlabel("Высота, м" if absolute_height else "ΔZ относительно старта, м")
-    ax.set_title("JT-Zero — 3D маршрут")
+    ax.set_title("JT-Zero — 3D маршрут" if len(rows) > 1 else "JT-Zero — ожидание старта")
 
     info = (
         f"NET XY: {netxy*1000:.1f} мм\n"
@@ -180,6 +205,7 @@ def main():
         rows = load_rows(path)
         if not args.all:
             rows = trim_idle(rows)
+        rows = filter_height_glitches(rows)
         draw(ax, rows, args.absolute_height)
         fig.tight_layout()
         return rows

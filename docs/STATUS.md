@@ -300,3 +300,17 @@ Added V44.9:
 - tools/analyze_v44_9_multiheight.py fits one common focal multiplier and distortion-strength scale across all captured heights and reports the per-height implied k with distortion disabled.
 
 Protocol: capture at least three independently measured sensor-plane-to-board distances spanning roughly 150-260 mm, board flat for the first three captures. No A->B motion run until common-k stability is established.
+
+
+## 2026-09-09 — V44.10 adapted to board only at start of 500 mm path
+
+Constraint: the ChArUco board exists only at A/start and cannot cover the full 500 mm route. V44.9 multi-height protocol is not feasible and is superseded for the current stand.
+
+Added V44.10 start-board anchored one-pass protocol:
+- capture 20 static OV9281 ChArUco frames at A only;
+- derive a start focal-scale anchor from the known 7x5 board, actual square 26.47 mm, marker ratio 22/30, and physical sensor-plane height 185.5 mm;
+- then perform exactly one standard V43 A->B 500 mm pass; the board may disappear immediately after motion begins;
+- offline analysis applies FC-attitude rotation compensation and compares the full 500 mm camera flow using stored focal vs the independently derived start-anchor focal;
+- also compares affine-net and median-flow estimates under the same anchor to test whether the correction transfers from static board geometry to real translation.
+
+This directly tests whether the start-board projection-scale discrepancy is causal for the 500 mm motion error without requiring the board along the route or changing stand height.

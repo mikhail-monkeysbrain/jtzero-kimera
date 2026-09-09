@@ -58,15 +58,15 @@ if(gV26ControlledAb4){
   std::string status,action,next_action;
   cv::Scalar status_color(220,220,220);
   if(gV26ControlledAb4){
-    if(!warmup.passed){status="ПОДГОТОВКА — НЕ ДВИГАТЬ";action="СЕЙЧАС: ДЕРЖИТЕ СТЕНД НЕПОДВИЖНО";next_action="ДАЛЬШЕ: ДОЖДИТЕСЬ ГОТОВНОСТИ И УСТАНОВИТЕ СТЕНД В ТОЧКУ A";status_color=cv::Scalar(0,210,255);}
+    if(!warmup.passed){status="ПОДГОТОВКА — НЕ ДВИГАТЬ";action="СЕЙЧАС: НЕ ДВИГАТЬ";next_action="ДАЛЬШЕ: ТОЧКА A → ПРОБЕЛ";status_color=cv::Scalar(0,210,255);}
     else if(phase==CapturePhase::WAIT_START){
       status=(leg==0)?"УСТАНОВИТЕ СТЕНД НА A":"ВЕРНИТЕ СТЕНД B → A";
-      action="СЕЙЧАС: УСТАНОВИТЕ СТЕНД В ТОЧКУ A И НАЖМИТЕ ПРОБЕЛ"; next_action="ДАЛЬШЕ: ПОСЛЕ СТАРТА ПЛАВНО ДВИГАЙТЕ СТЕНД A → B";
+      action="СЕЙЧАС: ТОЧКА A → ПРОБЕЛ"; next_action="ДАЛЬШЕ: ДВИЖЕНИЕ A → B";
       status_color=cv::Scalar(90,220,90);
     }
-    else if(phase==CapturePhase::SETTLE_START){status="ФИКСИРУЮ ТОЧКУ A — НЕ ДВИГАТЬ";action="СЕЙЧАС: ДЕРЖИТЕ СТЕНД НЕПОДВИЖНО";next_action="ДАЛЬШЕ: ПО КОМАНДЕ НАЧНИТЕ ДВИЖЕНИЕ A → B";status_color=cv::Scalar(0,210,255);}
-    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ A → B";action="СЕЙЧАС: ПЛАВНО ДВИГАЙТЕ СТЕНД К ТОЧКЕ B";next_action="ДАЛЬШЕ: НА ТОЧКЕ B ОСТАНОВИТЕСЬ И НАЖМИТЕ ПРОБЕЛ";status_color=cv::Scalar(0,210,255);}
-    else {status="ТОЧКА B — НЕ ДВИГАТЬ";action="СЕЙЧАС: ДЕРЖИТЕ СТЕНД НЕПОДВИЖНО";next_action="ДАЛЬШЕ: ДОЖДИТЕСЬ СООБЩЕНИЯ О СОХРАНЕНИИ ДАННЫХ";status_color=cv::Scalar(0,210,255);}
+    else if(phase==CapturePhase::SETTLE_START){status="ФИКСИРУЮ ТОЧКУ A — НЕ ДВИГАТЬ";action="СЕЙЧАС: НЕ ДВИГАТЬ";next_action="ДАЛЬШЕ: ДВИЖЕНИЕ A → B";status_color=cv::Scalar(0,210,255);}
+    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ A → B";action="СЕЙЧАС: ДВИГАЙТЕ A → B";next_action="ДАЛЬШЕ: ТОЧКА B → СТОП → ПРОБЕЛ";status_color=cv::Scalar(0,210,255);}
+    else {status="ТОЧКА B — НЕ ДВИГАТЬ";action="СЕЙЧАС: НЕ ДВИГАТЬ";next_action="ДАЛЬШЕ: ЖДИТЕ СОХРАНЕНИЯ";status_color=cv::Scalar(0,210,255);}
   }else{
     if(!warmup.passed){status="ПРОГРЕВ VIO — НЕ ДВИГАТЬ";action="СТАРТ ПОКА ЗАБЛОКИРОВАН";status_color=cv::Scalar(0,210,255);}
     else if(phase==CapturePhase::WAIT_START){status="ГОТОВО К СТАРТУ";action="ПРОБЕЛ / ENTER: СТАРТ";status_color=cv::Scalar(90,220,90);}
@@ -78,7 +78,7 @@ if(gV26ControlledAb4){
   if(gV26ControlledAb4 && leg>=kLegCount){
     status="ТЕСТ ЗАВЕРШЁН";
     action="СЕЙЧАС: НЕ ДВИГАЙТЕ СТЕНД";
-    next_action="ДАЛЬШЕ: НАЖМИТЕ Q ИЛИ ESC ДЛЯ ВЫХОДА";
+    next_action="ДАЛЬШЕ: Q ИЛИ ESC — ВЫХОД";
     status_color=cv::Scalar(90,220,90);
   }
 #endif

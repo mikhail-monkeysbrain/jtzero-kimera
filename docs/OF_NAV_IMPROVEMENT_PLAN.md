@@ -9,8 +9,8 @@ OV9281 optical flow + TF-Luna height + FC gyro/attitude -> metric Vx,Vy -> integ
 ## Счетчик шагов
 
 - Шаг 1/8 — ВЫПОЛНЕН: архив пригоден для replay уже вычисленного visual motion; raw OV9281 frames не записаны.
-- Шаг 2/8 — ТЕКУЩИЙ: единый offline estimator: median flow + TF-Luna height + FC rotation compensation.
-- Шаг 3/8 — проверка единиц, осей, знаков, timestamps и 500-мм endpoint на архиве.
+- Шаг 2/8 — ВЫПОЛНЕН: независимый OF estimator построен; результат 548.84 мм dynamic / 531.42 мм fixed 185.5 мм, улучшение недостаточно.
+- Шаг 3/8 — ТЕКУЩИЙ: аудит геометрии/осей/height/rotation; обнаружена возможная stale R_BC в Step 2.
 - Шаг 4/8 — исправление только подтвержденного систематического источника ошибки.
 - Шаг 5/8 — baseline qualification на серии одинаковых 500-мм проходов без правок между ними.
 - Шаг 6/8 — 2D движения: X/Y/диагональ/возврат.

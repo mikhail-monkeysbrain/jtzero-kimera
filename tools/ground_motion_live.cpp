@@ -115,7 +115,7 @@ int main(int argc,char**argv){
     const CameraCalib calib=loadCameraCalib(camera_yaml);
     Camera cam;cam.openDev(camdev);LunaReader luna;luna.start(lunadev);FcReader fc;fc.start(fcdev);std::ofstream csv(csvpath,std::ios::trunc);csv<<"mono_ns,frame,height_m,x_m,y_m,vx_mps,vy_mps,path_m,inliers,roll,pitch,yaw\n";
     cv::setNumThreads(1);cv::namedWindow(kWindow,cv::WINDOW_NORMAL);cv::setWindowProperty(kWindow,cv::WND_PROP_FULLSCREEN,cv::WINDOW_FULLSCREEN);
-    cv::Mat prev;Attitude prev_att{};int64_t prev_ns=0;Estimate est;bool reset_pending=true;bool armed=false;uint64_t frame_id=0;
+    cv::Mat prev;Attitude prev_att{};int64_t prev_ns=0;Estimate est;bool reset_pending=true;enum class TestState{READY,MOVING,DONE};TestState test_state=TestState::READY;uint64_t frame_id=0;double result_x=0,result_y=0,result_path=0;
     while(g_running){
       pollfd p{cam.fd,POLLIN,0};int pr=poll(&p,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0)continue;
       for(;;){
@@ -123,7 +123,7 @@ int main(int argc,char**argv){
         const int64_t now=monoNs();cv::Mat raw(1,(int)b.bytesused,CV_8UC1,cam.bufs[b.index].p);cv::Mat gray=cv::imdecode(raw,cv::IMREAD_GRAYSCALE);if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");if(gray.empty())continue;frame_id++;
         double luna_m=0;int strength=0;int64_t luna_ns=0;Attitude att{};bool have_luna=luna.latest(&luna_m,&strength,&luna_ns),have_att=fc.latest(&att);double h=have_luna?luna_m-offset_m:0;bool sensors_ok=have_luna&&have_att&&h>0.05&&(now-luna_ns)<200000000LL&&(now-att.recv_ns)<200000000LL;
         if(reset_pending){prev.release();est={};reset_pending=false;}
-        if(armed&&sensors_ok&&!prev.empty()&&prev_att.valid){
+        if(test_state==TestState::MOVING&&sensors_ok&&!prev.empty()&&prev_att.valid){
           std::vector<cv::Point2f>p0,p1;cv::goodFeaturesToTrack(prev,p0,700,0.01,7);
           if(p0.size()>=30){
             std::vector<uchar>st;std::vector<float>er;cv::calcOpticalFlowPyrLK(prev,gray,p0,p1,st,er,{21,21},3);
@@ -146,9 +146,11 @@ int main(int argc,char**argv){
         prev=gray.clone();prev_att=att;prev_ns=now;
         cv::Mat bgr,video;cv::cvtColor(gray,bgr,cv::COLOR_GRAY2BGR);cv::resize(bgr,video,{900,675});cv::Mat canvas(720,1280,CV_8UC3,cv::Scalar(12,12,12));video.copyTo(canvas(cv::Rect(0,45,900,675)));ru(canvas,"JT-ZERO — ОЦЕНКА ДВИЖЕНИЯ ПО ЗЕМЛЕ",{22,31},20,{245,245,245},cv::QT_FONT_BOLD);cv::Mat panel=canvas(cv::Rect(900,0,380,720));
         ru(panel,sensors_ok?"СИСТЕМА ГОТОВА":"ЖДИТЕ ДАТЧИКИ",{18,48},16,sensors_ok?cv::Scalar(90,220,90):cv::Scalar(0,210,255),cv::QT_FONT_BOLD);
-        ru(panel,armed?"СЕЙЧАС: ДВИГАЙТЕ СТЕНД":"СЕЙЧАС: НЕ ДВИГАТЬ",{18,105},14,{255,255,255},cv::QT_FONT_BOLD);
-        ru(panel,armed?"ДАЛЬШЕ: Q / ESC — ЗАВЕРШИТЬ":"ДАЛЬШЕ: ПРОБЕЛ — ОБНУЛИТЬ",{18,145},12,{235,235,235},cv::QT_FONT_BOLD);
-        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Геом. точек: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Крен/тангаж: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);int k=cv::waitKey(1);if(k==' '&&sensors_ok){reset_pending=true;armed=true;}if(k=='q'||k=='Q'||k==27)g_running=false;
+        const char* now_text=test_state==TestState::READY?"СЕЙЧАС: ТОЧКА A — НЕ ДВИГАТЬ":test_state==TestState::MOVING?"СЕЙЧАС: ДВИЖЕНИЕ A -> B":"СЕЙЧАС: РЕЗУЛЬТАТ ЗАФИКСИРОВАН";
+        const char* next_text=test_state==TestState::READY?"ДАЛЬШЕ: ПРОБЕЛ — СТАРТ":test_state==TestState::MOVING?"В ТОЧКЕ B: ПРОБЕЛ — СТОП":"Q / ESC — ВЫХОД";
+        ru(panel,now_text,{18,105},13,{255,255,255},cv::QT_FONT_BOLD);
+        ru(panel,next_text,{18,145},12,{235,235,235},cv::QT_FONT_BOLD);
+        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Геом. точек: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Крен/тангаж: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});if(test_state==TestState::DONE){snprintf(z,sizeof(z),"ИТОГ NET: %.1f мм",std::hypot(result_x,result_y)*1000);ru(panel,z,{18,635},13,{245,245,245},cv::QT_FONT_BOLD);}ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);int k=cv::waitKey(1);if(k==' '&&sensors_ok){if(test_state==TestState::READY){reset_pending=true;test_state=TestState::MOVING;}else if(test_state==TestState::MOVING){result_x=est.x;result_y=est.y;result_path=est.path;test_state=TestState::DONE;est.vx=0;est.vy=0;}}if(k=='q'||k=='Q'||k==27)g_running=false;
         if(csv&&sensors_ok)csv<<now<<','<<frame_id<<','<<std::fixed<<std::setprecision(6)<<h<<','<<est.x<<','<<est.y<<','<<est.vx<<','<<est.vy<<','<<est.path<<','<<est.inliers<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<'\n';
       }
     }

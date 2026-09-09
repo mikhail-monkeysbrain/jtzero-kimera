@@ -104,3 +104,7 @@ echo "БОЛЬШЕ ФИЗИЧЕСКИХ ПРОХОДОВ НЕ НУЖНО."
 echo "Archive: ${OUT}"
 echo "Пришли полный терминальный вывод."
 echo "======================================================================"
+
+# Propagate the underlying VIO process status after archiving.
+# Previously an abort was archived but reported as shell success (RC=0 to callers).
+exit "${RC}"

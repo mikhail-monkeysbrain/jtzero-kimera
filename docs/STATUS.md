@@ -495,3 +495,10 @@ Added V44.24 to reuse the four archived runs (reference, 417.6 mm regression, fi
 Reference and current are close: Kimera 486.07 vs 482.11 mm, camera-only net 557.79 vs 557.39 mm, VALID fraction 0.848 vs 0.839, and mono tilt 4.90 vs 4.56 deg. The current run has no >=30 deg VALID geometry event, gate telemetry reports evaluated=26/rejected=0, and late post-peak loss is only 1.1 mm (0.7 mm more than reference). Therefore the ~482 mm result is not caused by the diagnostic gate and does not reproduce the 417.6 mm failure.
 
 The 417.6 mm run remains a transient accepted-pose/front-end/backend failure case already localized by V44.15/V44.16; it must not be used to tune focal scale. The remaining clean-run endpoint residual is about -14 to -18 mm (~3%). V44.25 compares cumulative along-track shape for reference, bad, gated1, and current archives before deciding whether that clean residual is sufficiently repeatable for a production correction.
+
+
+### V44.25 result — endpoint residual repeats, but keyframe-progress shape does not
+
+Reference/current endpoints remain close (486.07/482.11 mm; mean 484.09 mm, spread 3.97 mm), confirming a repeatable clean-run endpoint shortfall near 3%. However their keyframe-count-normalized cumulative trajectories are not close through the middle: current-reference reaches roughly +35 mm around 45–65% before converging to -4 mm at the endpoint. Therefore V44.25 does **not** justify applying 500/484 as a production scale coefficient. The progress axis is confounded by different keyframe timing/count (33 vs 31 backend rows and different motion duration).
+
+V44.26 re-normalizes the two clean runs by observed camera-only cumulative progress and interpolates backend displacement at equal camera progress. This tests whether the mid-run shape disagreement is mostly a time/keyframe-normalization artifact and whether the remaining endpoint residual is genuinely downstream of raw image displacement.

@@ -368,3 +368,15 @@ Files:
 - tools/run_v44_17_mono_pose_gate_single.sh
 
 Next physical test is one A->B pass with the gate enabled. Do not change focal/intrinsics for this test.
+
+
+### V44.17 installer correction
+
+The first V44.17 installer failed before touching Kimera because the hand-written unified diff was malformed (`git apply: corrupt patch at line 18`). This is an artifact-generation error, not a diagnostic result.
+
+V44.17b replaces the fragile unified-diff step with guarded exact source-block replacement. It:
+- verifies both source anchors before editing;
+- creates `MonoImuPipeline.cpp.v44_17_pre_gate.bak`;
+- installs the same default-OFF gate logic;
+- prints source markers;
+- rebuilds Kimera with `cmake --build /home/vio/Kimera-VIO/build -j2`.

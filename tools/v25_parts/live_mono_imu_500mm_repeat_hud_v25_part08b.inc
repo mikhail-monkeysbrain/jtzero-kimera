@@ -115,11 +115,16 @@
           if(gV26ControlledAb4 && leg>=0 && leg<4 && gV26MoveStartWallNs>0){
             const double move_sec=(event_wall_ns-gV26MoveStartWallNs)*1e-9;
             gV26MoveDurationsSec[leg]=move_sec;
+#ifdef JTZERO_CLEAN01
+            std::cout<<"CLEAN01 MOTION DURATION "<<std::fixed<<std::setprecision(3)<<move_sec
+                     <<" s (только запись, без PASS/FAIL по времени)\n";
+#else
             const double dt_target=move_sec-gV26TargetMoveSec;
             const bool timing_ok=std::abs(dt_target)<=gV26DurationToleranceSec;
             std::cout<<"PASS "<<leg+1<<"AB MOTION DURATION "<<std::fixed<<std::setprecision(3)<<move_sec<<" s"
                      <<"  delta_from_target="<<std::showpos<<dt_target<<std::noshowpos<<" s"
                      <<"  timing="<<(timing_ok?"PASS":"FAIL")<<"\n";
+#endif
           }
           stable.reset();phase=CapturePhase::SETTLE_END;notice="SPACE ПРИНЯТ — ОСТАНОВИТЕ НА B И НЕ ДВИГАЙТЕ";notice_until=monotonicNs()+2200000000LL;std::cout<<"LEG "<<leg+1<<" END key accepted KF="<<s.keyframe<<" event_wall_ns="<<event_wall_ns<<" state_ts="<<s.timestamp_ns<<" cb_wall_ns="<<s.callback_wall_ns<<" age_ms="<<(event_wall_ns-s.callback_wall_ns)/1e6<<" [gravity feedback remains OFF, settling]\n";}
       }
@@ -201,14 +206,14 @@
     saveBackendTraceV8(states,rows,kBackendPath);
     if(imu_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);imu_req=false;}if(att_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);att_req=false;}requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,0);if(streaming){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(camera_fd,VIDIOC_STREAMOFF,&t);streaming=false;}for(auto&bf:buffers)if(bf.start&&bf.start!=MAP_FAILED)munmap(bf.start,bf.length);if(camera_fd!=-1)close(camera_fd);if(serial_fd!=-1)close(serial_fd);
     if(gV26ControlledAb4){
-      #ifdef JTZERO_CLEAN01
-      std::cout<<"CLEAN01: "<<kLegCount<<" измеряемый проход A->B"
+#ifdef JTZERO_CLEAN01
+      std::cout<<"CLEAN01: "<<kLegCount<<" измеряемый проход A->B; временной критерий отсутствует\n";
 #else
       std::cout<<"V26 MODE: CONTROLLED_AB4 — "<<kLegCount<<" measured A->B pass"
-#endif
                <<(kLegCount==1?"":"es")<<", target "<<gV26TargetMoveSec
                <<" s, accepted window "<<(gV26TargetMoveSec-gV26DurationToleranceSec)<<".."
                <<(gV26TargetMoveSec+gV26DurationToleranceSec)<<" s\n";
+#endif
     } else std::cout<<"V25 MODE: A-B-A x2 closure test, strict gate, pure FRD->FLU, ZXY OFF, gravity feedback OFF, first_direction="<<(gV25BFirst?"B->A":"A->B")<<"\n";
     printSummaryV8(rows,raw,rejected,selected,decoded,imu_rx,imu_fed,att_rx,sync.size(),mapping,states.size());
     raw_combined.flush();raw_camera.flush();raw_mjpg.flush();raw_attitude.flush();raw_range.flush();
@@ -221,9 +226,20 @@
              <<"BACKEND CSV: "<<kBackendPath<<"\n"
              <<"FRONTEND CSV: "<<kFrontendPath<<" rows="<<frontend_states.size()<<"\n"
              <<"EVENTS CSV: "<<kEventsPath<<"\n"
+#ifdef JTZERO_CLEAN01
+             <<"SELECTED MJPEG: "<<kV11MjpegPath<<" (буферизован в памяти, сохранён после прогона)\n"
+#else
              <<"RAW MJPEG: DISABLED in V25 diagnostic\n"
+#endif
              <<"LOOP STALLS >100ms: "<<loop_stall_count<<" max="<<std::fixed<<std::setprecision(3)
              <<max_loop_stall_ns/1e6<<" ms\n";
+    const bool pipeline_pass=!aborted&&rows.size()==kLegCount&&mapping.valid&&states.size()>0;
+#ifdef JTZERO_CLEAN01
+    std::cout<<"CLEAN01 DATA CAPTURE: "<<(pipeline_pass?"PASS":"FAIL")<<"\n";
+    std::cout<<"CLEAN01 MEASUREMENT VERDICT: НЕ ВЫЧИСЛЯЕТСЯ ВО ВРЕМЯ ЗАПИСИ\n";
+    std::cout<<"CLEAN01 RESULT: "<<(pipeline_pass?"DATA_SAVED":"CAPTURE_FAILED")<<"\n";
+    return pipeline_pass?0:1;
+#else
     double sd=0.0;
 #ifdef JTZERO_SINGLE_LEG_MODE
     const bool metric_pass = rows.size()==1 && std::abs(rows[0].measured.error)<=kV8MaxLegErrorM && std::abs(rows[0].measured.dz)<=kV8MaxAbsDzM;
@@ -249,11 +265,11 @@
       metric_pass=v8MeasurementPass(rows,&sd);
     }
 #endif
-    const bool pipeline_pass=!aborted&&rows.size()==kLegCount&&mapping.valid&&states.size()>0;
     std::cout<<"PIPELINE RESULT: "<<(pipeline_pass?"PASS":"FAIL")<<"\nMEASUREMENT RESULT: "<<(metric_pass?"PASS":"FAIL")<<"\n";
     const bool pass=pipeline_pass&&metric_pass;
     std::cout<<"RESULT: "<<(pass?"PASS":"FAIL")<<"\n";
     return pass?0:1;
+#endif
   }catch(const std::exception&e){std::cerr<<"[FATAL] "<<e.what()<<"\n";
 #ifdef JTZERO_V42_DIRECT_LUNA
     gV41Cam.stopDirectRange();

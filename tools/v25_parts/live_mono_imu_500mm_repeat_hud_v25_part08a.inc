@@ -40,7 +40,14 @@
         if(vio_feed_enabled){
           raw_camera<<b.sequence<<','<<raw_ts_ns<<','<<corrected<<','<<(mapping.valid?1:0)<<','<<((ok&&due&&mapping.valid)?1:0)<<','<<this_offset<<','<<b.bytesused<<'\n';
         }
-        if(ok&&due&&mapping.valid&&vio_feed_enabled){std::vector<unsigned char>jpg(b.bytesused);std::memcpy(jpg.data(),buffers[b.index].start,b.bytesused);cv::Mat g=cv::imdecode(jpg,cv::IMREAD_GRAYSCALE);if(!g.empty()){++decoded;gray=g;
+        if(ok&&due&&mapping.valid&&vio_feed_enabled){std::vector<unsigned char>jpg(b.bytesused);std::memcpy(jpg.data(),buffers[b.index].start,b.bytesused);
+#ifdef JTZERO_R14_RAW_ARCHIVE
+          if(phase==CapturePhase::MOVING){
+            R14RawFrame rr; rr.leg=leg+1; rr.sequence=b.sequence; rr.timestamp_ns=corrected; rr.jpeg=jpg;
+            gR14RawFrames.push_back(std::move(rr));
+          }
+#endif
+          cv::Mat g=cv::imdecode(jpg,cv::IMREAD_GRAYSCALE);if(!g.empty()){++decoded;gray=g;
 #ifdef JTZERO_V41_METRIC_CAMERA
           gV41Cam.update(g,b.sequence,corrected);
 #endif

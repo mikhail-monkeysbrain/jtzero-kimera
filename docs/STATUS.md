@@ -447,3 +447,16 @@ A shared stats object prints one `[JTZERO-MONO-POSE-GATE-SUMMARY]` line when the
 is absent.
 
 Do not run another physical pass until `tools/install_v44_20_gate_counters.sh` builds successfully.
+
+
+### V44.21 — V44.20 aborted before the physical pass; endpoint is invalid
+
+The first V44.20 attempt aborted during startup/warmup immediately after JT-IMU-INIT with
+`terminate called without an active exception`. No A->B pass occurred. Therefore the archived camera forensic rows are
+leftovers/partial runtime data and MUST NOT be interpreted as a 500 mm result. The missing shutdown summary is explained by
+abnormal termination: destructors are not guaranteed to run under `std::terminate`/abort.
+
+V44.21 adds crash-safe gate telemetry via `JTZERO_MONO_POSE_GATE_STATS_FILE`. The file is synchronously rewritten and flushed
+at gate initialization, every evaluated VALID pose, and every rejection. This provides evidence even if the process aborts.
+Also added a stationary startup/warmup smoke wrapper. Do not perform another physical 500 mm movement until this smoke test
+survives startup/warmup with the gate enabled.

@@ -176,3 +176,20 @@ Physical target measurement supplied by user: 80.77 mm over the marked two-large
 Added `tools/analyze_v44_grid_effective_focal.py`. It uses the same 20 static OV9281 frames, auto-detects the largest checker-grid inner-corner pattern, solves planar pose with the stored K/D, compares recovered perpendicular camera-to-plane distance against the independently measured 185.5 mm, and converts the discrepancy into an independent effective focal multiplier. This directly tests the remaining ~1.068 focal-scale hypothesis without a new A->B run.
 
 Caution: if 80.77 mm was not exactly a two-large-square physical span, rerun with the correct one-square size; do not interpret focal scale until target geometry is confirmed.
+
+
+## 2026-09-09 — V44.4 first analyzer result invalid; false checker-grid detections
+
+The first V44.4 analyzer run produced physically impossible plane heights, 34-89 deg board tilts and reprojection RMS ~20-106 px across nominally static frames. This is not a camera-calibration result. It demonstrates that generic findChessboardCornersSB was locking onto false sub-patterns in the ArUco/checker artwork.
+
+Do **not** use the reported focal_k~1.998 or any individual PnP height from that run.
+
+Analyzer updated to V44.4b:
+- ranks candidate checker grids by adjacent-spacing regularity;
+- rejects irregular false detections;
+- avoids interpreting bad PnP;
+- estimates local effective fx/fy from robust adjacent physical-square spacing;
+- recomputes spacing after K/D undistortion;
+- reports homography reprojection RMS as a geometry sanity check.
+
+If the artwork is not detectable as one regular checker grid, next discriminator will use explicit ArUco/ChArUco geometry or explicit endpoints of the physically measured 80.77 mm span.

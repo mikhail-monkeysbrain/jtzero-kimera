@@ -145,3 +145,11 @@ A stronger remaining camera-only hypothesis is now **physical attitude rotation 
 Added tools/analyze_v44_fc_rotation_compensation.py. It aligns the 220 forensic intervals uniformly over the exact START/END wall-time window, interpolates FC ATTITUDE, maps FRD->FLU, transforms the active camera extrinsic R_BC, predicts rotation-only flow at each real inlier centroid, subtracts it from the real median flow, and recomputes metric distance for h=180/185 mm.
 
 Status semantics: root cause not yet identified; **НА МЕСТЕ** until this mechanism is supported/rejected quantitatively.
+
+
+## 2026-09-09 — V44 physical height measurement
+
+Physical measurement: working surface -> OV9281 sensor plane = **185–186 mm**.
+This rejects the ~173.2 mm height required to close the V44 camera-only scale after FC-rotation compensation.
+At h=185 mm the remaining corrected camera-only excess is ~+6.8%, so do not tune height to ~173 mm.
+Next discriminator: static runtime V4L2/camera-geometry audit, then independent effective-focal measurement if runtime mode is consistent.

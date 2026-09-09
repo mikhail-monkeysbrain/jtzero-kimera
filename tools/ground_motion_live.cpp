@@ -94,11 +94,14 @@ CameraCalib loadCameraCalib(const std::string& path){
   if(!fs.isOpened())throw std::runtime_error("не удалось открыть camera yaml");
   std::vector<double> intr;fs["intrinsics"]>>intr;
   if(intr.size()<4)throw std::runtime_error("camera yaml: intrinsics");
-  cv::Mat T;fs["T_BS"]>>T;
-  if(T.rows!=4||T.cols!=4)throw std::runtime_error("camera yaml: T_BS");
-  T.convertTo(T,CV_64F);
+  cv::FileNode tbs=fs["T_BS"];
+  if(tbs.empty())throw std::runtime_error("camera yaml: T_BS отсутствует");
+  int rows=(int)tbs["rows"],cols=(int)tbs["cols"];
+  std::vector<double> data;
+  tbs["data"]>>data;
+  if(rows!=4||cols!=4||data.size()!=16)throw std::runtime_error("camera yaml: неверный T_BS.data");
   CameraCalib k;k.fx=intr[0];k.fy=intr[1];k.cx=intr[2];k.cy=intr[3];
-  for(int r=0;r<3;r++)for(int col=0;col<3;col++)k.B_R_C(r,col)=T.at<double>(r,col);
+  for(int r=0;r<3;r++)for(int col=0;col<3;col++)k.B_R_C(r,col)=data[r*4+col];
   return k;
 }
 struct Estimate{double x=0,y=0,vx=0,vy=0,path=0,height=0;int inliers=0;uint64_t frames=0;};

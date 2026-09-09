@@ -3054,3 +3054,22 @@ Action taken:
 
 **Physical test:** none.
 **Status:** ANALYZER INFRASTRUCTURE REPAIRED BY CLEAN REWRITE; NEXT = SYNTAX CHECK + V43.1 OFFLINE RUN.
+
+
+## 2026-09-09 — V43.1 affine-origin hypothesis rejected; next exact height recomputation
+
+V43.1 on 255 recovered real camera updates:
+- camera-only net 565.93 mm (+65.93 mm, scale 1.131851);
+- affine scale mean 1.000627, max 1.001360;
+- |rotation| mean 0.0136°, max 0.0422°;
+- summed affine translation at optical axis: 1666.118 px;
+- summed affine-predicted motion at inlier centroid: 1666.343 px;
+- summed axis/centroid norm ratio = 0.999866.
+
+Therefore evaluating similarity translation at the optical-axis-centered origin versus the actual inlier centroid changes the accumulated pixel-motion norm by only ~0.013%, nowhere near the observed +13.19%. This specific affine-origin leakage hypothesis is quantitatively rejected for this run.
+
+Next discriminator uses the same real logged tx/ty and recomputes metric distance under fixed heights 195/190/185/180 mm, then solves the exact fixed height required for 500 mm. This isolates the entire height term without a new physical run.
+
+Added `tools/analyze_v43_height_recompute.py`.
+**Physical test:** none.
+**Status:** AFFINE ORIGIN/CENTROID PARAMETERIZATION INSUFFICIENT; NEXT = EXACT HEIGHT-TERM RECONCILIATION ON REAL V43 tx/ty.

@@ -403,3 +403,16 @@ V44.17d now patches the exact local callback. For a gated anomalous VALID monocu
 - remains OFF by default and is enabled only by `JTZERO_MONO_POSE_GATE=1`.
 
 This preserves the existing `JTZERO_DIAG_IMU_ONLY` diagnostic path and avoids adding backend no-motion constraints during the pose-gate test.
+
+
+### V44.18 — first gated run must be verified before another physical run
+
+First V44.17d gated A->B archive: `20260909_135833_v43_CAMERA_AFFINE_FORENSIC`.
+Endpoint improved from the prior 417.6 mm regression to 457.63 mm (scale 0.915251), but the terminal output contains no
+`[JTZERO-MONO-POSE-GATE]` rejection line. This is not sufficient evidence that the gate caused the improvement.
+Camera-only was 548.32 mm while Kimera ended at 457.63 mm, with dz=45.80 mm.
+
+V44.18 adds a no-new-run comparison of the archived reference, ungated regression, and first gated run. The immediate
+question is whether the current-only large VALID translation-direction discontinuity identified by V44.15 is actually absent
+from the gated archive and whether V44.16 would have fired on that archive. Do not perform another 500 mm physical pass
+until this archive-only discriminator is evaluated.

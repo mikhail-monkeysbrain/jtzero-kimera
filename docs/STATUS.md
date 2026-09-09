@@ -387,3 +387,19 @@ V44.17b replaces the fragile unified-diff step with guarded exact source-block r
 The guarded installer correctly refused to modify Kimera because the local /home/vio/Kimera-VIO/src/pipeline/MonoImuPipeline.cpp layout does not match the upstream source text used to generate the installer anchors. No source change was applied.
 
 Added V44.17c source-layout snapshot helper to print the exact include block and registerOutputCallback context from the local Kimera checkout. Next step is to derive the patch from the user's actual local source layout, not from upstream assumptions.
+
+
+### V44.17d — adapted to the actual local MonoImuPipeline callback
+
+V44.17c showed the local Kimera source already contains a JT-Zero `JTZERO_DIAG_IMU_ONLY` branch. This also exposed an important backend semantic: in this tree `LOW_DISPARITY` causes `ZeroVelocityPrior` and `NoMotionFactor`. Therefore the earlier proposal to convert a gated anomaly to LOW_DISPARITY would be methodologically wrong and could itself create a stop/reversal artifact.
+
+V44.17d now patches the exact local callback. For a gated anomalous VALID monocular pose it:
+- copies the status/measurements;
+- clears smart landmark measurements for that one interval;
+- sets tracking status to `INVALID` (not LOW_DISPARITY);
+- resets the mono pose in the copied diagnostic packet;
+- leaves the PIM/IMU input intact;
+- does not update the previous-good translation direction with the rejected pose;
+- remains OFF by default and is enabled only by `JTZERO_MONO_POSE_GATE=1`.
+
+This preserves the existing `JTZERO_DIAG_IMU_ONLY` diagnostic path and avoids adding backend no-motion constraints during the pose-gate test.

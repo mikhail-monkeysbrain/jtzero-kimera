@@ -460,3 +460,19 @@ V44.21 adds crash-safe gate telemetry via `JTZERO_MONO_POSE_GATE_STATS_FILE`. Th
 at gate initialization, every evaluated VALID pose, and every rejection. This provides evidence even if the process aborts.
 Also added a stationary startup/warmup smoke wrapper. Do not perform another physical 500 mm movement until this smoke test
 survives startup/warmup with the gate enabled.
+
+
+### V44.22 — stationary smoke reached READY; abort is teardown, not startup
+
+V44.21 stationary smoke reached the GUI READY state. The user did not move and exited with Q/ESC. Crash-safe telemetry then
+persisted `phase=shutdown enabled=1 evaluated=0 rejected=0`. The terminal's `terminate called without an active exception`
+therefore occurred during teardown after the smoke had reached READY, not during JT-IMU initialization/startup.
+
+However, `evaluated=0` is ambiguous on a stationary scene because the gate only counted VALID poses. V44.22 extends telemetry
+with `keyframes_seen`, `valid_seen`, `low_disparity_seen`, and `invalid_seen`, persisted on every keyframe. This provides
+direct proof that the runtime callback containing the gate is executing even when no VALID translation exists.
+
+Also fixed `run_v43_camera_affine_forensic_single.sh` to propagate the underlying VIO process exit code after archiving.
+Previously an abort could be archived and still appear as wrapper RC=0.
+
+Next: build V44.22 and run one stationary callback smoke. No physical 500 mm movement until `keyframes_seen>0` is confirmed.

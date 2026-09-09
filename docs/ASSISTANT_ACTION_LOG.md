@@ -3032,3 +3032,10 @@ No further exact attribution is possible from V42 because affine scale/rotation 
 
 **Next physical measurement:** exactly one A->B / 500 mm pass, target ~7.5 s. This is not a repeat for averaging; it adds previously missing observability.
 **Status:** OFFLINE HYPOTHESES EXHAUSTED WITHOUT REPRODUCING +10%; NEXT = V43 INSTRUMENTED SINGLE PASS.
+
+
+## 2026-09-09 — V43 physical run captured
+
+V43 completed one A->B pass in 6.847 s (timing PASS). Camera-only remained high at 567.76 mm (205 accepted, 0 rejected); Kimera horizontal was 477.89 mm with dz +49.96 mm. Direct TF-Luna was active. Important inconsistency noticed in preflight: direct range 0.190 m but camera_height 0.170 m despite runner exporting +0.005 m; this requires source/config-path verification separately. The process aborted after result printing (`terminate called without an active exception`), but the runner still archived the run as `20260909_112648_v43_CAMERA_AFFINE_FORENSIC` and should have copied the forensic CSV before metadata creation.
+
+Next step is offline only: analyze the newly logged affine matrix and inlier-centroid data. Added `tools/analyze_v43_camera_affine_forensic.py`. No new physical pass is requested until this archive has been analyzed.

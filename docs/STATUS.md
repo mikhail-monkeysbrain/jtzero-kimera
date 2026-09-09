@@ -153,3 +153,15 @@ Physical measurement: working surface -> OV9281 sensor plane = **185–186 mm**.
 This rejects the ~173.2 mm height required to close the V44 camera-only scale after FC-rotation compensation.
 At h=185 mm the remaining corrected camera-only excess is ~+6.8%, so do not tune height to ~173 mm.
 Next discriminator: static runtime V4L2/camera-geometry audit, then independent effective-focal measurement if runtime mode is consistent.
+
+
+## 2026-09-09 — V44.3 runtime geometry audit
+
+Static audit on the active OV9281/rp1-cfe capture node:
+- active capture geometry is 640x480, matching the 640x480 calibration resolution;
+- active raw format is pRAA (10-bit Bayer);
+- VIDIOC_G_PARM is unsupported on this rp1-cfe node and is not treated as a geometry failure;
+- therefore a simple runtime-resolution mismatch is rejected as the source of the remaining camera scale error.
+
+Physical sensor-plane height remains measured at 185-186 mm, so the ~173.2 mm height closure remains rejected.
+Next discriminator: independent static effective-focal / projection-scale measurement at the real 185-186 mm sensor-plane height. No A->B run is required.

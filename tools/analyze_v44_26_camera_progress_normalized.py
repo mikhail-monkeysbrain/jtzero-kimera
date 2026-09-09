@@ -66,13 +66,13 @@ print("="*116)
 print("V44.26 — CLEAN RUNS NORMALIZED BY CAMERA-ONLY OBSERVED PROGRESS")
 print("="*116)
 print(f"common camera-progress range: 0..{common:.1f} mm")
-print("cam progress | ref backend  cur backend  delta | ref backend/cam cur backend/cam | max timestamp dt")
+print("cam progress | ref backend  cur backend  delta | ref backend/cam cur backend/cam | max norm-progress mismatch")
 print("-"*116)
 for i in range(1,21):
     target=common*i/20
     ar=interp(A,target); br=interp(B,target)
     print(f"{target:11.1f} | {ar[1]:11.1f} {br[1]:11.1f} {br[1]-ar[1]:+7.1f} |"
-          f" {ar[1]/target:15.4f} {br[1]/target:15.4f} | {max(ar[2],br[2]):8.2f} ms")
+          f" {ar[1]/target:15.4f} {br[1]/target:15.4f} | {max(ar[2],br[2]):8.5f}")
 print("\nEND SCREEN")
 print("-"*116)
 for name,z in (("reference",A),("current",B)):

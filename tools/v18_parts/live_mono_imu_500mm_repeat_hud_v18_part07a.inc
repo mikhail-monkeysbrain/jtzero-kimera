@@ -32,7 +32,7 @@ int main(int argc,char**argv){
   google::InitGoogleLogging(argv[0]);
   FLAGS_visualize=false;FLAGS_viz_type=2;FLAGS_use_lcd=false;FLAGS_log_output=false;FLAGS_extract_planes_from_the_scene=false;
   const std::string params=argc>1?argv[1]:"params/JTZeroMonoFLU_TBS_Rm1d5_Pm5d5";
-  const std::string camera_device=argc>2?argv[2]:"/dev/video8";
+  const std::string camera_device=argc>2?argv[2]:"/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9281_USB_Camera_UC762-video-index0";
 #ifdef JTZERO_B_FIRST_HUD
   #ifdef JTZERO_B_FIRST_FLAG
   JTZERO_B_FIRST_FLAG=(argc>3 && std::string(argv[3])=="B_FIRST");

@@ -107,3 +107,25 @@
 - Для geometry/calibration code сначала открыть фактический calibration/config и проверить sensor order, stereo axis/type, frames, units, K/D/R/T/P.
 - Перед причинным выводом выполнить order-of-magnitude reconciliation.
 - n<3 independent physical runs = предварительный результат, если нет отдельного независимого discriminator.
+
+
+## 2026-09-09 — V43 camera-only scale branch
+
+User correction on status semantics: eliminating a hypothesis without identifying a more likely cause is **НА МЕСТЕ**, not **ПРОДВИНУЛИСЬ**. Use ПРОДВИНУЛИСЬ only when the new result materially narrows the cause toward an actionable mechanism or improves the project solution.
+
+Current V43 camera-only facts:
+- real 500 mm motion -> camera-only 565.93 mm with logged dynamic h (mean 193.16 mm);
+- recomputing the same real tx/ty with fixed h=180 mm still gives 526.45 mm (+5.29%);
+- fixed h=185 mm gives 541.07 mm (+8.21%);
+- exact fixed h needed to force 500 mm is 170.96 mm;
+- affine-origin vs inlier-centroid parameterization changes accumulated pixel norm by only ~0.013%;
+- affine scale itself is ~1.0006, so it is not the 1.13 metric factor;
+- lens distortion alone and tested small projective perturbations were insufficient in prior screens.
+
+Current leading hypotheses for the residual camera-only scale error:
+1. **Effective focal length / runtime camera geometry mismatch**: V43 uses hard-coded fx/fy from calibration. Since metric distance is proportional to h/f, a 5–8% residual can be produced by a 5–8% mismatch between actual effective focal length in the runtime 640x480 stream and the calibration value. Possible causes: stale intrinsics, different crop/ROI/scaler mode, camera mode mismatch, calibration file not matching the actual USB stream.
+2. **Plane/camera geometry mismatch**: h/f translation formula assumes a fronto-parallel planar ground and correct optical-center-to-plane perpendicular height. Camera tilt, non-fronto-parallel plane, or using the wrong reference height can bias scale. Current height uncertainty explains a substantial part but not all of the error.
+3. **Residual model mismatch in optical-flow/affine translation** not captured by the tested scale/rotation centroid checks: spatially nonuniform flow from projective geometry or calibration mismatch can bias tx/ty even when fitted affine scale is near 1.
+4. **Physical 500-mm reference / endpoint protocol error** is currently lower priority because Kimera has produced runs near 500 mm (e.g. 495.79 mm) on the same bench, but it remains a generic external possibility and should not be declared impossible without an independent ruler/marker check.
+
+Next discriminator: derive the effective focal length required by the real V43 tx/ty at fixed physically plausible heights, compare it to calibration fx/fy, and inspect whether the runtime USB camera mode/crop is consistent with the calibration mode.

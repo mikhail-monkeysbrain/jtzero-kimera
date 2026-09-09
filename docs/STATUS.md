@@ -476,3 +476,15 @@ Also fixed `run_v43_camera_affine_forensic_single.sh` to propagate the underlyin
 Previously an abort could be archived and still appear as wrapper RC=0.
 
 Next: build V44.22 and run one stationary callback smoke. No physical 500 mm movement until `keyframes_seen>0` is confirmed.
+
+
+### V44.23 result — gate path proven, but gate did not fire; current endpoint ~482 mm
+
+The V44.23 physical pass produced crash-safe telemetry:
+`keyframes_seen=107 valid_seen=26 low_disparity_seen=80 invalid_seen=1 evaluated=26 rejected=0 max_jump_deg=3.58629 max_tilt_deg=7.12048`.
+
+Thus the modified callback and gate evaluator are proven active during real motion, and every VALID pose was evaluated. The gate did **not** fire because this run never approached either 30 deg threshold. The user's observed Kimera endpoint was ~482 mm. Therefore the improvement relative to the 417.6 mm and 457.6 mm runs cannot be attributed to pose rejection by the gate; it is run-to-run/estimator behavior unless another archived discriminator identifies a consistent cause.
+
+The V44.23 shell summary printed `valid_seen=1` because its sed pattern matched the suffix of `invalid_seen=1`. This was a reporting bug only; the telemetry file itself correctly says `valid_seen=26`. The parser is fixed to exact key=value token matching.
+
+Added V44.24 to reuse the four archived runs (reference, 417.6 mm regression, first gated ~457.6 mm run, current ~482 mm run) and run the cross-run, pose-discontinuity, late-reversal, and PIM/gate screens in one analysis. No new physical pass is required.

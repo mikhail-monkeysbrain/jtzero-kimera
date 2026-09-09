@@ -141,7 +141,8 @@ struct V41MetricCamera {
   static constexpr double cy=239.88148589100641;
 
   void reset(){
-    prev.release(); net_x_m=net_y_m=path_m=last_step_m=0.0;
+    prev.release(); prev_frame_sequence=0; prev_frame_timestamp_ns=0; current_frame_sequence=0; current_frame_timestamp_ns=0;
+    net_x_m=net_y_m=path_m=last_step_m=0.0;
     good_updates=rejected_updates=0; armed=true;
 #ifdef JTZERO_V43_CAMERA_FORENSIC
     forensic_seq=0;
@@ -184,7 +185,7 @@ struct V41MetricCamera {
 
     std::vector<cv::Point2f> p0;
     cv::goodFeaturesToTrack(prev,p0,350,0.01,7.0,cv::Mat(),7,false,0.04);
-    if(p0.size()<40){ ++rejected_updates; prev=gray.clone(); return; }
+    if(p0.size()<40){ ++rejected_updates; prev=gray.clone(); prev_frame_sequence=frame_sequence; prev_frame_timestamp_ns=frame_timestamp_ns; return; }
 
     std::vector<cv::Point2f> p1; std::vector<unsigned char> st; std::vector<float> err;
     cv::calcOpticalFlowPyrLK(prev,gray,p0,p1,st,err,cv::Size(21,21),3);
@@ -197,12 +198,12 @@ struct V41MetricCamera {
       a.emplace_back(p0[i].x-static_cast<float>(cx),p0[i].y-static_cast<float>(cy));
       b.emplace_back(p1[i].x-static_cast<float>(cx),p1[i].y-static_cast<float>(cy));
     }
-    if(a.size()<30){ ++rejected_updates; prev=gray.clone(); return; }
+    if(a.size()<30){ ++rejected_updates; prev=gray.clone(); prev_frame_sequence=frame_sequence; prev_frame_timestamp_ns=frame_timestamp_ns; return; }
 
     cv::Mat inliers;
     cv::Mat A=cv::estimateAffinePartial2D(a,b,inliers,cv::RANSAC,2.0,2000,0.99,10);
     int nin=0; if(!inliers.empty()) nin=cv::countNonZero(inliers);
-    if(A.empty() || nin<20){ ++rejected_updates; prev=gray.clone(); return; }
+    if(A.empty() || nin<20){ ++rejected_updates; prev=gray.clone(); prev_frame_sequence=frame_sequence; prev_frame_timestamp_ns=frame_timestamp_ns; return; }
 
     const double tx=A.at<double>(0,2), ty=A.at<double>(1,2);
     const double aff_a=A.at<double>(0,0), aff_b=A.at<double>(1,0);
@@ -249,7 +250,7 @@ struct V41MetricCamera {
     const double dy_m=-ty*h/fy;
     const double step=std::hypot(dx_m,dy_m);
     // Reject impossible one-frame jumps (>30 mm at ~30 fps).
-    if(!std::isfinite(step) || step>0.030){ ++rejected_updates; prev=gray.clone(); return; }
+    if(!std::isfinite(step) || step>0.030){ ++rejected_updates; prev=gray.clone(); prev_frame_sequence=frame_sequence; prev_frame_timestamp_ns=frame_timestamp_ns; return; }
     net_x_m+=dx_m; net_y_m+=dy_m; path_m+=step; last_step_m=step; ++good_updates;
 #ifdef JTZERO_V43_CAMERA_FORENSIC
     if(forensic){

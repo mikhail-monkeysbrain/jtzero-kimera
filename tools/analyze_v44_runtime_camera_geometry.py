@@ -32,12 +32,19 @@ def main():
     if rc:
         raise SystemExit("v4l2-ctl --all failed")
 
-    rc,fmt=run(["v4l2-ctl","-d",a.device,"--get-fmt-video","--get-parm"])
-    print("\nV4L2 ACTIVE FORMAT / FRAME INTERVAL")
+    rc_fmt,fmt=run(["v4l2-ctl","-d",a.device,"--get-fmt-video"])
+    print("\nV4L2 ACTIVE FORMAT")
     print("-"*112)
     print(fmt.rstrip())
-    if rc:
+    if rc_fmt:
         raise SystemExit("v4l2 active-format query failed")
+
+    rc_parm,parm=run(["v4l2-ctl","-d",a.device,"--get-parm"])
+    print("\nV4L2 FRAME INTERVAL")
+    print("-"*112)
+    print(parm.rstrip())
+    if rc_parm:
+        print("NOTE: VIDIOC_G_PARM unsupported on this rp1-cfe raw capture node; this is non-fatal.")
 
     m=re.search(r"Width/Height\s*:\s*(\d+)\s*/\s*(\d+)",fmt)
     if m:

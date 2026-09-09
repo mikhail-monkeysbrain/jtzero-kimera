@@ -521,3 +521,16 @@ Step 2 adds a production-candidate offline estimator independent of Kimera backe
 median OV9281 flow -> subtract FC-attitude-predicted rotational image flow -> scale every sample by TF-Luna height -> integrate metric XY.
 
 The same script also reports affine, uncorrected median-flow, rotation-corrected dynamic-height, and fixed physical-height variants in one execution. This follows the project rule of testing maximum relevant hypotheses per run. No empirical 500-mm correction coefficient is applied.
+
+
+### OF navigation improvement — step 2/8 complete, step 3/8 started
+
+Step 2 candidate result on clean run 20260909_141831:
+- affine + logged height: 557.39 mm;
+- median flow + logged height: 554.73 mm;
+- median flow + FC rotation + logged height: 548.84 mm;
+- median flow + FC rotation + fixed physical 185.5 mm: 531.42 mm.
+
+This is an improvement over raw camera-only, but still not sufficient.
+
+Before changing scale, Step 3 found a concrete implementation risk: the Step-2 script inherited the older hard-coded R_BC used by V44 analyzers, while current `params/JTZeroMonoFLU/LeftCameraParams.yaml` contains a materially different camera-to-body rotation. Step 3 now compares legacy and current extrinsics on the SAME archive, with both logged and fixed height, and quantifies the rotation disagreement. No new physical run and no empirical scale correction.

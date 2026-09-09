@@ -172,6 +172,21 @@ def draw(ax, rows, absolute_height):
     ax.grid(True)
 
 
+def maximize_window(fig):
+    """Развернуть окно Matplotlib с сохранением системной рамки."""
+    mgr = fig.canvas.manager
+    try:
+        win = mgr.window
+        if hasattr(win, "showMaximized"):
+            win.showMaximized()
+            return
+        if hasattr(win, "state"):
+            win.state("zoomed")
+            return
+    except Exception:
+        pass
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="3D-визуализация маршрута JT-Zero из Ground Motion CSV"
@@ -200,6 +215,7 @@ def main():
     fig = plt.figure(figsize=(11, 8))
     ax = fig.add_subplot(111, projection="3d")
     fig.canvas.manager.set_window_title("JT-Zero — 3D маршрут")
+    maximize_window(fig)
 
     def reload_and_draw():
         rows = load_rows(path)

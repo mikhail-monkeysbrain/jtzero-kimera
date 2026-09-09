@@ -163,7 +163,13 @@ int main(int argc,char**argv){
         int k=cv::waitKey(1);
         // Крестик окна должен завершать процесс даже без фокуса клавиатуры.
         if(cv::getWindowProperty(kWindow,cv::WND_PROP_VISIBLE)<1){g_running=false;break;}if(k==' '&&sensors_ok){if(test_state==TestState::READY){reset_pending=true;test_state=TestState::MOVING;}else if(test_state==TestState::MOVING){result_x=est.x;result_y=est.y;result_path=est.path;test_state=TestState::DONE;est.vx=0;est.vy=0;}}if(k=='q'||k=='Q'||k==27)g_running=false;
-        if(csv&&sensors_ok)csv<<now<<','<<frame_id<<','<<std::fixed<<std::setprecision(6)<<h<<','<<est.x<<','<<est.y<<','<<est.vx<<','<<est.vy<<','<<est.path<<','<<est.inliers<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<'\n';
+        if(csv&&sensors_ok){
+          csv<<now<<','<<frame_id<<','<<std::fixed<<std::setprecision(6)<<h<<','<<est.x<<','<<est.y<<','<<est.vx<<','<<est.vy<<','<<est.path<<','<<est.inliers<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<'\n';
+          // Demo/live consumer must see data with low latency. Flushing every
+          // 4 camera frames avoids multi-second std::ofstream buffering while
+          // keeping SD-card sync overhead low.
+          if((frame_id & 3u)==0u) csv.flush();
+        }
       }
     }
     cv::destroyAllWindows();

@@ -233,3 +233,15 @@ User measured the outer black-square side on multiple target squares/markers as 
 With the same detected pixel geometry and h=185.5 mm, replacing the provisional 24.35 mm by the measured 26.47 mm scales the inferred focal by 24.35/26.47: approximately fx=448.4 px, fy=446.9 px, mean k≈0.787. This does NOT support the prior +6.8% effective-focal hypothesis; it creates a much larger opposite-sign discrepancy.
 
 Do not tune K to ~447 px yet. V44.5 is a local fronto-parallel scale approximation and the target/image show perspective/tilt. Next step must use full planar ArUco geometry / homography (or solvePnP) across many markers, jointly checking plane pose, metric scale, stored K, and the independently measured 185.5 mm sensor-plane distance on the SAME existing images. No new A->B run is required.
+
+
+## 2026-09-09 — V44.6 full-board planar geometry sweep added
+
+V44.5 with the real 26.47 mm marker side gives a naive local-scale k~0.787, opposite in sign and far larger than the +6.8% motion residual hypothesis. Because the target plane is visibly projective and the local-scale formula assumes fronto-parallel geometry, this is not a valid calibration replacement.
+
+Added `tools/analyze_v44_fullboard_geometry.py` to use the SAME 20 static OV9281 frames and the independently measured physical geometry:
+- large checker-cell pitch = 40.385 mm (from measured 80.77 mm over two cells);
+- ArUco outer black-square side = 26.47 mm;
+- sensor-plane to working-plane height = 185.5 mm nominal.
+
+The analyzer derives a consistent marker-center lattice from stable ArUco IDs, builds full 3-D planar marker-corner coordinates, and sweeps shared focal multiplier k plus distortion-strength scale. For every model it solves board pose and reports reprojection RMS, recovered perpendicular camera-plane height, and tilt. It explicitly compares stored K (k=1), motion hypothesis (k=1.068), and the naive local-scale k~0.7866. No new image or A->B run is needed.

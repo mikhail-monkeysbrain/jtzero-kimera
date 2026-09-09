@@ -32,7 +32,7 @@ def camera(run):
     if len(q)<2: raise RuntimeError(f"insufficient camera forensic rows: {run}")
     # Camera log already contains cumulative net_x/net_y. Use radial net as a
     # monotonic-ish observed progress coordinate; enforce nondecreasing envelope.
-    raw=[(I(r,"timestamp_ns"),math.hypot(F(r,"net_x_m"),F(r,"net_y_m"))*1000) for r in q]
+    raw=[(i/max(1,len(q)-1),math.hypot(F(r,"net_x_m"),F(r,"net_y_m"))*1000) for i,r in enumerate(q)]
     out=[]; m=0.0
     for t,v in raw:
         if math.isfinite(v): m=max(m,v)
@@ -61,7 +61,7 @@ ap=argparse.ArgumentParser()
 ap.add_argument("--reference",required=True); ap.add_argument("--current",required=True)
 a=ap.parse_args(); R=Path(a.reference).expanduser(); C=Path(a.current).expanduser()
 A=pairs(R); B=pairs(C)
-common=min(A[-1][0],B[-1][0])
+common=min(max(x[0] for x in A),max(x[0] for x in B))
 print("="*116)
 print("V44.26 — CLEAN RUNS NORMALIZED BY CAMERA-ONLY OBSERVED PROGRESS")
 print("="*116)

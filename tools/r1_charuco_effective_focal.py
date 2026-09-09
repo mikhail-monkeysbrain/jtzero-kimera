@@ -21,13 +21,24 @@ def read_payload(mj,row):
     return im
 
 def read_intrinsics(path):
-    txt=Path(path).read_text()
-    mi=re.search(r'intrinsics:\\s*\\[([^\\]]+)\\]',txt)
-    md=re.search(r'distortion_coefficients:\\s*\\[([^\\]]+)\\]',txt)
-    if not (mi and md):
+    values={}
+    for raw in Path(path).read_text().splitlines():
+        line=raw.strip()
+        if ":" not in line:
+            continue
+        key,val=line.split(":",1)
+        key=key.strip()
+        if key not in ("intrinsics","distortion_coefficients"):
+            continue
+        val=val.strip()
+        if not (val.startswith("[") and val.endswith("]")):
+            raise RuntimeError(f"unexpected {key} format")
+        values[key]=[float(x.strip()) for x in val[1:-1].split(",")]
+
+    intr=values.get("intrinsics")
+    d=values.get("distortion_coefficients")
+    if intr is None or d is None:
         raise RuntimeError("camera yaml parse failed")
-    intr=[float(x.strip()) for x in mi.group(1).split(",")]
-    d=[float(x.strip()) for x in md.group(1).split(",")]
     if len(intr)!=4 or len(d)<4:
         raise RuntimeError("unexpected camera yaml values")
     return intr,d

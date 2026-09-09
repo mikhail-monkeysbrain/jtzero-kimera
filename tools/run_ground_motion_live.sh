@@ -8,7 +8,7 @@ FC="${JTZERO_GM_FC:-/dev/ttyAMA0}"
 PARAMS="${JTZERO_GM_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraParams.yaml}"
 OFFSET="${JTZERO_GM_CAMERA_OFFSET_MM:-0}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
-OUT="$HOME/jtzero_runs/${STAMP}_GROUND_MOTION_LIVE.csv"
+OUT="${JTZERO_GM_OUT:-$HOME/jtzero_runs/${STAMP}_GROUND_MOTION_LIVE.csv}"
 if [[ ! -x "$BIN" || "$ROOT/tools/ground_motion_live.cpp" -nt "$BIN" ]]; then
   bash "$ROOT/tools/build_ground_motion_live.sh" "$BIN"
 fi

@@ -48,6 +48,10 @@ bool gV25BFirst = false;
 #endif
 struct V41MetricCamera {
   cv::Mat prev;
+  uint32_t prev_frame_sequence=0;
+  int64_t prev_frame_timestamp_ns=0;
+  uint32_t current_frame_sequence=0;
+  int64_t current_frame_timestamp_ns=0;
   double net_x_m=0.0, net_y_m=0.0, path_m=0.0;
   double last_step_m=0.0;
   int good_updates=0, rejected_updates=0;
@@ -146,7 +150,7 @@ struct V41MetricCamera {
     if(!forensic){
       std::cerr<<"[V43-FORENSIC] ERROR opening /home/vio/jtzero_v43_camera_forensic.csv\n";
     }else{
-      forensic<<"seq,n_tracks,n_inliers,c0x,c0y,c1x,c1y,aff_a,aff_b,aff_scale,aff_rot_deg,tx_px,ty_px,height_m,dx_m,dy_m,step_m,net_x_m,net_y_m,med_flow_x_px,med_flow_y_px,med_flow_norm_px,flow_q10_px,flow_q50_px,flow_q90_px,flow_left_px,flow_right_px,flow_top_px,flow_bottom_px\n";
+      forensic<<"seq,frame0_sequence,frame0_timestamp_ns,frame1_sequence,frame1_timestamp_ns,n_tracks,n_inliers,c0x,c0y,c1x,c1y,aff_a,aff_b,aff_scale,aff_rot_deg,tx_px,ty_px,height_m,dx_m,dy_m,step_m,net_x_m,net_y_m,med_flow_x_px,med_flow_y_px,med_flow_norm_px,flow_q10_px,flow_q50_px,flow_q90_px,flow_left_px,flow_right_px,flow_top_px,flow_bottom_px\n";
       forensic.flush();
       std::cout<<"[V43-FORENSIC] OPEN OK offset="<<camera_height_offset_m
                <<" camera_height="<<cameraHeight()<<" m\n";
@@ -168,9 +172,15 @@ struct V41MetricCamera {
   }
   double net() const { return std::hypot(net_x_m,net_y_m); }
 
-  void update(const cv::Mat& gray){
-    if(!armed || gray.empty() || !range_valid){ prev=gray.clone(); return; }
-    if(prev.empty()){ prev=gray.clone(); return; }
+  void update(const cv::Mat& gray,uint32_t frame_sequence,int64_t frame_timestamp_ns){
+    current_frame_sequence=frame_sequence;
+    current_frame_timestamp_ns=frame_timestamp_ns;
+    if(!armed || gray.empty() || !range_valid){
+      prev=gray.clone(); prev_frame_sequence=frame_sequence; prev_frame_timestamp_ns=frame_timestamp_ns; return;
+    }
+    if(prev.empty()){
+      prev=gray.clone(); prev_frame_sequence=frame_sequence; prev_frame_timestamp_ns=frame_timestamp_ns; return;
+    }
 
     std::vector<cv::Point2f> p0;
     cv::goodFeaturesToTrack(prev,p0,350,0.01,7.0,cv::Mat(),7,false,0.04);
@@ -243,7 +253,7 @@ struct V41MetricCamera {
     net_x_m+=dx_m; net_y_m+=dy_m; path_m+=step; last_step_m=step; ++good_updates;
 #ifdef JTZERO_V43_CAMERA_FORENSIC
     if(forensic){
-      forensic<<forensic_seq++<<","<<a.size()<<","<<nin<<","<<c0x<<","<<c0y<<","<<c1x<<","<<c1y<<","
+      forensic<<forensic_seq++<<","<<prev_frame_sequence<<","<<prev_frame_timestamp_ns<<","<<frame_sequence<<","<<frame_timestamp_ns<<","<<a.size()<<","<<nin<<","<<c0x<<","<<c0y<<","<<c1x<<","<<c1y<<","
               <<aff_a<<","<<aff_b<<","<<aff_scale<<","<<aff_rot_deg<<","<<tx<<","<<ty<<","<<h<<","
               <<dx_m<<","<<dy_m<<","<<step<<","<<net_x_m<<","<<net_y_m<<","
               <<med_fx<<","<<med_fy<<","<<med_fn<<","<<fq10<<","<<fq50<<","<<fq90<<","
@@ -252,6 +262,8 @@ struct V41MetricCamera {
     }
 #endif
     prev=gray.clone();
+    prev_frame_sequence=frame_sequence;
+    prev_frame_timestamp_ns=frame_timestamp_ns;
   }
 };
 V41MetricCamera gV41Cam;

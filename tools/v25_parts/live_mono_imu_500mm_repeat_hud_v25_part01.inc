@@ -43,6 +43,9 @@ constexpr int64_t kV25FatalLoopStallNs = 500000000LL;
 bool gV25BFirst = false;
 
 #ifdef JTZERO_V41_METRIC_CAMERA
+#ifdef JTZERO_V42_DIRECT_LUNA
+#include <atomic>
+#endif
 struct V41MetricCamera {
   cv::Mat prev;
   double net_x_m=0.0, net_y_m=0.0, path_m=0.0;
@@ -51,7 +54,79 @@ struct V41MetricCamera {
   bool armed=false;
   double vertical_range_m=0.0;
   bool range_valid=false;
-  double camera_height_offset_m=-0.020; // camera is 20 mm closer to ground than TF-Luna in JT-Zero rig.
+  double camera_height_offset_m=-0.020; // configurable camera optical-center offset relative to range reading.
+#ifdef JTZERO_V42_DIRECT_LUNA
+  std::atomic<bool> direct_range_stop{false};
+  std::thread direct_range_thread;
+
+  void startDirectRange(const std::string& device="/dev/ttyAMA2"){
+    if(direct_range_thread.joinable()) return;
+    direct_range_stop.store(false);
+    direct_range_thread=std::thread([this,device](){
+      int fd=open(device.c_str(),O_RDONLY|O_NOCTTY|O_NONBLOCK);
+      if(fd<0){
+        std::cerr<<"[V42-LUNA] cannot open "<<device<<": "<<std::strerror(errno)<<"\n";
+        return;
+      }
+      termios t{};
+      if(tcgetattr(fd,&t)!=0){
+        std::cerr<<"[V42-LUNA] tcgetattr failed: "<<std::strerror(errno)<<"\n";
+        close(fd); return;
+      }
+      cfmakeraw(&t);
+      if(cfsetispeed(&t,B115200)!=0 || cfsetospeed(&t,B115200)!=0){
+        std::cerr<<"[V42-LUNA] baud setup failed\n";
+        close(fd); return;
+      }
+      t.c_cflag|=CLOCAL|CREAD;
+      t.c_cflag&=~CRTSCTS; t.c_cflag&=~PARENB; t.c_cflag&=~CSTOPB;
+      t.c_cflag&=~CSIZE; t.c_cflag|=CS8;
+      t.c_cc[VMIN]=0; t.c_cc[VTIME]=0;
+      if(tcsetattr(fd,TCSANOW,&t)!=0){
+        std::cerr<<"[V42-LUNA] tcsetattr failed: "<<std::strerror(errno)<<"\n";
+        close(fd); return;
+      }
+      tcflush(fd,TCIFLUSH);
+      std::cout<<"[V42-LUNA] direct TF-Luna opened "<<device<<" @ 115200\n";
+
+      std::array<uint8_t,9> fr{};
+      int pos=0;
+      while(!direct_range_stop.load()){
+        pollfd p{fd,POLLIN,0};
+        const int pr=poll(&p,1,100);
+        if(pr<=0) continue;
+        uint8_t data[256];
+        const ssize_t n=read(fd,data,sizeof(data));
+        if(n<=0) continue;
+        for(ssize_t i=0;i<n;++i){
+          const uint8_t v=data[i];
+          if(pos==0){ if(v==0x59){fr[0]=v;pos=1;} continue; }
+          if(pos==1){ if(v==0x59){fr[1]=v;pos=2;} else pos=0; continue; }
+          fr[pos++]=v;
+          if(pos==9){
+            uint8_t sum=0; for(int k=0;k<8;++k) sum=static_cast<uint8_t>(sum+fr[k]);
+            if(sum==fr[8]){
+              const uint16_t cm=static_cast<uint16_t>(fr[2]) | (static_cast<uint16_t>(fr[3])<<8);
+              const double m=0.01*static_cast<double>(cm);
+              if(std::isfinite(m) && m>0.05 && m<5.0){
+                vertical_range_m=m;
+                range_valid=true;
+              }
+            }
+            pos=0;
+          }
+        }
+      }
+      close(fd);
+      std::cout<<"[V42-LUNA] direct TF-Luna reader stopped\n";
+    });
+  }
+
+  void stopDirectRange(){
+    direct_range_stop.store(true);
+    if(direct_range_thread.joinable()) direct_range_thread.join();
+  }
+#endif
   static constexpr double fx=568.53170752165227;
   static constexpr double fy=569.68005562865858;
   static constexpr double cx=315.98271077441063;

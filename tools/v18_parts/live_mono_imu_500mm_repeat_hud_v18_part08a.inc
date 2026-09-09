@@ -30,10 +30,15 @@
       if(pending&&monotonicNs()-pending>20000000LL)pending=0;
 
       if(pf[0].revents&POLLIN){for(;;){v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(camera_fd,VIDIOC_DQBUF,&b)==-1){if(errno==EAGAIN)break;fail("DQBUF");}++raw;const int64_t raw_ts_ns=timevalToNs(b.timestamp);const int64_t corrected=jtzero::timesync::correctCameraTimestampNs(raw_ts_ns);
-        // V18 diagnostic: do NOT synchronously write raw MJPEG in the acquisition loop.
-        // This isolates filesystem/write stalls from camera + MAVLink ingestion.
-        const uint64_t this_offset=0;
+        // R1 recorder: persist the exact compressed OV9281 payload before QBUF.
+        // MJPEG is already compressed by the UVC camera, so replay can reconstruct
+        // the exact selected/non-selected camera input without re-encoding.
+        const uint64_t this_offset=raw_mjpg_offset;
         if(vio_feed_enabled&&b.bytesused>0){
+          raw_mjpg.write(reinterpret_cast<const char*>(buffers[b.index].start),
+                         static_cast<std::streamsize>(b.bytesused));
+          if(!raw_mjpg) throw std::runtime_error("R1 raw MJPEG write failed");
+          raw_mjpg_offset+=static_cast<uint64_t>(b.bytesused);
           ++raw_camera_rows;
         }
         bool ok=true;if(have_prev){const int64_t dt=corrected-prev_ts;ok=b.sequence==prev_seq+1U&&dt>0&&dt<=20000000LL;if(!ok)++rejected;}prev_seq=b.sequence;prev_ts=corrected;have_prev=true;const bool due=last_sel==0||corrected-last_sel>=30000000LL;

@@ -172,7 +172,11 @@
     }
     if(gV26ControlledAb4){
       for(size_t i=0;i<rows.size() && i<4;++i){
+        #ifdef JTZERO_CLEAN01
+        const std::string path="/home/vio/jtzero_clean01_vio_trace.csv";
+#else
         const std::string path="/home/vio/jtzero_500mm_v26_"+std::to_string(i+1)+"AB.csv";
+#endif
         std::ofstream pf(path,std::ios::trunc);
         if(!pf) continue;
         pf<<"pass,direction,keyframe,timestamp_ns,elapsed_ms,px_rel_mm,py_rel_mm,pz_rel_mm,vx_m_s,vy_m_s,vz_m_s,speed_m_s\n";
@@ -197,7 +201,11 @@
     saveBackendTraceV8(states,rows,kBackendPath);
     if(imu_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);imu_req=false;}if(att_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);att_req=false;}requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,0);if(streaming){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(camera_fd,VIDIOC_STREAMOFF,&t);streaming=false;}for(auto&bf:buffers)if(bf.start&&bf.start!=MAP_FAILED)munmap(bf.start,bf.length);if(camera_fd!=-1)close(camera_fd);if(serial_fd!=-1)close(serial_fd);
     if(gV26ControlledAb4){
+      #ifdef JTZERO_CLEAN01
+      std::cout<<"CLEAN01: "<<kLegCount<<" измеряемый проход A->B"
+#else
       std::cout<<"V26 MODE: CONTROLLED_AB4 — "<<kLegCount<<" measured A->B pass"
+#endif
                <<(kLegCount==1?"":"es")<<", target "<<gV26TargetMoveSec
                <<" s, accepted window "<<(gV26TargetMoveSec-gV26DurationToleranceSec)<<".."
                <<(gV26TargetMoveSec+gV26DurationToleranceSec)<<" s\n";

@@ -335,3 +335,10 @@ Added `tools/analyze_v44_11_kimera_regression_crossrun.py` to compare the curren
 V44.12 shows the 417.6 mm run is not a simple constant scale underestimate. Relative to the reference, the current backend starts behind, overtakes strongly in the middle (+59.5 mm horizontal at 60% normalized progress), then loses distance rapidly late in the run and finishes -68.9 mm behind. Current horizontal displacement peaks around 85% (~439 mm) and then falls to 417.6 mm while the reference continues toward ~486.5 mm.
 
 The V44.12 frontend columns were empty because frontend and backend keyframe IDs are not directly shared. Added V44.13 to fix that methodological error: frontend rows are now matched to backend rows by nearest timestamp. The new analyzer prints backend per-step motion from the late run, identifies negative along-track steps and post-peak loss, and correlates them with timestamp-matched frontend status/inlier/tracked/mono-pose quality. No new physical run is required.
+
+
+## 2026-09-09 — V44.13 localizes the 417 mm regression before LOW_DISPARITY
+
+V44.13 shows the reference remains monotonic to 486.9 mm (post-peak loss 0.4 mm), while the current run peaks at 439.9 mm at 84% and loses 22.3 mm. Crucially, reversal starts at kf=88 on a VALID row (inlier 0.891, 276 tracked), and the largest following negative step at kf=89 is also VALID (inlier 0.929, 312 tracked). LOW_DISPARITY begins only at kf=90, after approximately 10.8 mm of reversal has already accumulated. Therefore the V44.13 generic conclusion that visual rejection remains the primary branch is too coarse.
+
+V44.14 explicitly tests causal order: it separates negative backend displacement accumulated on VALID pose rows from displacement accumulated after non-VALID/LOW_DISPARITY, and prints the archived monocular translation vector plus backend along-track velocity around the first reversal. No new physical run is required.

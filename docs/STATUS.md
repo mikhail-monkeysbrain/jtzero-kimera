@@ -342,3 +342,10 @@ The V44.12 frontend columns were empty because frontend and backend keyframe IDs
 V44.13 shows the reference remains monotonic to 486.9 mm (post-peak loss 0.4 mm), while the current run peaks at 439.9 mm at 84% and loses 22.3 mm. Crucially, reversal starts at kf=88 on a VALID row (inlier 0.891, 276 tracked), and the largest following negative step at kf=89 is also VALID (inlier 0.929, 312 tracked). LOW_DISPARITY begins only at kf=90, after approximately 10.8 mm of reversal has already accumulated. Therefore the V44.13 generic conclusion that visual rejection remains the primary branch is too coarse.
 
 V44.14 explicitly tests causal order: it separates negative backend displacement accumulated on VALID pose rows from displacement accumulated after non-VALID/LOW_DISPARITY, and prints the archived monocular translation vector plus backend along-track velocity around the first reversal. No new physical run is required.
+
+
+## 2026-09-09 — V44.15 confirms a current-only accepted visual-pose discontinuity
+
+V44.15: reference contains zero VALID large-geometry events. Current contains exactly one: at ~90% / backend kf89, the accepted monocular body translation jumps by ~63.2 deg, from ~5 deg out-of-plane to 56.5 deg, while status remains VALID, inlier=0.929 and tracked=312. Backend simultaneously moves -9.0 mm. LOW_DISPARITY begins only on the next backend state.
+
+This strongly shifts the diagnosis from generic frontend quality to a specific accepted monocular translation-direction degeneracy near the end of motion. Added V44.16 to cross-check that event against the already logged PIM delta-position/delta-velocity/delta-rotation and to counterfactually screen a conservative gate: VALID + pose_valid + translation direction jump >=30 deg + out-of-plane tilt >=30 deg. The gate is not yet applied to production; V44.16 first measures reference false positives and current selectivity. No new physical run is required.

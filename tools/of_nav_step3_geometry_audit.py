@@ -164,6 +164,8 @@ def main():
     print("- If CURRENT extrinsic materially improves the result, Step 2 was using stale geometry and the estimator implementation must be corrected before any new run.")
     print("- If CURRENT and LEGACY are nearly identical, remaining bias is not caused by this stale extrinsic.")
     print("- No global scale correction is permitted in Step 3.")
+    print("- Observed result: current-vs-legacy extrinsic changes fixed-height endpoint by only ~0.1 mm, so extrinsic is closed as the cause.")
+    print("- Next: audit height semantics (TF-Luna range vs camera optical-axis height vs plane-normal distance) and projection model on the same archive.")
     print("="*122)
 
 if __name__=="__main__":

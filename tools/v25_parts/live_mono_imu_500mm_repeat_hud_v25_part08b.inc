@@ -128,25 +128,6 @@
     #ifdef JTZERO_V42_DIRECT_LUNA
     gV41Cam.stopDirectRange();
 #endif
-#ifdef JTZERO_R14_RAW_ARCHIVE
-    {
-      std::ofstream mj("/home/vio/jtzero_r14_selected.mjpg",std::ios::binary|std::ios::trunc);
-      std::ofstream ix("/home/vio/jtzero_r14_selected.csv",std::ios::trunc);
-      uint64_t off=0;
-      if(mj&&ix){
-        ix<<"leg,sequence,timestamp_ns,offset,bytes\n";
-        for(const auto& r:gR14RawFrames){
-          mj.write(reinterpret_cast<const char*>(r.jpeg.data()),static_cast<std::streamsize>(r.jpeg.size()));
-          ix<<r.leg<<','<<r.sequence<<','<<r.timestamp_ns<<','<<off<<','<<r.jpeg.size()<<'\n';
-          off+=r.jpeg.size();
-        }
-        std::cout<<"[R14-RAW] frames="<<gR14RawFrames.size()<<" bytes="<<off
-                 <<" index=/home/vio/jtzero_r14_selected.csv mjpeg=/home/vio/jtzero_r14_selected.mjpg\n";
-      }else{
-        std::cerr<<"[R14-RAW] ERROR opening output files\n";
-      }
-    }
-#endif
     std::this_thread::sleep_for(std::chrono::milliseconds(500));pipeline->shutdown();if(pipeline_thread.joinable())pipeline_thread.join();pipeline_started=false;cv::destroyAllWindows();const auto states=pipeline->states();
     const auto frontend_states=pipeline->frontendStates();
     {

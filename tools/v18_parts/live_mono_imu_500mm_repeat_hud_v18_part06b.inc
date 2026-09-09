@@ -6,14 +6,18 @@
   cv::Mat canvas(720,1280,CV_8UC3,cv::Scalar(8,8,8));
   video.copyTo(canvas(cv::Rect(0,45,900,675)));
 
-  ru(canvas,gV26ControlledAb4?(kLegCount==1?"JT-ZERO — FRESH START 1× A→B":"JT-ZERO — CONTROL 4× A→B"):"JT-ZERO — 500 мм × 4 — V25",{24,32},23,{245,245,245},cv::QT_FONT_BOLD);
+  #ifdef JTZERO_CLEAN01
+  ru(canvas,"JT-ZERO — ЧИСТЫЙ ТЕСТ 01 — ОДИН ПРОХОД A → B, 500 ММ",{24,32},22,{245,245,245},cv::QT_FONT_BOLD);
+#else
+  ru(canvas,gV26ControlledAb4?(kLegCount==1?"JT-ZERO — СВЕЖИЙ СТАРТ 1× A→B":"JT-ZERO — КОНТРОЛЬ 4× A→B"):"JT-ZERO — 500 мм × 4 — V25",{24,32},23,{245,245,245},cv::QT_FONT_BOLD);
+#endif
   if(gV26ControlledAb4){
     char hb[256];
-    std::snprintf(hb,sizeof(hb),kLegCount==1?"1 A→B • цель %.1f с • окно %.1f..%.1f с • после сохранения Q/ESC":"4 одинаковых A→B • цель %.1f с • окно %.1f..%.1f с • B→A не измеряется",
+    std::snprintf(hb,sizeof(hb),kLegCount==1?"1 проход A→B • цель %.1f с • допустимое окно %.1f..%.1f с • после сохранения нажмите Q или ESC":"4 одинаковых A→B • цель %.1f с • окно %.1f..%.1f с • возврат B→A не измеряется",
                   gV26TargetMoveSec,gV26TargetMoveSec-gV26DurationToleranceSec,gV26TargetMoveSec+gV26DurationToleranceSec);
     ru(canvas,hb,{430,30},14,{190,190,190});
   }else{
-    ru(canvas,"12s warm-up • stabilized endpoints • TF-Luna • mono frontend",{430,30},14,{190,190,190});
+    ru(canvas,"12 с прогрева • стабилизация конечных точек • TF-Luna • монокулярный фронтенд",{430,30},14,{190,190,190});
   }
   char b[256];
   std::snprintf(b,sizeof(b),"ПРОХОД %d / %d",std::min(leg+1,kLegCount),kLegCount);
@@ -54,20 +58,20 @@ if(gV26ControlledAb4){
   std::string status,action;
   cv::Scalar status_color(220,220,220);
   if(gV26ControlledAb4){
-    if(!warmup.passed){status="ПОДГОТОВКА — НЕ ДВИГАТЬ";action="SPACE ПОКА ЗАБЛОКИРОВАН";status_color=cv::Scalar(0,210,255);}
+    if(!warmup.passed){status="ПОДГОТОВКА — НЕ ДВИГАТЬ";action="КНОПКА ПРОБЕЛ ПОКА ЗАБЛОКИРОВАНА";status_color=cv::Scalar(0,210,255);}
     else if(phase==CapturePhase::WAIT_START){
       status=(leg==0)?"УСТАНОВИТЕ СТЕНД НА A":"ВЕРНИТЕ СТЕНД B → A";
-      action="SPACE: СТАРТ → ДВИГАЙТЕ";
+      action="НАЖМИТЕ ПРОБЕЛ: СТАРТ → ЗАТЕМ ДВИГАЙТЕ";
       status_color=cv::Scalar(90,220,90);
     }
     else if(phase==CapturePhase::SETTLE_START){status="ФИКСИРУЮ A — НЕ ДВИГАТЬ";action="ЖДИТЕ";status_color=cv::Scalar(0,210,255);}
-    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ A → B";action="НА B: SPACE → СТОП";status_color=cv::Scalar(0,210,255);}
+    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ A → B";action="НА ТОЧКЕ B: ОСТАНОВИТЕСЬ И НАЖМИТЕ ПРОБЕЛ";status_color=cv::Scalar(0,210,255);}
     else {status="НА B — НЕ ДВИГАТЬ";action="ФИКСИРУЮ КОНЕЦ";status_color=cv::Scalar(0,210,255);}
   }else{
-    if(!warmup.passed){status="VIO WARM-UP — НЕ ДВИГАТЬ";action="СТАРТ ПОКА ЗАБЛОКИРОВАН";status_color=cv::Scalar(0,210,255);}
+    if(!warmup.passed){status="ПРОГРЕВ VIO — НЕ ДВИГАТЬ";action="СТАРТ ПОКА ЗАБЛОКИРОВАН";status_color=cv::Scalar(0,210,255);}
     else if(phase==CapturePhase::WAIT_START){status="ГОТОВО К СТАРТУ";action="ПРОБЕЛ / ENTER: СТАРТ";status_color=cv::Scalar(90,220,90);}
     else if(phase==CapturePhase::SETTLE_START){status="СТАБИЛИЗАЦИЯ СТАРТА";action="НЕ ДВИГАТЬ";status_color=cv::Scalar(0,210,255);}
-    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ — ACC GRAVITY OFF";action="ПРОБЕЛ / ENTER: КОНЕЦ";status_color=cv::Scalar(0,210,255);}
+    else if(phase==CapturePhase::MOVING){status="ДВИЖЕНИЕ — КОРРЕКЦИЯ ГРАВИТАЦИИ ВЫКЛЮЧЕНА";action="ПРОБЕЛ / ENTER: КОНЕЦ";status_color=cv::Scalar(0,210,255);}
     else {status="СТАБИЛИЗАЦИЯ КОНЦА";action="НЕ ДВИГАТЬ";status_color=cv::Scalar(0,210,255);}
   }
   ru(panel,status,{18,260},15,status_color,cv::QT_FONT_BOLD);
@@ -98,7 +102,7 @@ if(gV26ControlledAb4){
 
     const int targetx=x0+static_cast<int>(w*(ref/scale_sec));
     cv::line(canvas,{targetx,y0-8},{targetx,y0+h+8},cv::Scalar(255,255,255),2);
-    char gb[64]; std::snprintf(gb,sizeof(gb),"B / SPACE ~%.2f с",ref);
+    char gb[64]; std::snprintf(gb,sizeof(gb),"ТОЧКА B / ПРОБЕЛ ~%.2f с",ref);
     ru(canvas,gb,{targetx-85,y0-14},13,{235,235,235},cv::QT_FONT_BOLD);
 
     const int px=x0+static_cast<int>(w*std::min(1.0,elapsed/scale_sec));
@@ -117,7 +121,7 @@ if(gV26ControlledAb4){
     ru(canvas,pace_text,{250,615},20,pace_color,cv::QT_FONT_BOLD);
   }
   if(!warmup.passed){
-    std::snprintf(b,sizeof(b),"Warm-up %.1f / %.0f с; stable %d / %d",
+    std::snprintf(b,sizeof(b),"Прогрев %.1f / %.0f с; стабильных состояний %d / %d",
                   warmup.elapsedSec(now_ns),kPostStartupWarmupSec,
                   warmup.stableCount(),kWarmupStableStatesNeeded);
     ru(panel,b,{18,292},14,{220,220,220});

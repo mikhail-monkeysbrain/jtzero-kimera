@@ -557,3 +557,12 @@ Step 4 now tests a physically explicit planar model instead of another scalar-he
 4. obtains camera translation from the difference between the two ground-intersection vectors.
 
 This tests in one pass: small-angle projection vs exact projective geometry, distortion OFF/ON, fixed physical height vs logged height, and the maximum possible slant-range correction from body tilt. No Kimera state and no empirical 500-mm scale coefficient are used.
+
+
+### OF navigation improvement — step 4/8 result
+
+STEP 4 CLOSED on archive 20260909_141831_v43_CAMERA_AFFINE_FORENSIC.
+
+Exact planar ray/ground intersection did not remove the residual. Best branch was fixed 185.5-mm height with distortion OFF: 534.50 mm for 500 mm truth (+6.90%). Distortion ON produced 534.90 mm (+6.98%), so current radtan correction changes the endpoint by only +0.40 mm. Logged height worsened the result to 550.33–550.74 mm (+10.1%). FC body tilt was <=2.32 deg; slant-range cos(tilt) correction is only ~0.034% on average and cannot explain the residual.
+
+Conclusion: do not spend another iteration on planar projection, radtan distortion, or slant-range correction for this archive. The remaining +6.9% is not explained by those branches. Step 5 must test whether the residual is repeatable across independent clean physical passes before any production calibration coefficient or hardware change is justified.

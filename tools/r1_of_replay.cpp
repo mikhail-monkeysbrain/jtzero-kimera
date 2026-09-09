@@ -76,10 +76,10 @@ int main(int argc,char**argv){
   std::ifstream mj(dir+"/frames.mjpg",std::ios::binary);if(!mj)throw std::runtime_error("open frames.mjpg");
 
   cv::FileStorage fs(yaml,cv::FileStorage::READ);if(!fs.isOpened())throw std::runtime_error("open camera yaml");
-  std::vector<double> intr,dist;fs["intrinsics"]>>intr;fs["distortion_coefficients"]>>dist;cv::Mat T;fs["T_BS"]>>T;
-  if(intr.size()!=4||dist.size()<4||T.rows!=4||T.cols!=4)throw std::runtime_error("bad camera yaml");
+  std::vector<double> intr,dist,tbs;fs["intrinsics"]>>intr;fs["distortion_coefficients"]>>dist;fs["T_BS"]["data"]>>tbs;
+  if(intr.size()!=4||dist.size()<4||tbs.size()!=16)throw std::runtime_error("bad camera yaml");
   cv::Matx33d K(intr[0],0,intr[2],0,intr[1],intr[3],0,0,1),Rbc;
-  for(int r=0;r<3;r++)for(int c=0;c<3;c++)Rbc(r,c)=T.at<double>(r,c);
+  for(int r=0;r<3;r++)for(int col=0;col<3;col++)Rbc(r,col)=tbs[r*4+col];
   cv::Mat D(dist);
 
   std::ofstream tracks(out+"/tracks.csv"),pairs(out+"/pairs.csv");

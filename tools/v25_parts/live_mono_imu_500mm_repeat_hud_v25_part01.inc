@@ -51,6 +51,10 @@ struct V41MetricCamera {
   double net_x_m=0.0, net_y_m=0.0, path_m=0.0;
   double last_step_m=0.0;
   int good_updates=0, rejected_updates=0;
+#ifdef JTZERO_V43_CAMERA_FORENSIC
+  std::ofstream forensic;
+  int forensic_seq=0;
+#endif
   bool armed=false;
   double vertical_range_m=0.0;
   bool range_valid=false;
@@ -135,8 +139,19 @@ struct V41MetricCamera {
   void reset(){
     prev.release(); net_x_m=net_y_m=path_m=last_step_m=0.0;
     good_updates=rejected_updates=0; armed=true;
+#ifdef JTZERO_V43_CAMERA_FORENSIC
+    forensic_seq=0;
+    if(forensic.is_open()) forensic.close();
+    forensic.open("/home/vio/jtzero_v43_camera_forensic.csv",std::ios::trunc);
+    if(forensic) forensic<<"seq,n_tracks,n_inliers,c0x,c0y,c1x,c1y,aff_a,aff_b,aff_scale,aff_rot_deg,tx_px,ty_px,height_m,dx_m,dy_m,step_m,net_x_m,net_y_m\\n";
+#endif
   }
-  void stop(){ armed=false; }
+  void stop(){
+    armed=false;
+#ifdef JTZERO_V43_CAMERA_FORENSIC
+    if(forensic.is_open()){ forensic.flush(); forensic.close(); }
+#endif
+  }
   double cameraHeight() const {
     return range_valid ? std::max(0.05, vertical_range_m + camera_height_offset_m) : 0.0;
   }
@@ -169,6 +184,19 @@ struct V41MetricCamera {
     if(A.empty() || nin<20){ ++rejected_updates; prev=gray.clone(); return; }
 
     const double tx=A.at<double>(0,2), ty=A.at<double>(1,2);
+    const double aff_a=A.at<double>(0,0), aff_b=A.at<double>(1,0);
+    const double aff_scale=std::hypot(aff_a,aff_b);
+    const double aff_rot_deg=std::atan2(aff_b,aff_a)*180.0/M_PI;
+    double c0x=0,c0y=0,c1x=0,c1y=0;
+    if(nin>0){
+      for(size_t i=0;i<a.size();++i){
+        if(inliers.at<unsigned char>(static_cast<int>(i))){
+          c0x+=a[i].x+cx; c0y+=a[i].y+cy;
+          c1x+=b[i].x+cx; c1y+=b[i].y+cy;
+        }
+      }
+      c0x/=nin; c0y/=nin; c1x/=nin; c1y/=nin;
+    }
     const double h=cameraHeight();
     // Ground translation is opposite to image motion. Magnitude is independent of camera/body axis naming.
     const double dx_m=-tx*h/fx;
@@ -177,6 +205,13 @@ struct V41MetricCamera {
     // Reject impossible one-frame jumps (>30 mm at ~30 fps).
     if(!std::isfinite(step) || step>0.030){ ++rejected_updates; prev=gray.clone(); return; }
     net_x_m+=dx_m; net_y_m+=dy_m; path_m+=step; last_step_m=step; ++good_updates;
+#ifdef JTZERO_V43_CAMERA_FORENSIC
+    if(forensic){
+      forensic<<forensic_seq++<<","<<a.size()<<","<<nin<<","<<c0x<<","<<c0y<<","<<c1x<<","<<c1y<<","
+              <<aff_a<<","<<aff_b<<","<<aff_scale<<","<<aff_rot_deg<<","<<tx<<","<<ty<<","<<h<<","
+              <<dx_m<<","<<dy_m<<","<<step<<","<<net_x_m<<","<<net_y_m<<"\\n";
+    }
+#endif
     prev=gray.clone();
   }
 };

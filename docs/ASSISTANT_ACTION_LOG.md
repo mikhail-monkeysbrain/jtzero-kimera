@@ -3011,3 +3011,14 @@ Important implementation observation in V41/V42 camera-only: `estimateAffinePart
 Before another physical run, add an offline synthetic sensitivity test using the exact current estimator and camera calibration. Sweep controlled translations over a planar scene at h=180 mm, apply calibrated lens distortion and small pitch/roll homographies, and measure estimator scale bias. This directly tests whether the algorithmic affine model itself can generate ~+10% bias under plausible geometry without relying on a new measurement.
 
 **Status:** HEIGHT AND DISTORTION ALONE INSUFFICIENT; NEXT = SYNTHETIC EXACT-ESTIMATOR SENSITIVITY.
+
+
+## 2026-09-09 — V42 synthetic sensitivity v1 invalid; test bug found
+
+The first run of `analyze_v42_exact_estimator_synthetic.py` produced an impossible baseline: pure translation + calibrated distortion = 1808.25 mm for a synthetic 500 mm translation. This invalidates that run and its projective sweep; it is not evidence about V42.
+
+Root cause in the synthetic analyzer: after every synthetic frame-to-frame step it assigned `pts=q`, while also adding the full per-step optical-flow displacement again on the next iteration. This progressively drove the synthetic feature distribution through/outside the FOV, so distortion and the fitted similarity translation were accumulated under a geometry unlike the intended stationary local feature distribution. The test itself, not the physical V42 measurement, was wrong.
+
+Fixed the analyzer to keep a stationary representative feature distribution for each local step. Re-run the same command before drawing any conclusion about affine/projective sensitivity.
+
+**Status:** PREVIOUS SYNTHETIC RESULT REJECTED; ANALYZER FIXED; NEXT = RE-RUN ONLY, NO PHYSICAL MOVEMENT.

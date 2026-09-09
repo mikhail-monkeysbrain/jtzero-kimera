@@ -3073,3 +3073,22 @@ Next discriminator uses the same real logged tx/ty and recomputes metric distanc
 Added `tools/analyze_v43_height_recompute.py`.
 **Physical test:** none.
 **Status:** AFFINE ORIGIN/CENTROID PARAMETERIZATION INSUFFICIENT; NEXT = EXACT HEIGHT-TERM RECONCILIATION ON REAL V43 tx/ty.
+
+
+## 2026-09-09 — Methodological rule: maximize hypotheses per physical run
+
+Fixed project-wide diagnostic principle for subsequent JT-Zero experiments:
+
+> **Cover the maximum number of plausible hypotheses with the minimum number of physical runs.**
+
+Operational consequences:
+- Before requesting a new physical run, enumerate the currently plausible competing hypotheses.
+- Instrument the run so the same raw data can discriminate as many of those hypotheses as technically possible.
+- Prefer logging raw/intermediate observables that allow multiple offline recomputations over changing one parameter and rerunning.
+- Recompute alternative models, heights, scales, estimators, filters, coordinate interpretations, and thresholds offline from one captured dataset whenever possible.
+- Request separate A/B physical runs only when the hypotheses cannot be distinguished from the same raw capture or when an intervention itself must be tested.
+- Preserve enough raw data for later hypotheses that were not anticipated when the run was performed.
+- Do not describe elimination of one hypothesis as experimental progress if the root cause remains unidentified; report status separately as root-cause identified / narrowed / not identified.
+- Every proposed run should state which hypotheses it tests and why another physical run is actually necessary.
+
+Goal: minimize operator time, mechanical variability, and run-to-run confounding while maximizing information gained per physical experiment.

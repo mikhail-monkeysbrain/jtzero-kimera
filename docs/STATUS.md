@@ -546,3 +546,14 @@ Same-run geometry audit:
 Conclusion: stale R_BC was a real code hygiene defect but is not the source of the remaining metric bias. Current fixed-height residual is +31.33 mm (+6.27%). The exact-height diagnostic gives 174.56 mm, about 10.94 mm below the supplied 185.5-mm physical height; this must not be adopted as calibration without resolving what each height represents geometrically.
 
 Step 4/8: audit height semantics and planar projection geometry on existing data before any scale tuning or new physical pass.
+
+
+### OF navigation improvement — step 4/8 implementation
+
+Step 4 now tests a physically explicit planar model instead of another scalar-height sweep. For each logged median-flow correspondence it:
+1. undistorts both pixel endpoints using current OV9281 radtan calibration;
+2. rotates camera rays into world using current T_BS and FC attitude at both frame boundaries;
+3. intersects each ray with a horizontal ground plane using either fixed 185.5-mm camera height or logged height;
+4. obtains camera translation from the difference between the two ground-intersection vectors.
+
+This tests in one pass: small-angle projection vs exact projective geometry, distortion OFF/ON, fixed physical height vs logged height, and the maximum possible slant-range correction from body tilt. No Kimera state and no empirical 500-mm scale coefficient are used.

@@ -185,19 +185,35 @@ int main(int argc,char** argv){
     std::filesystem::create_directories(out);
     std::ofstream mjpg(out+"/frames.mjpg",std::ios::binary|std::ios::trunc);
     std::ofstream frames(out+"/frames.csv",std::ios::trunc);
-    if(!mjpg||!frames) throw std::runtime_error("cannot create recorder outputs");
+    std::ofstream events(out+"/events.csv",std::ios::trunc);
+    if(!mjpg||!frames||!events) throw std::runtime_error("cannot create recorder outputs");
     frames<<"frame_id,sequence,v4l2_sec,v4l2_usec,recv_mono_ns,offset,bytes\n";
+    events<<"event_id,recv_mono_ns,event\n";
 
     Camera c; c.open_dev(cam);
     Luna l; l.start(luna,out+"/range.csv");
     FcMavlink f; f.start(fc,out);
-    std::cout<<"R1 STANDALONE RECORDER\nCAM="<<cam<<"\nLUNA="<<luna<<"\nFC="<<fc<<"\nOUT="<<out<<"\nCtrl-C to stop\n";
+    std::cout<<"R1 STANDALONE RECORDER\nCAM="<<cam<<"\nLUNA="<<luna<<"\nFC="<<fc<<"\nOUT="<<out
+             <<"\nENTER #1 = MOVE_START, ENTER #2 = MOVE_END, Ctrl-C = stop\n";
 
-    uint64_t id=0,off=0;
+    uint64_t id=0,off=0,event_id=0;
+    int move_marks=0;
     while(running){
-      pollfd p{c.fd,POLLIN,0}; int pr=::poll(&p,1,100);
-      if(pr<0){if(errno==EINTR) continue; fail("poll camera");}
-      if(pr==0) continue;
+      pollfd pfds[2]={{c.fd,POLLIN,0},{STDIN_FILENO,POLLIN,0}};
+      int pr=::poll(pfds,2,100);
+      if(pr<0){if(errno==EINTR) continue; fail("poll recorder");}
+      if(pfds[1].revents&POLLIN){
+        char ibuf[64]; ssize_t n=::read(STDIN_FILENO,ibuf,sizeof(ibuf));
+        if(n>0){
+          for(ssize_t k=0;k<n;k++) if(ibuf[k]=='\n'){
+            const uint64_t t=mono_ns();
+            if(move_marks==0){ events<<++event_id<<','<<t<<",MOVE_START\n"; events.flush(); move_marks=1; std::cout<<"[R1 EVENT] MOVE_START "<<t<<"\n"; }
+            else if(move_marks==1){ events<<++event_id<<','<<t<<",MOVE_END\n"; events.flush(); move_marks=2; std::cout<<"[R1 EVENT] MOVE_END "<<t<<"\n"; }
+            else { std::cout<<"[R1 EVENT] extra ENTER ignored\n"; }
+          }
+        }
+      }
+      if(!(pfds[0].revents&POLLIN)) continue;
       for(;;){
         v4l2_buffer b{}; b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE; b.memory=V4L2_MEMORY_MMAP;
         if(xioctl(c.fd,VIDIOC_DQBUF,&b)<0){
@@ -212,9 +228,9 @@ int main(int argc,char** argv){
         if(xioctl(c.fd,VIDIOC_QBUF,&b)<0) fail("VIDIOC_QBUF");
       }
     }
-    f.stop(); l.stop(); c.close(); mjpg.close(); frames.close();
+    f.stop(); l.stop(); c.close(); mjpg.close(); frames.close(); events.close();
     std::cout<<"R1 RECORDER PASS frames="<<id<<" mjpeg_bytes="<<off<<" luna_samples="<<l.samples.load()
-             <<" imu_samples="<<f.imu_samples.load()<<" attitude_samples="<<f.att_samples.load()<<"\n";
+             <<" imu_samples="<<f.imu_samples.load()<<" attitude_samples="<<f.att_samples.load()<<" move_marks="<<move_marks<<"\n";
     return (id>0 && off>0 && l.samples.load()>0 && f.imu_samples.load()>0 && f.att_samples.load()>0)?0:5;
   }catch(const std::exception& e){
     running=false;

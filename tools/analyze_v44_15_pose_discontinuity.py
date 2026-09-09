@@ -48,7 +48,7 @@ def rows(run):
         raw.append(dict(n=n,p=n/max(1,len(b)-1),kf=I(r,"keyframe"),t=I(r,"timestamp_ns"),x=x,y=y,
           status=fr.get("mono_status",""),valid=I(fr,"mono_pose_valid"),inlier=F(fr,"mono_inlier_ratio"),tracked=F(fr,"tracked_features"),
           tx=tx,ty=ty,tz=tz,tilt=tilt,norm=norm,dt=dt))
-    anchor=raw[min(len(raw)-1,max(1,round(.8*(len(raw)-1)))]
+    anchor=raw[min(len(raw)-1,max(1,round(.8*(len(raw)-1))))]
     nn=math.hypot(anchor["x"],anchor["y"]);ux,uy=(anchor["x"]/nn,anchor["y"]/nn) if nn else (1,0)
     for n,r in enumerate(raw):
         r["along"]=r["x"]*ux+r["y"]*uy

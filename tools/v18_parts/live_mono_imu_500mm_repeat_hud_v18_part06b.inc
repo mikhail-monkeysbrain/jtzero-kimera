@@ -86,6 +86,7 @@ if(gV26ControlledAb4){
   if(!action.empty()) ru(panel,action,{18,335},14,{245,245,245},cv::QT_FONT_BOLD);
   if(!next_action.empty()) ru(panel,next_action,{18,395},12,{190,220,255},cv::QT_FONT_BOLD);
 
+#ifndef JTZERO_CLEAN01
   if(gV26ControlledAb4 && phase==CapturePhase::MOVING && gV26MoveStartWallNs>0){
     const double elapsed=std::max(0.0,(now_ns-gV26MoveStartWallNs)*1e-9);
     const double ref=gV26TargetMoveSec;
@@ -130,6 +131,7 @@ if(gV26ControlledAb4){
     else { pace_text="ПОЗДНО — ЗАВЕРШИТЕ ПРОХОД"; pace_color=cv::Scalar(40,40,245); }
     ru(canvas,pace_text,{250,615},20,pace_color,cv::QT_FONT_BOLD);
   }
+#endif
   if(!warmup.passed){
     std::snprintf(b,sizeof(b),"Прогрев %.1f / %.0f с; стабильных состояний %d / %d",
                   warmup.elapsedSec(now_ns),kPostStartupWarmupSec,

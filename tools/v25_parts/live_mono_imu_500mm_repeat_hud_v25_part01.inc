@@ -149,7 +149,11 @@ struct V41MetricCamera {
   void stop(){
     armed=false;
 #ifdef JTZERO_V43_CAMERA_FORENSIC
-    if(forensic.is_open()){ forensic.flush(); forensic.close(); }
+    // Do not close here: the leg-end path prints camera metrics before the
+    // process-level archive step, and late callbacks/teardown may otherwise
+    // leave only the header in the forensic file. Flush every accepted row
+    // below and close at object teardown/process exit.
+    if(forensic.is_open()) forensic.flush();
 #endif
   }
   double cameraHeight() const {
@@ -210,6 +214,7 @@ struct V41MetricCamera {
       forensic<<forensic_seq++<<","<<a.size()<<","<<nin<<","<<c0x<<","<<c0y<<","<<c1x<<","<<c1y<<","
               <<aff_a<<","<<aff_b<<","<<aff_scale<<","<<aff_rot_deg<<","<<tx<<","<<ty<<","<<h<<","
               <<dx_m<<","<<dy_m<<","<<step<<","<<net_x_m<<","<<net_y_m<<"\\n";
+      forensic.flush();
     }
 #endif
     prev=gray.clone();

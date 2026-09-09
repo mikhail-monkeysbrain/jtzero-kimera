@@ -1,4 +1,8 @@
+#ifdef JTZERO_V42_DIRECT_LUNA
+    gV41Cam.startDirectRange("/dev/ttyAMA2");
+#else
     requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,20.0);
+#endif
 
     camera_fd=open(camera_device.c_str(),O_RDWR|O_NONBLOCK);if(camera_fd==-1)fail("open camera");configureCamera(camera_fd);buffers=initCameraBuffers(camera_fd);
     v4l2_buf_type type=V4L2_BUF_TYPE_VIDEO_CAPTURE;if(xioctl(camera_fd,VIDIOC_STREAMON,&type)==-1)fail("STREAMON");streaming=true;discardWarmup(camera_fd);

@@ -25,7 +25,7 @@
       }
 
       if(now>=next_hud){if(monotonicNs()>notice_until)notice.clear();drawHudV8(gray,*pipeline,fc,leg,phase,stable,rows,notice,warmup_gate,now);next_hud=now+kHudPeriodNs;}
-      static std::ofstream v25_events("/home/vio/jtzero_500mm_v25_events.csv",std::ios::trunc);
+      static std::ofstream v25_events(kEventsPath,std::ios::trunc);
       static bool v25_events_header=false;
       if(v25_events && !v25_events_header){
         v25_events<<"event_wall_ns,event,leg,phase,keyframe,state_timestamp_ns,state_callback_wall_ns,state_age_at_event_ms,px_m,py_m,pz_m,vx_m_s,vy_m_s,vz_m_s\n";
@@ -131,7 +131,7 @@
     std::this_thread::sleep_for(std::chrono::milliseconds(500));pipeline->shutdown();if(pipeline_thread.joinable())pipeline_thread.join();pipeline_started=false;cv::destroyAllWindows();const auto states=pipeline->states();
     const auto frontend_states=pipeline->frontendStates();
     {
-      std::ofstream ff("/home/vio/jtzero_500mm_v25_frontend.csv",std::ios::trunc);
+      std::ofstream ff(kFrontendPath,std::ios::trunc);
       if(ff){
         ff<<"timestamp_ns,callback_wall_ns,frame_id,is_keyframe,detected_features,tracked_features,mono_inliers,mono_putatives,mono_inlier_ratio,mono_ransac_iters,feature_detection_time_s,feature_tracking_time_s,mono_ransac_time_s,mono_status,mono_pose_valid,mono_tx,mono_ty,mono_tz,mono_t_norm,mono_body_tx,mono_body_ty,mono_body_tz,mono_body_t_norm,mono_roll_deg,mono_pitch_deg,mono_yaw_deg,pim_valid,pim_dt_s,pim_dpx,pim_dpy,pim_dpz,pim_dvx,pim_dvy,pim_dvz,pim_droll_deg,pim_dpitch_deg,pim_dyaw_deg\n";
         ff<<std::fixed<<std::setprecision(9);
@@ -175,7 +175,7 @@
       }
     }
     saveCsvV8(rows);
-    saveBackendTraceV8(states,rows,"/home/vio/jtzero_500mm_v25_backend.csv");
+    saveBackendTraceV8(states,rows,kBackendPath);
     if(imu_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_HIGHRES_IMU,0);imu_req=false;}if(att_req){requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,0);att_req=false;}requestRate(serial_fd,sys,comp,MAVLINK_MSG_ID_DISTANCE_SENSOR,0);if(streaming){v4l2_buf_type t=V4L2_BUF_TYPE_VIDEO_CAPTURE;xioctl(camera_fd,VIDIOC_STREAMOFF,&t);streaming=false;}for(auto&bf:buffers)if(bf.start&&bf.start!=MAP_FAILED)munmap(bf.start,bf.length);if(camera_fd!=-1)close(camera_fd);if(serial_fd!=-1)close(serial_fd);
     if(gV26ControlledAb4){
       std::cout<<"V26 MODE: CONTROLLED_AB4 — "<<kLegCount<<" measured A->B pass"
@@ -191,9 +191,9 @@
              <<"RAW ATTITUDE CSV: "<<kV11AttitudePath<<" rows="<<raw_attitude_rows<<"\n"
              <<"TF-LUNA RANGE CSV: "<<kV12RangePath<<" rows="<<raw_range_rows<<"\n"
              <<"LEGS CSV: "<<kV8CsvPath<<"\n"
-             <<"BACKEND CSV: /home/vio/jtzero_500mm_v25_backend.csv\n"
-             <<"FRONTEND CSV: /home/vio/jtzero_500mm_v25_frontend.csv rows="<<frontend_states.size()<<"\n"
-             <<"EVENTS CSV: /home/vio/jtzero_500mm_v25_events.csv\n"
+             <<"BACKEND CSV: "<<kBackendPath<<"\n"
+             <<"FRONTEND CSV: "<<kFrontendPath<<" rows="<<frontend_states.size()<<"\n"
+             <<"EVENTS CSV: "<<kEventsPath<<"\n"
              <<"RAW MJPEG: DISABLED in V25 diagnostic\n"
              <<"LOOP STALLS >100ms: "<<loop_stall_count<<" max="<<std::fixed<<std::setprecision(3)
              <<max_loop_stall_ns/1e6<<" ms\n";

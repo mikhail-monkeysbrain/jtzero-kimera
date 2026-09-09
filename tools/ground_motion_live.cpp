@@ -83,7 +83,23 @@ struct FcReader{
   void stop(){if(th.joinable())th.join();if(fd>=0){::close(fd);fd=-1;}}
 };
 
-cv::Matx33d RzRyRx(double r,double p,double y){double cr=cos(r),sr=sin(r),cp=cos(p),sp=sin(p),cy=cos(y),sy=sin(y);return {cy*cp,cy*sp*sr-sy*cr,cy*sp*cr+sy*sr,sy*cp,sy*sp*sr+cy*cr,sy*sp*cr-sy*sr,-sp,cp*sr,cp*cr};}
+cv::Matx33d RzRyRx(double r,double p,double y){double cr=cos(r),sr=sin(r),cp=cos(p),sp=sin(p),cy=cos(y),sy=sin(y);return {cy*cp,cy*sp*sr-sy*cr,cy*sp*cr+sy*sr,sy*cp,sy*sp*sr+cy*cr,sy*sp*cr-cy*sr,-sp,cp*sr,cp*cr};}
+struct CameraCalib{
+  double fx=0,fy=0,cx=0,cy=0;
+  cv::Matx33d B_R_C=cv::Matx33d::eye();
+};
+CameraCalib loadCameraCalib(const std::string& path){
+  cv::FileStorage fs(path,cv::FileStorage::READ);
+  if(!fs.isOpened())throw std::runtime_error("не удалось открыть camera yaml");
+  std::vector<double> intr;fs["intrinsics"]>>intr;
+  if(intr.size()<4)throw std::runtime_error("camera yaml: intrinsics");
+  cv::Mat T;fs["T_BS"]>>T;
+  if(T.rows!=4||T.cols!=4)throw std::runtime_error("camera yaml: T_BS");
+  T.convertTo(T,CV_64F);
+  CameraCalib k;k.fx=intr[0];k.fy=intr[1];k.cx=intr[2];k.cy=intr[3];
+  for(int r=0;r<3;r++)for(int col=0;col<3;col++)k.B_R_C(r,col)=T.at<double>(r,col);
+  return k;
+}
 struct Estimate{double x=0,y=0,vx=0,vy=0,path=0,height=0;int inliers=0;uint64_t frames=0;};
 }
 
@@ -93,7 +109,7 @@ int main(int argc,char**argv){
   try{
     Camera cam;cam.openDev(camdev);LunaReader luna;luna.start(lunadev);FcReader fc;fc.start(fcdev);std::ofstream csv(csvpath,std::ios::trunc);csv<<"mono_ns,frame,height_m,x_m,y_m,vx_mps,vy_mps,path_m,inliers,roll,pitch,yaw\n";
     cv::setNumThreads(1);cv::namedWindow(kWindow,cv::WINDOW_NORMAL);cv::setWindowProperty(kWindow,cv::WND_PROP_FULLSCREEN,cv::WINDOW_FULLSCREEN);
-    cv::Mat prev;Attitude prev_att{};int64_t prev_ns=0;Estimate est;bool reset_pending=true;uint64_t frame_id=0;
+    cv::Mat prev;Attitude prev_att{};int64_t prev_ns=0;Estimate est;bool reset_pending=true;bool armed=false;uint64_t frame_id=0;
     while(g_running){
       pollfd p{cam.fd,POLLIN,0};int pr=poll(&p,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0)continue;
       for(;;){
@@ -101,7 +117,7 @@ int main(int argc,char**argv){
         const int64_t now=monoNs();cv::Mat raw(1,(int)b.bytesused,CV_8UC1,cam.bufs[b.index].p);cv::Mat gray=cv::imdecode(raw,cv::IMREAD_GRAYSCALE);if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");if(gray.empty())continue;frame_id++;
         double luna_m=0;int strength=0;int64_t luna_ns=0;Attitude att{};bool have_luna=luna.latest(&luna_m,&strength,&luna_ns),have_att=fc.latest(&att);double h=have_luna?luna_m-offset_m:0;bool sensors_ok=have_luna&&have_att&&h>0.05&&(now-luna_ns)<200000000LL&&(now-att.recv_ns)<200000000LL;
         if(reset_pending){prev.release();est={};reset_pending=false;}
-        if(sensors_ok&&!prev.empty()&&prev_att.valid){
+        if(armed&&sensors_ok&&!prev.empty()&&prev_att.valid){
           std::vector<cv::Point2f>p0,p1;cv::goodFeaturesToTrack(prev,p0,700,0.01,7);
           if(p0.size()>=30){
             std::vector<uchar>st;std::vector<float>er;cv::calcOpticalFlowPyrLK(prev,gray,p0,p1,st,er,{21,21},3);
@@ -109,9 +125,13 @@ int main(int argc,char**argv){
             if(a.size()>=20){
               cv::Mat mask;cv::Mat H=cv::findHomography(a,bp,cv::RANSAC,2.0,mask);int nin=mask.empty()?0:cv::countNonZero(mask);
               if(!H.empty()&&nin>=15){
-                cv::Matx33d K(fx,0,320,0,fy,240,0,0,1),Ki=K.inv(),R0=RzRyRx(prev_att.roll,prev_att.pitch,prev_att.yaw),R1=RzRyRx(att.roll,att.pitch,att.yaw),Hr=K*(R1.t()*R0)*Ki;
+                cv::Matx33d K(calib.fx,0,calib.cx,0,calib.fy,calib.cy,0,0,1),Ki=K.inv();
+                cv::Matx33d W_R_C0=RzRyRx(prev_att.roll,prev_att.pitch,prev_att.yaw)*calib.B_R_C;
+                cv::Matx33d W_R_C1=RzRyRx(att.roll,att.pitch,att.yaw)*calib.B_R_C;
+                cv::Matx33d Hr=K*(W_R_C1.t()*W_R_C0)*Ki;
                 cv::Mat Hrd(3,3,CV_64F);for(int r=0;r<3;r++)for(int c=0;c<3;c++)Hrd.at<double>(r,c)=Hr(r,c);cv::Mat Hd=Hrd.inv()*H;Hd/=Hd.at<double>(2,2);
-                cv::Matx31d c0(320,240,1),q;for(int r=0;r<3;r++)q(r)=Hd.at<double>(r,0)*c0(0)+Hd.at<double>(r,1)*c0(1)+Hd.at<double>(r,2);double dx=q(0)/q(2)-320,dy=q(1)/q(2)-240,mx=-dx*h/fx,my=-dy*h/fy,dt=prev_ns?((now-prev_ns)*1e-9):0;
+                cv::Matx31d c0(calib.cx,calib.cy,1),q;for(int r=0;r<3;r++)q(r)=Hd.at<double>(r,0)*c0(0)+Hd.at<double>(r,1)*c0(1)+Hd.at<double>(r,2);
+                double dx=q(0)/q(2)-calib.cx,dy=q(1)/q(2)-calib.cy,mx=-dx*h/calib.fx,my=-dy*h/calib.fy,dt=prev_ns?((now-prev_ns)*1e-9):0;
                 if(dt>0&&dt<0.2){est.x+=mx;est.y+=my;est.path+=std::hypot(mx,my);est.vx=mx/dt;est.vy=my/dt;est.height=h;est.inliers=nin;est.frames++;}
               }
             }
@@ -119,8 +139,10 @@ int main(int argc,char**argv){
         }
         prev=gray.clone();prev_att=att;prev_ns=now;
         cv::Mat bgr,video;cv::cvtColor(gray,bgr,cv::COLOR_GRAY2BGR);cv::resize(bgr,video,{900,675});cv::Mat canvas(720,1280,CV_8UC3,cv::Scalar(12,12,12));video.copyTo(canvas(cv::Rect(0,45,900,675)));ru(canvas,"JT-ZERO — GROUND MOTION LIVE",{22,31},20,{245,245,245},cv::QT_FONT_BOLD);cv::Mat panel=canvas(cv::Rect(900,0,380,720));
-        ru(panel,sensors_ok?"СИСТЕМА ГОТОВА":"ЖДИТЕ ДАТЧИКИ",{18,48},16,sensors_ok?cv::Scalar(90,220,90):cv::Scalar(0,210,255),cv::QT_FONT_BOLD);ru(panel,"СЕЙЧАС: НЕ ДВИГАТЬ",{18,105},14,{255,255,255},cv::QT_FONT_BOLD);ru(panel,"ДАЛЬШЕ: ПРОБЕЛ — ОБНУЛИТЬ",{18,145},12,{235,235,235},cv::QT_FONT_BOLD);
-        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Inliers: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Roll/Pitch: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);int k=cv::waitKey(1);if(k==' ')reset_pending=true;if(k=='q'||k=='Q'||k==27)g_running=false;
+        ru(panel,sensors_ok?"СИСТЕМА ГОТОВА":"ЖДИТЕ ДАТЧИКИ",{18,48},16,sensors_ok?cv::Scalar(90,220,90):cv::Scalar(0,210,255),cv::QT_FONT_BOLD);
+        ru(panel,armed?"СЕЙЧАС: ДВИГАЙТЕ СТЕНД":"СЕЙЧАС: НЕ ДВИГАТЬ",{18,105},14,{255,255,255},cv::QT_FONT_BOLD);
+        ru(panel,armed?"ДАЛЬШЕ: Q / ESC — ЗАВЕРШИТЬ":"ДАЛЬШЕ: ПРОБЕЛ — ОБНУЛИТЬ",{18,145},12,{235,235,235},cv::QT_FONT_BOLD);
+        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Inliers: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Roll/Pitch: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);int k=cv::waitKey(1);if(k==' '&&sensors_ok){reset_pending=true;armed=true;}if(k=='q'||k=='Q'||k==27)g_running=false;
         if(csv&&sensors_ok)csv<<now<<','<<frame_id<<','<<std::fixed<<std::setprecision(6)<<h<<','<<est.x<<','<<est.y<<','<<est.vx<<','<<est.vy<<','<<est.path<<','<<est.inliers<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<'\n';
       }
     }

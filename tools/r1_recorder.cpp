@@ -23,6 +23,8 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "common/mavlink.h"
+
 namespace {
 std::atomic<bool> running{true};
 uint64_t mono_ns() {
@@ -71,6 +73,69 @@ struct Camera {
   }
 };
 
+struct FcMavlink {
+  int fd=-1; std::thread th; std::ofstream imu_csv, att_csv;
+  std::atomic<uint64_t> imu_samples{0}, att_samples{0};
+  ~FcMavlink(){ stop(); }
+  static void write_all(int fd,const uint8_t* p,size_t n){
+    for(size_t o=0;o<n;){ ssize_t k=::write(fd,p+o,n-o);
+      if(k>0){o+=static_cast<size_t>(k);continue;}
+      if(k<0&&(errno==EAGAIN||errno==EWOULDBLOCK)){pollfd q{fd,POLLOUT,0};::poll(&q,1,10);continue;}
+      if(k<0&&errno==EINTR)continue; fail("FC serial write");
+    }
+  }
+  static void send_msg(int fd,const mavlink_message_t& m){
+    uint8_t b[MAVLINK_MAX_PACKET_LEN]; const uint16_t n=mavlink_msg_to_send_buffer(b,&m); write_all(fd,b,n);
+  }
+  static void request_rate(int fd,uint8_t sys,uint8_t comp,uint32_t msgid,int hz){
+    mavlink_message_t m{};
+    mavlink_msg_command_long_pack(255,190,&m,sys,comp,MAV_CMD_SET_MESSAGE_INTERVAL,0,
+      static_cast<float>(msgid),1000000.0f/static_cast<float>(hz),0,0,0,0,0);
+    send_msg(fd,m);
+  }
+  void start(const std::string& dev,const std::string& out){
+    fd=::open(dev.c_str(),O_RDWR|O_NOCTTY|O_NONBLOCK); if(fd<0) fail("open FC MAVLink");
+    termios t{}; if(tcgetattr(fd,&t)<0) fail("FC tcgetattr"); cfmakeraw(&t);
+    if(cfsetispeed(&t,B460800)||cfsetospeed(&t,B460800)) fail("FC baud");
+    t.c_cflag|=CLOCAL|CREAD; t.c_cflag&=~CRTSCTS; t.c_cflag&=~PARENB; t.c_cflag&=~CSTOPB;
+    t.c_cflag&=~CSIZE; t.c_cflag|=CS8; t.c_cc[VMIN]=0; t.c_cc[VTIME]=0;
+    if(tcsetattr(fd,TCSANOW,&t)<0) fail("FC tcsetattr"); tcflush(fd,TCIFLUSH);
+    imu_csv.open(out+"/imu.csv",std::ios::trunc); att_csv.open(out+"/attitude.csv",std::ios::trunc);
+    if(!imu_csv||!att_csv) throw std::runtime_error("open FC csv");
+    imu_csv<<"sample_id,recv_mono_ns,time_usec,xacc,yacc,zacc,xgyro,ygyro,zgyro,xmag,ymag,zmag,abs_pressure,diff_pressure,pressure_alt,temperature,fields_updated\n";
+    att_csv<<"sample_id,recv_mono_ns,time_boot_ms,roll,pitch,yaw,rollspeed,pitchspeed,yawspeed\n";
+    th=std::thread([this]{
+      mavlink_status_t st{}; mavlink_message_t m{}; uint8_t target_sys=0,target_comp=0; uint8_t buf[8192];
+      const uint64_t deadline=mono_ns()+10000000000ULL;
+      while(running && !target_sys && mono_ns()<deadline){
+        pollfd p{fd,POLLIN,0}; if(::poll(&p,1,100)<=0) continue; ssize_t n=::read(fd,buf,sizeof(buf)); if(n<=0) continue;
+        for(ssize_t i=0;i<n;i++) if(mavlink_parse_char(MAVLINK_COMM_0,buf[i],&m,&st) && m.msgid==MAVLINK_MSG_ID_HEARTBEAT){
+          target_sys=m.sysid; target_comp=m.compid; break;
+        }
+      }
+      if(!target_sys){ std::cerr<<"R1 FC FAIL: HEARTBEAT timeout\n"; running=false; return; }
+      request_rate(fd,target_sys,target_comp,MAVLINK_MSG_ID_HIGHRES_IMU,200);
+      request_rate(fd,target_sys,target_comp,MAVLINK_MSG_ID_ATTITUDE,50);
+      while(running){
+        pollfd p{fd,POLLIN,0}; int pr=::poll(&p,1,50); if(pr<=0) continue;
+        for(;;){ ssize_t n=::read(fd,buf,sizeof(buf)); if(n<0&&(errno==EAGAIN||errno==EWOULDBLOCK)) break; if(n<=0) break;
+          for(ssize_t i=0;i<n;i++) if(mavlink_parse_char(MAVLINK_COMM_0,buf[i],&m,&st)){
+            const uint64_t recv=mono_ns();
+            if(m.msgid==MAVLINK_MSG_ID_HIGHRES_IMU){
+              mavlink_highres_imu_t x{}; mavlink_msg_highres_imu_decode(&m,&x); auto id=++imu_samples;
+              imu_csv<<id<<','<<recv<<','<<x.time_usec<<','<<x.xacc<<','<<x.yacc<<','<<x.zacc<<','<<x.xgyro<<','<<x.ygyro<<','<<x.zgyro<<','<<x.xmag<<','<<x.ymag<<','<<x.zmag<<','<<x.abs_pressure<<','<<x.diff_pressure<<','<<x.pressure_alt<<','<<x.temperature<<','<<x.fields_updated<<'\n';
+            } else if(m.msgid==MAVLINK_MSG_ID_ATTITUDE){
+              mavlink_attitude_t x{}; mavlink_msg_attitude_decode(&m,&x); auto id=++att_samples;
+              att_csv<<id<<','<<recv<<','<<x.time_boot_ms<<','<<x.roll<<','<<x.pitch<<','<<x.yaw<<','<<x.rollspeed<<','<<x.pitchspeed<<','<<x.yawspeed<<'\n';
+            }
+          }
+        }
+      }
+    });
+  }
+  void stop(){ if(th.joinable()) th.join(); if(fd>=0){::close(fd);fd=-1;} if(imu_csv.is_open())imu_csv.close(); if(att_csv.is_open())att_csv.close(); }
+};
+
 struct Luna {
   int fd=-1; std::thread th; std::ofstream csv; std::atomic<uint64_t> samples{0};
   ~Luna(){ stop(); }
@@ -114,6 +179,7 @@ int main(int argc,char** argv){
   const std::string cam=argc>1?argv[1]:"/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9281_USB_Camera_UC762-video-index0";
   const std::string luna=argc>2?argv[2]:"/dev/ttyAMA2";
   const std::string out=argc>3?argv[3]:"/home/vio/r1_dataset";
+  const std::string fc=argc>4?argv[4]:"/dev/ttyAMA0";
   std::signal(SIGINT,sig_handler); std::signal(SIGTERM,sig_handler);
   try{
     std::filesystem::create_directories(out);
@@ -124,7 +190,8 @@ int main(int argc,char** argv){
 
     Camera c; c.open_dev(cam);
     Luna l; l.start(luna,out+"/range.csv");
-    std::cout<<"R1 STANDALONE RECORDER\nCAM="<<cam<<"\nLUNA="<<luna<<"\nOUT="<<out<<"\nCtrl-C to stop\n";
+    FcMavlink f; f.start(fc,out);
+    std::cout<<"R1 STANDALONE RECORDER\nCAM="<<cam<<"\nLUNA="<<luna<<"\nFC="<<fc<<"\nOUT="<<out<<"\nCtrl-C to stop\n";
 
     uint64_t id=0,off=0;
     while(running){
@@ -145,9 +212,10 @@ int main(int argc,char** argv){
         if(xioctl(c.fd,VIDIOC_QBUF,&b)<0) fail("VIDIOC_QBUF");
       }
     }
-    l.stop(); c.close(); mjpg.close(); frames.close();
-    std::cout<<"R1 RECORDER PASS frames="<<id<<" mjpeg_bytes="<<off<<" luna_samples="<<l.samples.load()<<"\n";
-    return (id>0 && off>0 && l.samples.load()>0)?0:5;
+    f.stop(); l.stop(); c.close(); mjpg.close(); frames.close();
+    std::cout<<"R1 RECORDER PASS frames="<<id<<" mjpeg_bytes="<<off<<" luna_samples="<<l.samples.load()
+             <<" imu_samples="<<f.imu_samples.load()<<" attitude_samples="<<f.att_samples.load()<<"\n";
+    return (id>0 && off>0 && l.samples.load()>0 && f.imu_samples.load()>0 && f.att_samples.load()>0)?0:5;
   }catch(const std::exception& e){
     running=false;
     std::cerr<<"R1 RECORDER FAIL: "<<e.what()<<"\n";

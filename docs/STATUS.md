@@ -380,3 +380,10 @@ V44.17b replaces the fragile unified-diff step with guarded exact source-block r
 - installs the same default-OFF gate logic;
 - prints source markers;
 - rebuilds Kimera with `cmake --build /home/vio/Kimera-VIO/build -j2`.
+
+
+### V44.17b source-anchor mismatch
+
+The guarded installer correctly refused to modify Kimera because the local /home/vio/Kimera-VIO/src/pipeline/MonoImuPipeline.cpp layout does not match the upstream source text used to generate the installer anchors. No source change was applied.
+
+Added V44.17c source-layout snapshot helper to print the exact include block and registerOutputCallback context from the local Kimera checkout. Next step is to derive the patch from the user's actual local source layout, not from upstream assumptions.

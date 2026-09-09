@@ -2996,3 +2996,18 @@ Added `tools/analyze_v42_distortion_scale_bound.py`. It reads the actual LeftCam
 
 **Physical test:** none.
 **Status:** ROTATION-CORRELATED CONTAMINATION NOT SUPPORTED; NEXT = DISTORTION SCALE ORDER-OF-MAGNITUDE SCREEN.
+
+
+## 2026-09-09 — V42 lens distortion bound insufficient; inspect affine scale leakage
+
+V42 lens-distortion scale bound using the actual OV9281 calibration:
+- residual CAMERA-ONLY scale after direct h=180 mm: +10.26%;
+- distortion local scale p95: +5.70%;
+- maximum sampled local distortion scale: +9.74%;
+- verdict: distortion alone is too small, and typical field locations are substantially below the required residual.
+
+Important implementation observation in V41/V42 camera-only: `estimateAffinePartial2D` fits similarity transform `[sR|t]`, but metric conversion uses only `tx,ty`. With coordinates centered at a fixed principal point, fitted scale/rotation can alter the translation term when the actual image warp is projective/nonuniform. Existing V42 archive did not log affine matrix scale/rotation or feature centroids, so this cannot be reconstructed exactly offline.
+
+Before another physical run, add an offline synthetic sensitivity test using the exact current estimator and camera calibration. Sweep controlled translations over a planar scene at h=180 mm, apply calibrated lens distortion and small pitch/roll homographies, and measure estimator scale bias. This directly tests whether the algorithmic affine model itself can generate ~+10% bias under plausible geometry without relying on a new measurement.
+
+**Status:** HEIGHT AND DISTORTION ALONE INSUFFICIENT; NEXT = SYNTHETIC EXACT-ESTIMATOR SENSITIVITY.

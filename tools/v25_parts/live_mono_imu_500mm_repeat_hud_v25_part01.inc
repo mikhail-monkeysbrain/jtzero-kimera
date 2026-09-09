@@ -58,6 +58,15 @@ constexpr double kV25MaxStartBackendAgeMs = 300.0;
 constexpr int64_t kV25FatalLoopStallNs = 500000000LL;
 bool gV25BFirst = false;
 
+#ifdef JTZERO_CLEAN01
+struct Clean01Frame {
+  uint32_t sequence=0;
+  int64_t timestamp_ns=0;
+  std::vector<unsigned char> jpeg;
+};
+std::vector<Clean01Frame> gClean01Frames;
+#endif
+
 #ifdef JTZERO_V41_METRIC_CAMERA
 #ifdef JTZERO_V42_DIRECT_LUNA
 #include <atomic>

@@ -128,12 +128,25 @@ def main():
     # Because fx_eff = pixel_side * h / marker_side, marker_side scales inversely with focal multiplier.
     req_marker_stored=a.marker_mm*kval
     req_marker_motion=a.marker_mm*kval/1.068
+    # The argument is now a real physical measurement, so report the directly inferred focal.
+    # Keep this separate from the two inverse "required marker size" predictions.
+    measured_fx=mx
+    measured_fy=my
+    residual_vs_stored=(kval-1.0)*100.0
+    residual_vs_motion=(kval/1.068-1.0)*100.0
     print()
     print("PHYSICAL MARKER-SIDE DISCRIMINATOR")
     print("-"*116)
     print(f"outer black-square side required if stored focal is correct (k=1.000): {req_marker_stored:.3f} mm")
     print(f"outer black-square side required if motion residual focal hypothesis is correct (k=1.068): {req_marker_motion:.3f} mm")
-    print("Measure ONE marker outer black-square side with calipers and compare directly. This is the next discriminator.")
+    print()
+    print("DIRECT RESULT FOR SUPPLIED PHYSICAL MARKER SIZE")
+    print("-"*116)
+    print(f"inferred effective fx/fy={measured_fx:.2f}/{measured_fy:.2f}px, mean k={kval:.5f}")
+    print(f"vs stored focal k=1.000: {residual_vs_stored:+.2f}%")
+    print(f"vs motion hypothesis k=1.068: {residual_vs_motion:+.2f}%")
+    if kval < 0.95 or kval > 1.15:
+        print("WARNING: large disagreement; before changing calibration, test full planar pose/tilt and verify camera-target distance definition.")
     print()
     print("CAUTION: marker side must be the actual OUTER black-square side. This direct local-scale estimate")
     print("also assumes the target plane is approximately parallel to the sensor plane. It is a discriminator,")

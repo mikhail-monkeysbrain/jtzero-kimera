@@ -42,6 +42,6 @@
         }
         if(ok&&due&&mapping.valid&&vio_feed_enabled){std::vector<unsigned char>jpg(b.bytesused);std::memcpy(jpg.data(),buffers[b.index].start,b.bytesused);cv::Mat g=cv::imdecode(jpg,cv::IMREAD_GRAYSCALE);if(!g.empty()){++decoded;gray=g;
 #ifdef JTZERO_V41_METRIC_CAMERA
-          gV41Cam.update(g);
+          gV41Cam.update(g,b.sequence,corrected);
 #endif
           pipeline->fillLeftFrameQueue(std::make_unique<VIO::Frame>(fid++,corrected,vp.camera_params_.at(0),g.clone()));last_sel=corrected;++selected;}}if(xioctl(camera_fd,VIDIOC_QBUF,&b)==-1)fail("QBUF");}}

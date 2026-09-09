@@ -30,7 +30,7 @@
 namespace {
 constexpr int kWidth=640, kHeight=480, kCameraFps=120;
 constexpr int kExposureAbsolute=50, kGain=0;
-constexpr const char* kWindow="JT-ZERO — GROUND MOTION LIVE";
+constexpr const char* kWindow="JT-ZERO — ОЦЕНКА ДВИЖЕНИЯ ПО ЗЕМЛЕ";
 constexpr double kPi=3.14159265358979323846;
 std::atomic<bool> g_running{true};
 
@@ -138,11 +138,11 @@ int main(int argc,char**argv){
           }
         }
         prev=gray.clone();prev_att=att;prev_ns=now;
-        cv::Mat bgr,video;cv::cvtColor(gray,bgr,cv::COLOR_GRAY2BGR);cv::resize(bgr,video,{900,675});cv::Mat canvas(720,1280,CV_8UC3,cv::Scalar(12,12,12));video.copyTo(canvas(cv::Rect(0,45,900,675)));ru(canvas,"JT-ZERO — GROUND MOTION LIVE",{22,31},20,{245,245,245},cv::QT_FONT_BOLD);cv::Mat panel=canvas(cv::Rect(900,0,380,720));
+        cv::Mat bgr,video;cv::cvtColor(gray,bgr,cv::COLOR_GRAY2BGR);cv::resize(bgr,video,{900,675});cv::Mat canvas(720,1280,CV_8UC3,cv::Scalar(12,12,12));video.copyTo(canvas(cv::Rect(0,45,900,675)));ru(canvas,"JT-ZERO — ОЦЕНКА ДВИЖЕНИЯ ПО ЗЕМЛЕ",{22,31},20,{245,245,245},cv::QT_FONT_BOLD);cv::Mat panel=canvas(cv::Rect(900,0,380,720));
         ru(panel,sensors_ok?"СИСТЕМА ГОТОВА":"ЖДИТЕ ДАТЧИКИ",{18,48},16,sensors_ok?cv::Scalar(90,220,90):cv::Scalar(0,210,255),cv::QT_FONT_BOLD);
         ru(panel,armed?"СЕЙЧАС: ДВИГАЙТЕ СТЕНД":"СЕЙЧАС: НЕ ДВИГАТЬ",{18,105},14,{255,255,255},cv::QT_FONT_BOLD);
         ru(panel,armed?"ДАЛЬШЕ: Q / ESC — ЗАВЕРШИТЬ":"ДАЛЬШЕ: ПРОБЕЛ — ОБНУЛИТЬ",{18,145},12,{235,235,235},cv::QT_FONT_BOLD);
-        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Inliers: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Roll/Pitch: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);int k=cv::waitKey(1);if(k==' '&&sensors_ok){reset_pending=true;armed=true;}if(k=='q'||k=='Q'||k==27)g_running=false;
+        char z[160];snprintf(z,sizeof(z),"TF-Luna: %.1f см",luna_m*100);ru(panel,z,{18,210},12,{220,220,220});snprintf(z,sizeof(z),"Высота камеры: %.1f мм",h*1000);ru(panel,z,{18,245},12,{220,220,220});snprintf(z,sizeof(z),"X: %+.1f мм",est.x*1000);ru(panel,z,{18,315},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Y: %+.1f мм",est.y*1000);ru(panel,z,{18,355},15,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Путь: %.1f мм",est.path*1000);ru(panel,z,{18,395},14,{245,245,245},cv::QT_FONT_BOLD);snprintf(z,sizeof(z),"Vx: %+.3f м/с",est.vx);ru(panel,z,{18,455},12,{220,220,220});snprintf(z,sizeof(z),"Vy: %+.3f м/с",est.vy);ru(panel,z,{18,490},12,{220,220,220});snprintf(z,sizeof(z),"Геом. точек: %d",est.inliers);ru(panel,z,{18,550},12,{220,220,220});snprintf(z,sizeof(z),"Крен/тангаж: %+.2f / %+.2f°",att.roll*180/kPi,att.pitch*180/kPi);ru(panel,z,{18,585},11,{220,220,220});ru(panel,"Q / ESC — ВЫХОД",{18,685},11,{210,210,210});cv::imshow(kWindow,canvas);int k=cv::waitKey(1);if(k==' '&&sensors_ok){reset_pending=true;armed=true;}if(k=='q'||k=='Q'||k==27)g_running=false;
         if(csv&&sensors_ok)csv<<now<<','<<frame_id<<','<<std::fixed<<std::setprecision(6)<<h<<','<<est.x<<','<<est.y<<','<<est.vx<<','<<est.vy<<','<<est.path<<','<<est.inliers<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<'\n';
       }
     }

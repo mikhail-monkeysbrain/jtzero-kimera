@@ -8,8 +8,8 @@ OV9281 optical flow + TF-Luna height + FC gyro/attitude -> metric Vx,Vy -> integ
 
 ## Счетчик шагов
 
-- Шаг 1/8 — аудит пригодности существующих архивов для offline replay.
-- Шаг 2/8 — единый offline estimator: flow + height + rotation compensation.
+- Шаг 1/8 — ВЫПОЛНЕН: архив пригоден для replay уже вычисленного visual motion; raw OV9281 frames не записаны.
+- Шаг 2/8 — ТЕКУЩИЙ: единый offline estimator: median flow + TF-Luna height + FC rotation compensation.
 - Шаг 3/8 — проверка единиц, осей, знаков, timestamps и 500-мм endpoint на архиве.
 - Шаг 4/8 — исправление только подтвержденного систематического источника ошибки.
 - Шаг 5/8 — baseline qualification на серии одинаковых 500-мм проходов без правок между ними.

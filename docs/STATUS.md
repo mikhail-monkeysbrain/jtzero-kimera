@@ -224,3 +224,12 @@ The observed pixel geometry predicts the real OUTER black-square side that would
 - motion residual effective-focal hypothesis (k=1.068): **19.496 mm**.
 
 Next discriminator is purely physical and requires no new image or A->B run: measure the outer black-square side of at least three printed markers (center/left/right if possible) with calipers. Use the mean and spread to compare against 20.822 vs 19.496 mm. This also checks printer-scale uniformity across the sheet.
+
+
+## 2026-09-09 — V44.5 physical marker measurement = 26.47 mm
+
+User measured the outer black-square side on multiple target squares/markers as **26.47 mm**, with the same value at the sampled positions. This is materially larger than both inverse predictions from V44.5 (20.822 mm for stored K and 19.496 mm for k=1.068).
+
+With the same detected pixel geometry and h=185.5 mm, replacing the provisional 24.35 mm by the measured 26.47 mm scales the inferred focal by 24.35/26.47: approximately fx=448.4 px, fy=446.9 px, mean k≈0.787. This does NOT support the prior +6.8% effective-focal hypothesis; it creates a much larger opposite-sign discrepancy.
+
+Do not tune K to ~447 px yet. V44.5 is a local fronto-parallel scale approximation and the target/image show perspective/tilt. Next step must use full planar ArUco geometry / homography (or solvePnP) across many markers, jointly checking plane pose, metric scale, stored K, and the independently measured 185.5 mm sensor-plane distance on the SAME existing images. No new A->B run is required.

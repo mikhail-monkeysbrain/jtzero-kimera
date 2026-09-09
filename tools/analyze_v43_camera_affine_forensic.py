@@ -4,6 +4,13 @@ from pathlib import Path
 p=argparse.ArgumentParser(); p.add_argument("--run",required=True); a=p.parse_args()
 f=Path(a.run)/"jtzero_v43_camera_forensic.csv"
 rows=list(csv.DictReader(f.open()))
+if not rows:
+ print("="*100); print("V43 — CAMERA AFFINE FORENSIC"); print("="*100)
+ print("accepted updates in forensic CSV: 0")
+ print("VERDICT: FORENSIC LOG EMPTY — do not interpret affine statistics.")
+ print("The physical V43 run itself remains valid; only the added forensic observability failed.")
+ print("="*100)
+ raise SystemExit(2)
 def vals(k): return [float(r[k]) for r in rows]
 def q(v,x): return sorted(v)[min(len(v)-1,max(0,int(round((len(v)-1)*x))))]
 tx,ty,sc,rot,h,dx,dy,st=map(vals,["tx_px","ty_px","aff_scale","aff_rot_deg","height_m","dx_m","dy_m","step_m"])

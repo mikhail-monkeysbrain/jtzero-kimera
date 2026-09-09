@@ -193,3 +193,10 @@ Analyzer updated to V44.4b:
 - reports homography reprojection RMS as a geometry sanity check.
 
 If the artwork is not detectable as one regular checker grid, next discriminator will use explicit ArUco/ChArUco geometry or explicit endpoints of the physically measured 80.77 mm span.
+
+
+## 2026-09-09 — V44.4b rejects checker interpretation
+
+V44.4b rejected all 20 frames (regularity 0.345-1.742, threshold 0.20). Therefore the printed ArUco/checker artwork must not be treated as a conventional checkerboard. This confirms the first V44.4 focal result was an artifact of false checker detections.
+
+Next static discriminator is V44.5: detect ArUco markers directly. The analyzer sweeps common OpenCV ArUco dictionaries only because the target dictionary has not yet been recorded; dictionary selection is based on detection consistency across the 20 existing frames, never proximity to the desired focal. A physical measurement of one marker's outer black-square side is required. No new A->B motion run is required.

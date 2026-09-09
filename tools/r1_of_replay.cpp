@@ -21,6 +21,7 @@
 struct Frame { uint64_t id=0,seq=0,vsec=0,vusec=0,recv=0,off=0,bytes=0; };
 struct Range { uint64_t id=0,recv=0; double cm=0; int strength=0,temp=0,valid=0; };
 struct Att { uint64_t id=0,recv=0,boot=0; double r=0,p=0,y=0,rs=0,ps=0,ys=0; };
+struct Event { uint64_t id=0,recv=0; std::string name; };
 
 static std::vector<std::string> split(const std::string&s){std::vector<std::string>v;std::stringstream q(s);std::string x;while(std::getline(q,x,','))v.push_back(x);return v;}
 static uint64_t u64(const std::string&s){return std::stoull(s);}
@@ -50,6 +51,12 @@ static std::vector<Range> loadRange(const std::string&p){
   std::ifstream f(p);if(!f)throw std::runtime_error("open range.csv");std::string s;std::getline(f,s);std::vector<Range>v;
   while(std::getline(f,s)){if(s.empty())continue;auto a=split(s);if(a.size()!=6)throw std::runtime_error("bad range row");v.push_back({u64(a[0]),u64(a[1]),f64(a[2]),i32(a[3]),i32(a[4]),i32(a[5])});}return v;
 }
+static std::vector<Event> loadEvents(const std::string&p){
+  std::ifstream f(p); if(!f) return {}; std::string s; std::getline(f,s); std::vector<Event>v;
+  if(s!="event_id,recv_mono_ns,event") throw std::runtime_error("bad events.csv schema");
+  while(std::getline(f,s)){if(s.empty())continue;auto a=split(s);if(a.size()!=3)throw std::runtime_error("bad event row");v.push_back({u64(a[0]),u64(a[1]),a[2]});}
+  return v;
+}
 static std::vector<Att> loadAtt(const std::string&p){
   std::ifstream f(p);if(!f)throw std::runtime_error("open attitude.csv");std::string s;std::getline(f,s);std::vector<Att>v;
   while(std::getline(f,s)){if(s.empty())continue;auto a=split(s);if(a.size()!=9)throw std::runtime_error("bad attitude row");v.push_back({u64(a[0]),u64(a[1]),u64(a[2]),f64(a[3]),f64(a[4]),f64(a[5]),f64(a[6]),f64(a[7]),f64(a[8])});}return v;
@@ -71,7 +78,7 @@ int main(int argc,char**argv){
   const std::string out=argc>4?argv[4]:dir+"/of_replay";
   std::filesystem::create_directories(out);
 
-  auto F=loadFrames(dir+"/frames.csv");auto R=loadRange(dir+"/range.csv");auto A=loadAtt(dir+"/attitude.csv");
+  auto F=loadFrames(dir+"/frames.csv");auto R=loadRange(dir+"/range.csv");auto A=loadAtt(dir+"/attitude.csv");auto E=loadEvents(dir+"/events.csv");
   if(F.size()<stride+1||R.empty()||A.empty())throw std::runtime_error("dataset too small");
   std::ifstream mj(dir+"/frames.mjpg",std::ios::binary);if(!mj)throw std::runtime_error("open frames.mjpg");
 
@@ -88,17 +95,29 @@ int main(int argc,char**argv){
   pairs<<"pair_id,frame0_id,frame1_id,t0_ns,t1_ns,dt_ms,tracks,median_res_dx_px,median_res_dy_px,median_metric_x_mm,median_metric_y_mm,range_cm,range_dt_ms,att0_dt_ms,att1_dt_ms\n";
   tracks<<std::fixed<<std::setprecision(6);pairs<<std::fixed<<std::setprecision(6);
 
-  uint64_t pairId=0,skippedGap=0,skippedOutsideSync=0,skippedSyncDt=0,decodedPairs=0,totalTracks=0,digest=1469598103934665603ULL;
+  uint64_t pairId=0,skippedGap=0,skippedOutsideSync=0,skippedOutsideMove=0,skippedSyncDt=0,decodedPairs=0,totalTracks=0,digest=1469598103934665603ULL;
   double netx=0,nety=0,path=0,maxRangeDt=0,maxAttDt=0;
   const uint64_t syncBegin=std::max(R.front().recv,A.front().recv);
   const uint64_t syncEnd=std::min(R.back().recv,A.back().recv);
   if(syncEnd<=syncBegin) throw std::runtime_error("no common range/attitude time overlap");
+  bool haveMoveWindow=false;
+  uint64_t moveStart=0,moveEnd=0;
+  for(const auto& e:E){
+    if(e.name=="MOVE_START"){ if(moveStart) throw std::runtime_error("duplicate MOVE_START"); moveStart=e.recv; }
+    else if(e.name=="MOVE_END"){ if(moveEnd) throw std::runtime_error("duplicate MOVE_END"); moveEnd=e.recv; }
+  }
+  if(moveStart||moveEnd){
+    if(!moveStart||!moveEnd||moveEnd<=moveStart) throw std::runtime_error("invalid MOVE_START/MOVE_END events");
+    if(moveStart<syncBegin||moveEnd>syncEnd) throw std::runtime_error("move window outside synchronized sensor overlap");
+    haveMoveWindow=true;
+  }
   constexpr double kMaxRangeDtMs=15.0;
   constexpr double kMaxAttDtMs=30.0;
   for(size_t i=0;i+(size_t)stride<F.size();i+=stride){
     const Frame& f0=F[i];const Frame& f1=F[i+stride];
     if(f1.seq!=f0.seq+(uint64_t)stride){skippedGap++;continue;}
     if(f0.recv<syncBegin || f1.recv>syncEnd){skippedOutsideSync++;continue;}
+    if(haveMoveWindow && (f0.recv<moveStart || f1.recv>moveEnd)){skippedOutsideMove++;continue;}
     cv::Mat a=decode(mj,f0),b=decode(mj,f1);decodedPairs++;
     std::vector<cv::Point2f> p0,p1,p0back;
     cv::goodFeaturesToTrack(a,p0,350,0.01,8.0,cv::noArray(),7,false,0.04);
@@ -142,14 +161,19 @@ int main(int argc,char**argv){
   const double net=std::hypot(netx,nety);
   std::ofstream summary(out+"/summary.txt");
   summary<<std::fixed<<std::setprecision(6)
-         <<"pairs="<<pairId<<"\ndecoded_pairs="<<decodedPairs<<"\nskipped_sequence_gap="<<skippedGap<<"\nskipped_outside_sync="<<skippedOutsideSync<<"\nskipped_sync_dt="<<skippedSyncDt<<"\ntracks="<<totalTracks
+         <<"pairs="<<pairId<<"\ndecoded_pairs="<<decodedPairs<<"\nskipped_sequence_gap="<<skippedGap<<"\nskipped_outside_sync="<<skippedOutsideSync<<"\nskipped_outside_move="<<skippedOutsideMove<<"\nskipped_sync_dt="<<skippedSyncDt<<"\ntracks="<<totalTracks
          <<"\nnet_x_mm="<<netx<<"\nnet_y_mm="<<nety<<"\nnet_mm="<<net<<"\npath_mm="<<path
-         <<"\nmax_range_dt_ms="<<maxRangeDt<<"\nmax_att_dt_ms="<<maxAttDt<<"\ndigest="<<hex64(digest)<<"\n";
+         <<"\nmax_range_dt_ms="<<maxRangeDt<<"\nmax_att_dt_ms="<<maxAttDt
+         <<"\nhave_move_window="<<(haveMoveWindow?1:0)
+         <<"\nmove_start_ns="<<moveStart<<"\nmove_end_ns="<<moveEnd
+         <<"\nmove_duration_s="<<(haveMoveWindow?(moveEnd-moveStart)/1e9:0.0)
+         <<"\ndigest="<<hex64(digest)<<"\n";
   summary.close();
   std::cout<<std::fixed<<std::setprecision(3)
            <<"R1 6/6 — STANDALONE PIXEL OF REPLAY\n"
            <<"dataset="<<dir<<" stride="<<stride<<"\n"
-           <<"pairs="<<pairId<<" decoded="<<decodedPairs<<" skipped_sequence_gap="<<skippedGap<<" skipped_outside_sync="<<skippedOutsideSync<<" skipped_sync_dt="<<skippedSyncDt<<" tracks="<<totalTracks<<"\n"
+           <<(haveMoveWindow?("move_window="+std::to_string(moveStart)+".."+std::to_string(moveEnd)+" duration="+std::to_string((moveEnd-moveStart)/1e9)+" s\n"):"move_window=NONE (full synchronized dataset)\n")
+           <<"pairs="<<pairId<<" decoded="<<decodedPairs<<" skipped_sequence_gap="<<skippedGap<<" skipped_outside_sync="<<skippedOutsideSync<<" skipped_outside_move="<<skippedOutsideMove<<" skipped_sync_dt="<<skippedSyncDt<<" tracks="<<totalTracks<<"\n"
            <<"net=("<<netx<<","<<nety<<") mm net="<<net<<" mm path="<<path<<" mm\n"
            <<"max_range_dt="<<maxRangeDt<<" ms max_att_dt="<<maxAttDt<<" ms\n"
            <<"digest="<<hex64(digest)<<"\n"

@@ -9,7 +9,12 @@ echo "source=$SRC"
 echo "output=$OUT"
 
 rm -f "$OUT"
-g++ -std=c++17 -O2 -DNDEBUG -pthread "$SRC" -o "$OUT"
+MAVLINK="/home/vio/Kimera-VIO/third_party/mavlink"
+if [[ ! -f "$MAVLINK/common/mavlink.h" ]]; then
+  echo "ERROR: MAVLink headers not found: $MAVLINK/common/mavlink.h" >&2
+  exit 2
+fi
+g++ -std=c++17 -O2 -DNDEBUG -pthread "$SRC" -I"$MAVLINK" -o "$OUT"
 
 test -x "$OUT"
 echo

@@ -40,13 +40,21 @@ int main(int argc,char**argv){
   gV23BFirst=(argc>3 && std::string(argv[3])=="B_FIRST");
   #endif
 #endif
+#ifdef JTZERO_CLEAN01
+  gV26ControlledAb4=true;
+#else
   gV26ControlledAb4=(argc>3 && std::string(argv[3])=="CONTROLLED_AB4");
+#endif
   if(gV26ControlledAb4){
     gV25BFirst=false;
     if(const char* e=std::getenv("JTZERO_V26_TARGET_SEC")) gV26TargetMoveSec=std::max(0.5,std::atof(e));
     if(const char* e=std::getenv("JTZERO_V26_TOLERANCE_SEC")) gV26DurationToleranceSec=std::max(0.1,std::atof(e));
     gV26ReferenceMoveSec=gV26TargetMoveSec;
+    #ifdef JTZERO_CLEAN01
+    std::cout<<"[РЕЖИМ] CLEAN01: один измеряемый проход A->B; старые диагностические оценки отключены; целевое время "
+#else
     std::cout<<"[MODE] CONTROLLED_AB4: four measured A->B passes; B->A returns are unmeasured; target "
+#endif
              <<gV26TargetMoveSec<<" s; accepted "
              <<(gV26TargetMoveSec-gV26DurationToleranceSec)<<".."
              <<(gV26TargetMoveSec+gV26DurationToleranceSec)<<" s\n";

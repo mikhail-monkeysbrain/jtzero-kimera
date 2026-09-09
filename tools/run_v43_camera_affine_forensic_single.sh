@@ -70,6 +70,13 @@ bash "${ROOT}/tools/run_v25_auto_camera.sh" CONTROLLED_AB4
 RC=$?
 set -e
 
+echo "[V43] post-run forensic file:"
+ls -l "${HOME}/jtzero_v43_camera_forensic.csv" 2>/dev/null || true
+if [[ -f "${HOME}/jtzero_v43_camera_forensic.csv" ]]; then
+  echo "[V43] post-run forensic lines: $(wc -l < "${HOME}/jtzero_v43_camera_forensic.csv")"
+  tail -2 "${HOME}/jtzero_v43_camera_forensic.csv" || true
+fi
+
 A=$(bash "${ROOT}/tools/archive_v25_run.sh" "V43_CAMERA_AFFINE_FORENSIC" "${PARAMS}")
 mkdir -p "${OUT}"
 cp -a "${A}/." "${OUT}/"

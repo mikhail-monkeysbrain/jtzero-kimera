@@ -3022,3 +3022,13 @@ Root cause in the synthetic analyzer: after every synthetic frame-to-frame step 
 Fixed the analyzer to keep a stationary representative feature distribution for each local step. Re-run the same command before drawing any conclusion about affine/projective sensitivity.
 
 **Status:** PREVIOUS SYNTHETIC RESULT REJECTED; ANALYZER FIXED; NEXT = RE-RUN ONLY, NO PHYSICAL MOVEMENT.
+
+
+## 2026-09-09 — corrected synthetic estimator result; V43 instrumentation required
+
+Corrected synthetic sanity check passed: pure 500 mm translation + calibrated distortion -> 508.16 mm (+1.63%). Plausible weak projective sweep covered ~490.03..508.26 mm and never approached the V42 direct-height-equivalent 551.30 mm. Thus the synthetic model does not reproduce the observed +10.26% residual camera-only bias.
+
+No further exact attribution is possible from V42 because affine scale/rotation and feature spatial distribution were not logged. Prepared V43: same single A->B geometry/direct TF-Luna path, but logs each accepted camera-only update to `jtzero_v43_camera_forensic.csv`: track/inlier counts, inlier centroids, affine a/b, scale, rotation, tx/ty, height, metric step and accumulated net.
+
+**Next physical measurement:** exactly one A->B / 500 mm pass, target ~7.5 s. This is not a repeat for averaging; it adds previously missing observability.
+**Status:** OFFLINE HYPOTHESES EXHAUSTED WITHOUT REPRODUCING +10%; NEXT = V43 INSTRUMENTED SINGLE PASS.

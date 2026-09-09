@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+KIMERA_ROOT="${KIMERA_ROOT:-/home/vio/Kimera-VIO}"
+SRC="$ROOT/tools/clean01_standalone.cpp"
+OUT="${1:-/tmp/jtzero_clean01_standalone}"
+
+OPENCV_CFLAGS="$(pkg-config --cflags opencv4)"
+OPENCV_LIBS="$(pkg-config --libs opencv4)"
+
+MAVLINK_INC=""
+for d in   "$KIMERA_ROOT/third_party/mavlink"   "$KIMERA_ROOT/third_party/mavlink/include/mavlink/v2.0"   "$KIMERA_ROOT/third_party/mavlink/include"   "/usr/local/include/mavlink/v2.0"   "/usr/local/include/mavlink"
+do
+  if [[ -f "$d/common/mavlink.h" ]]; then
+    MAVLINK_INC="-I$d"
+    break
+  fi
+done
+[[ -n "$MAVLINK_INC" ]] || { echo "ОШИБКА: common/mavlink.h не найден" >&2; exit 2; }
+
+echo "Сборка CLEAN-01 STANDALONE"
+echo "Исходник: $SRC"
+echo "Kimera:   $KIMERA_ROOT"
+echo "Выход:    $OUT"
+
+g++ -std=c++17 -O2 -DNDEBUG -pthread   $OPENCV_CFLAGS   -I"$ROOT/tools"   -I"$KIMERA_ROOT/include"   -I/usr/local/include   -I/usr/include/eigen3   $MAVLINK_INC   "$SRC"   -o "$OUT"   -L"$KIMERA_ROOT/build"   -L/usr/local/lib   -Wl,-rpath,"$KIMERA_ROOT/build:/usr/local/lib"   -lkimera_vio -lgtsam -lgtsam_unstable -lKimeraRPGO   -lgflags -lglog -lboost_system   $OPENCV_LIBS -ldl -lpthread
+
+echo "ГОТОВО: $OUT"
+sha256sum "$OUT"

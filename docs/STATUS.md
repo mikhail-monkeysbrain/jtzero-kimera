@@ -129,3 +129,19 @@ Current leading hypotheses for the residual camera-only scale error:
 4. **Physical 500-mm reference / endpoint protocol error** is currently lower priority because Kimera has produced runs near 500 mm (e.g. 495.79 mm) on the same bench, but it remains a generic external possibility and should not be declared impossible without an independent ruler/marker check.
 
 Next discriminator: derive the effective focal length required by the real V43 tx/ty at fixed physically plausible heights, compare it to calibration fx/fy, and inspect whether the runtime USB camera mode/crop is consistent with the calibration mode.
+
+
+## 2026-09-09 — V44 one-pass camera sweep result
+
+Latest one-pass archive shows:
+- affine and median inlier flow agree almost exactly: median-flow/affine = 0.9998, so affine fitting itself is not the source of +5..8% residual scale;
+- left/right median flow ratio = 1.0293 and top/bottom = 0.9737, so large spatial/projective nonuniformity is not evident;
+- with fixed h=180 mm the same real flow gives 527.40 mm (+5.48%); h=185 mm gives 542.05 mm (+8.41%);
+- runtime stream is 640x480 and both Kimera params and camera-only use the same calibrated intrinsics 568.53/569.68, weakening a simple config-number mismatch;
+- the calibration itself is a real 640x480 OV9281 calibration with RMS 0.347 px / 63 usable views.
+
+A stronger remaining camera-only hypothesis is now **physical attitude rotation counted as translation**. The rig changes roll/pitch by degrees during bench translation; camera-only integrates 2-D flow without IMU rotation compensation. Pitch/roll rotation can appear mainly as translational optical flow even when affine in-plane rotation/scale are near identity. This mechanism was not ruled out by the previous affine-scale/centroid tests.
+
+Added tools/analyze_v44_fc_rotation_compensation.py. It aligns the 220 forensic intervals uniformly over the exact START/END wall-time window, interpolates FC ATTITUDE, maps FRD->FLU, transforms the active camera extrinsic R_BC, predicts rotation-only flow at each real inlier centroid, subtracts it from the real median flow, and recomputes metric distance for h=180/185 mm.
+
+Status semantics: root cause not yet identified; **НА МЕСТЕ** until this mechanism is supported/rejected quantitatively.

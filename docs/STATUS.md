@@ -488,3 +488,10 @@ Thus the modified callback and gate evaluator are proven active during real moti
 The V44.23 shell summary printed `valid_seen=1` because its sed pattern matched the suffix of `invalid_seen=1`. This was a reporting bug only; the telemetry file itself correctly says `valid_seen=26`. The parser is fixed to exact key=value token matching.
 
 Added V44.24 to reuse the four archived runs (reference, 417.6 mm regression, first gated ~457.6 mm run, current ~482 mm run) and run the cross-run, pose-discontinuity, late-reversal, and PIM/gate screens in one analysis. No new physical pass is required.
+
+
+### V44.24 result — 482 mm is a clean run; 417 mm failure is not a persistent focal/gate mode
+
+Reference and current are close: Kimera 486.07 vs 482.11 mm, camera-only net 557.79 vs 557.39 mm, VALID fraction 0.848 vs 0.839, and mono tilt 4.90 vs 4.56 deg. The current run has no >=30 deg VALID geometry event, gate telemetry reports evaluated=26/rejected=0, and late post-peak loss is only 1.1 mm (0.7 mm more than reference). Therefore the ~482 mm result is not caused by the diagnostic gate and does not reproduce the 417.6 mm failure.
+
+The 417.6 mm run remains a transient accepted-pose/front-end/backend failure case already localized by V44.15/V44.16; it must not be used to tune focal scale. The remaining clean-run endpoint residual is about -14 to -18 mm (~3%). V44.25 compares cumulative along-track shape for reference, bad, gated1, and current archives before deciding whether that clean residual is sufficiently repeatable for a production correction.

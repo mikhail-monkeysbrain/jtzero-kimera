@@ -11,7 +11,7 @@ OV9281 optical flow + TF-Luna height + FC gyro/attitude -> metric Vx,Vy -> integ
 - Шаг 1/8 — ВЫПОЛНЕН: архив пригоден для replay уже вычисленного visual motion; raw OV9281 frames не записаны.
 - Шаг 2/8 — ВЫПОЛНЕН: независимый OF estimator построен; результат 548.84 мм dynamic / 531.42 мм fixed 185.5 мм, улучшение недостаточно.
 - Шаг 3/8 — ВЫПОЛНЕН: stale R_BC проверена; 5.701° различия меняют endpoint лишь ~0.1 мм, гипотеза закрыта.
-- Шаг 4/8 — ТЕКУЩИЙ: height semantics / projection geometry audit на архиве.\n- Шаг 4/8 — исправление только подтвержденного систематического источника ошибки.
+- Шаг 4/8 — ТЕКУЩИЙ: exact planar ray/ground intersection + height semantics + distortion.
 - Шаг 5/8 — baseline qualification на серии одинаковых 500-мм проходов без правок между ними.
 - Шаг 6/8 — 2D движения: X/Y/диагональ/возврат.
 - Шаг 7/8 — выдача metric Vx,Vy в ArduPilot/EKF.

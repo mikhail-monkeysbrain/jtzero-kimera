@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import argparse,csv,math,statistics
 from pathlib import Path
-p=argparse.ArgumentParser(); p.add_argument("--run",required=True); a=p.parse_args()
-f=Path(a.run)/"jtzero_v43_camera_forensic.csv"
+p=argparse.ArgumentParser(); p.add_argument("--run",required=False); p.add_argument("--file",required=False); a=p.parse_args()\nif not a.run and not a.file: p.error("one of --run or --file is required")
+f=Path(a.file) if a.file else Path(a.run)/"jtzero_v43_camera_forensic.csv"
 rows=list(csv.DictReader(f.open()))
 if not rows:
  print("="*100); print("V43 — CAMERA AFFINE FORENSIC"); print("="*100)
@@ -38,3 +38,8 @@ print("The V41/V42/V43 metric estimator integrates affine tx/ty evaluated at the
 print("If affine scale/rotation differs from identity and inlier centroids are off-axis, tx/ty is not the same as feature-centroid translation.")
 print("A large systematic axis/centroid difference is direct evidence that similarity-transform parameterization contaminates metric translation.")
 print("="*100)
+
+print("\n500 MM RECONCILIATION")
+print(f"net/truth scale={net/0.5:.6f} error={(net-0.5)*1000:+.2f} mm")
+print(f"path={sum(st)*1000:.2f} mm path/net={sum(st)/net:.6f}")
+print(f"summed axis pixel vector / net = {math.hypot(sum(tx),sum(ty))/net:.3f} px/m")

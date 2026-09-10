@@ -24,13 +24,21 @@ struct FcLocalPosition {
   bool valid=false;
 };
 
+struct FcGlobalVelocity {
+  float vx=0,vy=0,vz=0; // NED, m/s; GLOBAL_POSITION_INT передаёт cm/s
+  int64_t recv_ns=0;
+  bool valid=false;
+};
+
 struct FcHistory {
   int fd=-1;
   std::thread th;
   std::mutex mu;
   std::deque<Attitude> hist;
   FcLocalPosition local_pos{};
+  FcGlobalVelocity global_vel{};
   uint64_t local_pos_count=0;
+  uint64_t global_vel_count=0;
   uint8_t target_sys=0,target_comp=0;
 
   static constexpr uint8_t self_sys=191;
@@ -104,6 +112,7 @@ struct FcHistory {
       std::cerr<<"FC: ArduPilot heartbeat sys="<<(int)sys<<" comp="<<(int)comp<<"\n";
       requestRate(fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,50);
       requestRate(fd,sys,comp,MAVLINK_MSG_ID_LOCAL_POSITION_NED,20);
+      requestRate(fd,sys,comp,MAVLINK_MSG_ID_GLOBAL_POSITION_INT,20);
 
       while(g_running){
         pollfd p{fd,POLLIN,0};
@@ -131,6 +140,15 @@ struct FcHistory {
               local_pos.vx=pned.vx;local_pos.vy=pned.vy;local_pos.vz=pned.vz;
               local_pos.recv_ns=monoNs();local_pos.valid=true;
               ++local_pos_count;
+            } else if(m.msgid==MAVLINK_MSG_ID_GLOBAL_POSITION_INT && m.sysid==sys){
+              mavlink_global_position_int_t gp{};
+              mavlink_msg_global_position_int_decode(&m,&gp);
+              std::lock_guard<std::mutex>l(mu);
+              global_vel.vx=static_cast<float>(gp.vx)*0.01f;
+              global_vel.vy=static_cast<float>(gp.vy)*0.01f;
+              global_vel.vz=static_cast<float>(gp.vz)*0.01f;
+              global_vel.recv_ns=monoNs();global_vel.valid=true;
+              ++global_vel_count;
             } else if(m.msgid==MAVLINK_MSG_ID_COMMAND_ACK){
               mavlink_command_ack_t a{};
               mavlink_msg_command_ack_decode(&m,&a);
@@ -166,6 +184,15 @@ struct FcHistory {
     return true;
   }
 
+  bool latestGlobalVelocity(FcGlobalVelocity*out,double*age_ms,uint64_t*count=nullptr){
+    std::lock_guard<std::mutex>l(mu);
+    if(count)*count=global_vel_count;
+    if(!global_vel.valid)return false;
+    *out=global_vel;
+    if(age_ms)*age_ms=(monoNs()-global_vel.recv_ns)*1e-6;
+    return true;
+  }
+
   void stop(){if(th.joinable())th.join();if(fd>=0){::close(fd);fd=-1;}}
 };
 
@@ -196,7 +223,7 @@ int main(int argc,char**argv){
     int64_t last_range_send_ns=0;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,frame,valid,quality,dx_m,dy_m,vx_mps,vy_mps,x_m,y_m,height_m,luna_m,inliers,scatter_m,att_age_ms,luna_age_ms,roll,pitch,yaw,mav_sent,gm_vx_ned,gm_vy_ned,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_local_age_ms,ekf_local_count\n";
+    csv<<"mono_ns,frame,valid,quality,dx_m,dy_m,vx_mps,vy_mps,x_m,y_m,height_m,luna_m,inliers,scatter_m,att_age_ms,luna_age_ms,roll,pitch,yaw,mav_sent,gm_vx_ned,gm_vy_ned,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_local_age_ms,ekf_local_count,fc_vel_valid,fc_vx_ned,fc_vy_ned,fc_vz_ned,fc_vel_age_ms,fc_vel_count\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal);std::signal(SIGTERM,onSignal);std::signal(SIGUSR1,onSource1);std::signal(SIGUSR2,onSource2);
@@ -277,13 +304,18 @@ int main(int argc,char**argv){
         FcLocalPosition ekf{};double ekf_age=1e9;uint64_t ekf_count=0;
         const bool ekf_ok=fc.latestLocalPosition(&ekf,&ekf_age,&ekf_count);
         const bool ekf_fresh=ekf_ok&&ekf_age<500.0;
+        FcGlobalVelocity fcv{};double fcv_age=1e9;uint64_t fcv_count=0;
+        const bool fcv_ok=fc.latestGlobalVelocity(&fcv,&fcv_age,&fcv_count);
+        const bool fcv_fresh=fcv_ok&&fcv_age<500.0;
         const double gm_vx_ned=valid?vx:0.0;
         const double gm_vy_ned=valid?-vy:0.0;
 
-        csv<<now<<','<<frame<<','<<(valid?1:0)<<','<<quality<<','<<dx<<','<<dy<<','<<vx<<','<<vy<<','<<x<<','<<y<<','<<h<<','<<lm<<','<<inliers<<','<<scatter<<','<<att_age<<','<<lage<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<','<<(sent?1:0)<<','<<gm_vx_ned<<','<<gm_vy_ned<<','<<(ekf_fresh?1:0)<<','<<ekf.x<<','<<ekf.y<<','<<ekf.z<<','<<ekf.vx<<','<<ekf.vy<<','<<ekf.vz<<','<<ekf_age<<','<<ekf_count<<'\n';
+        csv<<now<<','<<frame<<','<<(valid?1:0)<<','<<quality<<','<<dx<<','<<dy<<','<<vx<<','<<vy<<','<<x<<','<<y<<','<<h<<','<<lm<<','<<inliers<<','<<scatter<<','<<att_age<<','<<lage<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<','<<(sent?1:0)<<','<<gm_vx_ned<<','<<gm_vy_ned<<','<<(ekf_fresh?1:0)<<','<<ekf.x<<','<<ekf.y<<','<<ekf.z<<','<<ekf.vx<<','<<ekf.vy<<','<<ekf.vz<<','<<ekf_age<<','<<ekf_count<<','<<(fcv_fresh?1:0)<<','<<fcv.vx<<','<<fcv.vy<<','<<fcv.vz<<','<<fcv_age<<','<<fcv_count<<'\n';
 
         if(frame%100==0){
           std::cerr<<"GM frame="<<frame<<" valid="<<(valid?1:0)<<" VISION_SPEED_ESTIMATE sent="<<mav_sent<<" skipped="<<mav_skipped<<" DISTANCE_SENSOR sent="<<range_sent<<" skipped="<<range_skipped;
+          if(fcv_ok)std::cerr<<" FC_VEL rx="<<fcv_count<<" age="<<fcv_age<<"ms vN="<<fcv.vx<<" vE="<<fcv.vy;
+          else std::cerr<<" FC_VEL rx=0";
           if(ekf_ok)std::cerr<<" EKF_LOCAL rx="<<ekf_count<<" age="<<ekf_age<<"ms vN="<<ekf.vx<<" vE="<<ekf.vy;
           else std::cerr<<" EKF_LOCAL rx=0";
           std::cerr<<"\r"<<std::flush;

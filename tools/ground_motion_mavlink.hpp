@@ -51,15 +51,29 @@ struct GroundMotionMavlinkPublisher {
         const float x_ned = static_cast<float>(x_nwu);
         const float y_ned = static_cast<float>(-y_nwu);
 
-        // Консервативная XY position covariance для первого MVP.
-        // Z/RPY не являются измерениями Ground Motion и получают большую дисперсию.
+        // ВАЖНО: ArduPilot для VISION_POSITION_ESTIMATE сворачивает
+        // covariance X/Y/Z в один сферический posErr:
+        // sqrt(cov_x + cov_y + cov_z). Поэтому нельзя ставить огромную
+        // дисперсию Z для обозначения "Z не измеряется" — это одновременно
+        // делает XY position практически бесполезной для EKF.
+        //
+        // POSZ у нас выбран RangeFinder, поэтому ExternalNav Z не является
+        // источником вертикальной позиции. Здесь задаём суммарный posErr=0.20 m,
+        // согласованный с VISO_POS_M_NSE=0.20:
+        // sqrt(3 * 0.013333333) ~= 0.20 m.
+        constexpr float pose_axis_var = 0.013333333f;
         float covariance[21]{};
-        covariance[0] = 0.04f;   // X: sigma=0.20 m
-        covariance[6] = 0.04f;   // Y: sigma=0.20 m
-        covariance[11] = 100.0f; // Z
-        covariance[15] = 100.0f; // roll
-        covariance[18] = 100.0f; // pitch
-        covariance[20] = 100.0f; // yaw
+        covariance[0] = pose_axis_var;
+        covariance[6] = pose_axis_var;
+        covariance[11] = pose_axis_var;
+
+        // Attitude не используется как EKF yaw source (EK3_SRC1_YAW=None),
+        // но ArduPilot также сворачивает R/P/Y covariance в один angErr.
+        // Оставляем конечные консервативные значения вместо прежних 100 rad^2.
+        constexpr float attitude_axis_var = 0.25f;
+        covariance[15] = attitude_axis_var;
+        covariance[18] = attitude_axis_var;
+        covariance[20] = attitude_axis_var;
 
         mavlink_message_t msg{};
         mavlink_msg_vision_position_estimate_pack(

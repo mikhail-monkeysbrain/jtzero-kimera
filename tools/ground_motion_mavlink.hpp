@@ -21,8 +21,8 @@
 #include "common/mavlink.h"
 
 struct GroundMotionMavlinkPublisher {
-    // FC в текущей конфигурации использует SYSID 42. Companion обязан иметь
-    // другой SYSID, иначе MAVLink routing/ACK становятся неоднозначными.
+    // Companion имеет отдельный SYSID. SYSID FC определяется по heartbeat
+    // во время запуска и здесь не хардкодится.
     uint8_t system_id = 191;
     uint8_t component_id = MAV_COMP_ID_VISUAL_INERTIAL_ODOMETRY;
 

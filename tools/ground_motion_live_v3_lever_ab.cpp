@@ -8,9 +8,12 @@
 // Z намеренно 0: STEP не определяет pinhole-Z OV9281 достаточно точно.
 // Переопределение через env:
 //   JTZERO_LEVER_X_MM, JTZERO_LEVER_Y_MM, JTZERO_LEVER_Z_MM
-#define main jtzero_v3_sync_ab_unused_main
+//
+// ground_motion_live_v3_sync_ab.cpp сам переименовывает main своего базового include,
+// поэтому здесь задаём имя, которое он ожидает, чтобы его собственный main тоже был скрыт.
+#define jtzero_v2_v3_unused_main jtzero_v3_sync_ab_unused_main
 #include "ground_motion_live_v3_sync_ab.cpp"
-#undef main
+#undef jtzero_v2_v3_unused_main
 #include <cstdlib>
 
 namespace {

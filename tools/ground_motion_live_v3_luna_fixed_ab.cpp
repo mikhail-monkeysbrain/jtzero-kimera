@@ -4,9 +4,9 @@
 // FIXED branch uses one constant camera-center height for the whole measurement.
 // Fixed height is captured automatically as the median LUNA camera height from READY samples
 // immediately before SPACE; it is NOT tuned to the known 500 mm motion.
-#define main jtzero_lever_ab_unused_main
+#define JTZERO_V3_LEVER_NO_MAIN
 #include "ground_motion_live_v3_lever_ab.cpp"
-#undef main
+#undef JTZERO_V3_LEVER_NO_MAIN
 #include <deque>
 
 namespace {

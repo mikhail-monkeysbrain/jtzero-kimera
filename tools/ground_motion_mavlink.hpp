@@ -1,17 +1,18 @@
 #pragma once
 // MAVLink publisher для Ground Motion MVP.
 // Публикует:
-//   1) VISION_SPEED_ESTIMATE — горизонтальная скорость ExternalNav;
-//   2) DISTANCE_SENSOR — TF-Luna для AP_RangeFinder MAVLink backend.
+//   1) VISION_POSITION_ESTIMATE — относительная горизонтальная позиция ExternalNav;
+//   2) VISION_SPEED_ESTIMATE — горизонтальная скорость ExternalNav;
+//   3) DISTANCE_SENSOR — TF-Luna для AP_RangeFinder MAVLink backend.
 // Сам по себе НЕ переключает EKF и НЕ меняет параметры FC.
 //
-// Контракт production MVP: Ground Motion является источником горизонтальной
-// скорости, а TF-Luna — отдельным источником высоты. Позицию и yaw estimator
-// не публикует.
+// Position и velocity происходят из одной Ground Motion оценки и потому
+// коррелированы. Это не два независимых датчика, а единый ExternalNav output.
+// Yaw estimator не публикует.
 //
-// Вход estimator: NWU. AP_VisualOdom_MAV::handle_vision_speed_estimate()
-// ожидает velocity в NED, поэтому преобразование: X остаётся, Y меняет знак.
-// Вертикальная скорость пока не оценивается и передаётся 0.
+// Вход estimator: NWU. Для ArduPilot преобразование в NED:
+// X остаётся, Y меняет знак. Z position намеренно 0: вертикальная позиция
+// поступает в EKF отдельно от TF-Luna через DISTANCE_SENSOR/POSZ=RangeFinder.
 
 #include <cerrno>
 #include <cmath>
@@ -21,8 +22,6 @@
 #include "common/mavlink.h"
 
 struct GroundMotionMavlinkPublisher {
-    // Companion имеет отдельный SYSID. SYSID FC определяется по heartbeat
-    // во время запуска и здесь не хардкодится.
     uint8_t system_id = 191;
     uint8_t component_id = MAV_COMP_ID_VISUAL_INERTIAL_ODOMETRY;
 
@@ -33,15 +32,50 @@ struct GroundMotionMavlinkPublisher {
         size_t off = 0;
         while (off < n) {
             const ssize_t k = ::write(fd, buf + off, n - off);
-            if (k > 0) {
-                off += static_cast<size_t>(k);
-                continue;
-            }
+            if (k > 0) { off += static_cast<size_t>(k); continue; }
             if (k < 0 && errno == EINTR) continue;
             if (k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return false;
             return false;
         }
         return true;
+    }
+
+    bool sendPosition(int fd,
+                      uint64_t time_usec,
+                      bool valid,
+                      double x_nwu,
+                      double y_nwu) const {
+        if (fd < 0 || !valid) return false;
+        if (!std::isfinite(x_nwu) || !std::isfinite(y_nwu)) return false;
+
+        const float x_ned = static_cast<float>(x_nwu);
+        const float y_ned = static_cast<float>(-y_nwu);
+
+        // Консервативная XY position covariance для первого MVP.
+        // Z/RPY не являются измерениями Ground Motion и получают большую дисперсию.
+        float covariance[21]{};
+        covariance[0] = 0.04f;   // X: sigma=0.20 m
+        covariance[6] = 0.04f;   // Y: sigma=0.20 m
+        covariance[11] = 100.0f; // Z
+        covariance[15] = 100.0f; // roll
+        covariance[18] = 100.0f; // pitch
+        covariance[20] = 100.0f; // yaw
+
+        mavlink_message_t msg{};
+        mavlink_msg_vision_position_estimate_pack(
+            system_id,
+            component_id,
+            &msg,
+            time_usec,
+            x_ned,
+            y_ned,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            covariance,
+            0);
+        return writeMessage(fd, msg);
     }
 
     bool send(int fd,
@@ -52,79 +86,42 @@ struct GroundMotionMavlinkPublisher {
               double y_nwu,
               double vx_nwu,
               double vy_nwu) const {
-        (void)quality01; // VISION_SPEED_ESTIMATE не имеет quality поля.
+        (void)quality01;
         (void)x_nwu;
         (void)y_nwu;
-
-        // Fail-closed: при невалидном Ground Motion ничего в EKF не отправляем.
         if (fd < 0 || !valid) return false;
         if (!std::isfinite(vx_nwu) || !std::isfinite(vy_nwu)) return false;
 
         const float vx_ned = static_cast<float>(vx_nwu);
         const float vy_ned = static_cast<float>(-vy_nwu);
-        const float vz_ned = 0.0f;
-
-        // Диагональная covariance скорости. AP_VisualOdom извлекает из неё
-        // vel_err. Берём консервативные 0.10 m/s по каждой оси для MVP;
-        // нижнюю границу всё равно задаёт VISO_VEL_M_NSE на FC.
-        constexpr float sigma_v = 0.10f;
-        constexpr float var_v = sigma_v * sigma_v;
-        float covariance[9] = {
-            var_v, 0.0f, 0.0f,
-            0.0f, var_v, 0.0f,
-            0.0f, 0.0f, var_v
-        };
+        constexpr float var_v = 0.01f;
+        float covariance[9] = {var_v,0,0, 0,var_v,0, 0,0,var_v};
 
         mavlink_message_t msg{};
         mavlink_msg_vision_speed_estimate_pack(
-            system_id,
-            component_id,
-            &msg,
-            time_usec,
-            vx_ned,
-            vy_ned,
-            vz_ned,
-            covariance,
-            0);
-
+            system_id, component_id, &msg, time_usec,
+            vx_ned, vy_ned, 0.0f, covariance, 0);
         return writeMessage(fd, msg);
     }
 
     bool sendDistanceSensor(int fd,
                             uint32_t time_boot_ms,
                             double distance_m) const {
-        // Fail-closed: не публикуем NaN/inf и значения вне рабочего диапазона
-        // TF-Luna, используемого на текущем этапе.
         if (fd < 0 || !std::isfinite(distance_m)) return false;
         if (distance_m < 0.20 || distance_m > 8.00) return false;
-
         const uint16_t current_cm = static_cast<uint16_t>(
             std::lround(std::clamp(distance_m, 0.20, 8.00) * 100.0));
-
         constexpr uint16_t min_cm = 20;
         constexpr uint16_t max_cm = 800;
         constexpr uint8_t sensor_id = 0;
-        constexpr uint8_t covariance = 0; // неизвестна — не выдумываем дисперсию
-        float quaternion[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
+        constexpr uint8_t covariance = 0;
+        float quaternion[4] = {0,0,0,0};
         mavlink_message_t msg{};
         mavlink_msg_distance_sensor_pack(
-            system_id,
-            component_id,
-            &msg,
-            time_boot_ms,
-            min_cm,
-            max_cm,
-            current_cm,
-            MAV_DISTANCE_SENSOR_LASER,
-            sensor_id,
-            MAV_SENSOR_ROTATION_PITCH_270,
-            covariance,
-            0.0f,
-            0.0f,
-            quaternion,
-            0);
-
+            system_id, component_id, &msg, time_boot_ms,
+            min_cm, max_cm, current_cm, MAV_DISTANCE_SENSOR_LASER,
+            sensor_id, MAV_SENSOR_ROTATION_PITCH_270, covariance,
+            0.0f, 0.0f, quaternion, 0);
         return writeMessage(fd, msg);
     }
 };

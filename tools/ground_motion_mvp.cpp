@@ -7,6 +7,7 @@
 #include "ground_motion_mavlink.hpp"
 #include <deque>
 #include <cstdlib>
+#include <cstdio>
 
 namespace {
 int64_t frameTvToNsMvp(const timeval& tv){return (int64_t)tv.tv_sec*1000000000LL+(int64_t)tv.tv_usec*1000LL;}
@@ -27,10 +28,11 @@ bool v3StepMvp(const std::vector<cv::Point2f>&ai,const std::vector<cv::Point2f>&
 
 int main(int argc,char**argv){
  if(argc<7){std::cerr<<"Использование: "<<argv[0]<<" <camera> <luna> <fc> <csv> <camera_yaml> <camera_offset_mm>\n";return 2;}
- const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3],csvpath=argv[4],yaml=argv[5];const double offset=std::stod(argv[6])/1000.0;const cv::Vec3d lever_b(0.04916,0.00022,0.0);
+ const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3],csvpath=argv[4],yaml=argv[5];const double offset=std::stod(argv[6])/1000.0;const cv::Vec3d lever_b(0.04916,0.00022,0.0);const char* preview_env=std::getenv("JTZERO_GM_PREVIEW");const std::string preview_path=preview_env?preview_env:"";
  try{CameraCalib calib=loadCameraCalib(yaml);Camera cam;cam.openDev(camdev);LunaReader luna;luna.start(lunadev);FcHistory fc;fc.start(fcdev);GroundMotionMavlinkPublisher mavpub;uint64_t mav_sent=0,mav_skipped=0;std::ofstream csv(csvpath,std::ios::trunc);csv<<"mono_ns,frame,valid,quality,dx_m,dy_m,vx_mps,vy_mps,x_m,y_m,height_m,luna_m,inliers,scatter_m,att_age_ms,luna_age_ms,roll,pitch,yaw,mav_sent\n";cv::setNumThreads(1);std::signal(SIGINT,onSignal);std::signal(SIGTERM,onSignal);
  cv::Mat prev;Attitude prev_att{};double prev_h=0;int64_t prev_ts=0;double x=0,y=0;uint64_t frame=0;
  while(g_running){pollfd p{cam.fd,POLLIN,0};int pr=poll(&p,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0)continue;while(g_running){v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(cam.fd,VIDIOC_DQBUF,&b)<0){if(errno==EAGAIN)break;fail("VIDIOC_DQBUF");}int64_t now=monoNs(),ts=frameTvToNsMvp(b.timestamp);cv::Mat raw(1,(int)b.bytesused,CV_8UC1,cam.bufs[b.index].p);cv::Mat gray=cv::imdecode(raw,cv::IMREAD_GRAYSCALE);if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");if(gray.empty())continue;++frame;
+ if(!preview_path.empty() && frame%5==0){const std::string tmp=preview_path+".tmp.pgm";if(cv::imwrite(tmp,gray))std::rename(tmp.c_str(),preview_path.c_str());}
  double lm=0;int strength=0;int64_t lns=0;Attitude att{};double att_age=1e9;bool hl=luna.latest(&lm,&strength,&lns),ha=fc.at(ts,&att,&att_age);double lage=hl?(now-lns)*1e-6:1e9,h=0,down=0;if(hl&&ha){auto R=attitudeFluToNwu(att);down=-(R*cv::Vec3d(0,0,-1))[2];h=lm*down-offset+(R*lever_b)[2];}bool sensors=hl&&ha&&down>0.20&&h>0.05&&lage<200&&att_age<30;
  bool valid=false;double dx=0,dy=0,vx=0,vy=0,scatter=0,quality=0;int inliers=0;double dt=prev_ts?(ts-prev_ts)*1e-9:0;
  if(sensors&&!prev.empty()&&prev_att.valid&&prev_h>0&&dt>0&&dt<0.2){std::vector<cv::Point2f>p0,p1;cv::goodFeaturesToTrack(prev,p0,700,0.01,7);if(p0.size()>=30){std::vector<uchar>st;std::vector<float>err;cv::calcOpticalFlowPyrLK(prev,gray,p0,p1,st,err,{21,21},3);std::vector<cv::Point2f>a,bp;for(size_t i=0;i<p0.size();++i)if(st[i]){a.push_back(p0[i]);bp.push_back(p1[i]);}if(a.size()>=20){cv::Mat mask;cv::findHomography(a,bp,cv::RANSAC,2.0,mask);if(!mask.empty()){std::vector<cv::Point2f>ai,bi;for(size_t i=0;i<a.size();++i)if(mask.at<uchar>((int)i)){ai.push_back(a[i]);bi.push_back(bp[i]);}cv::Vec2d d;if(ai.size()>=15&&v3StepMvp(ai,bi,calib,prev_att,prev_h,att,h,&d,&inliers,&scatter)&&cv::norm(d)<0.20){dx=d[0];dy=d[1];vx=dx/dt;vy=dy/dt;quality=std::clamp((inliers/150.0)*std::exp(-scatter/0.003),0.0,1.0);valid=inliers>=20&&scatter<0.004&&quality>=0.15;if(valid){x+=dx;y+=dy;}}}}}}
@@ -38,5 +40,5 @@ int main(int argc,char**argv){
  csv<<now<<','<<frame<<','<<(valid?1:0)<<','<<quality<<','<<dx<<','<<dy<<','<<vx<<','<<vy<<','<<x<<','<<y<<','<<h<<','<<lm<<','<<inliers<<','<<scatter<<','<<att_age<<','<<lage<<','<<att.roll<<','<<att.pitch<<','<<att.yaw<<','<<(sent?1:0)<<'\n';
  if(frame%100==0)std::cerr<<"GM frame="<<frame<<" valid="<<(valid?1:0)<<" ODOMETRY sent="<<mav_sent<<" skipped="<<mav_skipped<<"\r"<<std::flush;
  if(sensors){prev=gray.clone();prev_att=att;prev_h=h;prev_ts=ts;}else{prev.release();prev_att.valid=false;prev_h=0;prev_ts=0;}
- }}g_running=false;fc.stop();luna.stop();std::cerr<<"\nОстановлено. CSV: "<<csvpath<<" ODOMETRY sent="<<mav_sent<<" skipped="<<mav_skipped<<"\n";return 0;}catch(const std::exception&e){g_running=false;std::cerr<<"ОШИБКА: "<<e.what()<<"\n";return 1;}
+ }}g_running=false;fc.stop();luna.stop();if(!preview_path.empty())std::remove(preview_path.c_str());std::cerr<<"\nОстановлено. CSV: "<<csvpath<<" ODOMETRY sent="<<mav_sent<<" skipped="<<mav_skipped<<"\n";return 0;}catch(const std::exception&e){g_running=false;if(!preview_path.empty())std::remove(preview_path.c_str());std::cerr<<"ОШИБКА: "<<e.what()<<"\n";return 1;}
 }

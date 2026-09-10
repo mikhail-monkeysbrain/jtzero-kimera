@@ -8,7 +8,7 @@
 //
 // Position и velocity происходят из одной Ground Motion оценки и потому
 // коррелированы. Это не два независимых датчика, а единый ExternalNav output.
-// Yaw estimator не публикует.
+// Yaw estimator не публикует как источник EKF yaw.
 //
 // Вход estimator: NWU. Для ArduPilot преобразование в NED:
 // X остаётся, Y меняет знак. Z position намеренно 0: вертикальная позиция
@@ -78,6 +78,30 @@ struct GroundMotionMavlinkPublisher {
         return writeMessage(fd, msg);
     }
 
+    bool sendVelocity(int fd,
+                      uint64_t time_usec,
+                      bool valid,
+                      double quality01,
+                      double vx_nwu,
+                      double vy_nwu) const {
+        (void)quality01;
+        if (fd < 0 || !valid) return false;
+        if (!std::isfinite(vx_nwu) || !std::isfinite(vy_nwu)) return false;
+
+        const float vx_ned = static_cast<float>(vx_nwu);
+        const float vy_ned = static_cast<float>(-vy_nwu);
+        constexpr float var_v = 0.01f; // sigma=0.10 m/s
+        float covariance[9] = {var_v,0,0, 0,var_v,0, 0,0,var_v};
+
+        mavlink_message_t msg{};
+        mavlink_msg_vision_speed_estimate_pack(
+            system_id, component_id, &msg, time_usec,
+            vx_ned, vy_ned, 0.0f, covariance, 0);
+        return writeMessage(fd, msg);
+    }
+
+    // Сохраняем прежний production API. Один вызов отправляет согласованную пару
+    // position + velocity из одной оценки одного кадра.
     bool send(int fd,
               uint64_t time_usec,
               bool valid,
@@ -86,22 +110,10 @@ struct GroundMotionMavlinkPublisher {
               double y_nwu,
               double vx_nwu,
               double vy_nwu) const {
-        (void)quality01;
-        (void)x_nwu;
-        (void)y_nwu;
         if (fd < 0 || !valid) return false;
-        if (!std::isfinite(vx_nwu) || !std::isfinite(vy_nwu)) return false;
-
-        const float vx_ned = static_cast<float>(vx_nwu);
-        const float vy_ned = static_cast<float>(-vy_nwu);
-        constexpr float var_v = 0.01f;
-        float covariance[9] = {var_v,0,0, 0,var_v,0, 0,0,var_v};
-
-        mavlink_message_t msg{};
-        mavlink_msg_vision_speed_estimate_pack(
-            system_id, component_id, &msg, time_usec,
-            vx_ned, vy_ned, 0.0f, covariance, 0);
-        return writeMessage(fd, msg);
+        const bool pos_ok = sendPosition(fd, time_usec, valid, x_nwu, y_nwu);
+        const bool vel_ok = sendVelocity(fd, time_usec, valid, quality01, vx_nwu, vy_nwu);
+        return pos_ok && vel_ok;
     }
 
     bool sendDistanceSensor(int fd,

@@ -25,6 +25,7 @@ class App:
         self.stage = "READY"
         self.countdown_end = None
         self.preview_img = None
+        self.direction = tk.StringVar(value="A_TO_B")
 
         self.title = tk.Label(root, text="JT-ZERO GROUND MOTION MVP", font=("DejaVu Sans", 28, "bold"), fg="white", bg="#111111")
         self.title.pack(pady=(18, 10))
@@ -41,14 +42,28 @@ class App:
         self.video = tk.Label(left, text="ВИДЕО ПОЯВИТСЯ ПОСЛЕ ЗАПУСКА", font=("DejaVu Sans", 20, "bold"), fg="white", bg="black")
         self.video.pack(fill="both", expand=True)
 
+        direction_frame = tk.Frame(right, bg="#111111")
+        direction_frame.pack(fill="x", pady=(3, 8))
+        tk.Label(direction_frame, text="НАПРАВЛЕНИЕ ТЕСТА", font=("DejaVu Sans", 14, "bold"), fg="#aaaaaa", bg="#111111").pack()
+        rb_frame = tk.Frame(direction_frame, bg="#111111")
+        rb_frame.pack(pady=4)
+        self.rb_ab = tk.Radiobutton(rb_frame, text="A → B", variable=self.direction, value="A_TO_B",
+                                    command=self.update_ready_text, font=("DejaVu Sans", 16, "bold"),
+                                    fg="white", bg="#111111", selectcolor="#333333", activebackground="#111111", activeforeground="white")
+        self.rb_ab.pack(side="left", padx=20)
+        self.rb_ba = tk.Radiobutton(rb_frame, text="B → A", variable=self.direction, value="B_TO_A",
+                                    command=self.update_ready_text, font=("DejaVu Sans", 16, "bold"),
+                                    fg="white", bg="#111111", selectcolor="#333333", activebackground="#111111", activeforeground="white")
+        self.rb_ba.pack(side="left", padx=20)
+
         self.current_hdr = tk.Label(right, text="ТЕКУЩЕЕ ДЕЙСТВИЕ", font=("DejaVu Sans", 16, "bold"), fg="#aaaaaa", bg="#111111")
         self.current_hdr.pack(pady=(5, 3))
-        self.current = tk.Label(right, text="Подготовьте стенд и нажмите СТАРТ", font=("DejaVu Sans", 25, "bold"), fg="white", bg="#111111", wraplength=520, justify="center")
+        self.current = tk.Label(right, text="Подготовьте стенд в точке A и нажмите СТАРТ", font=("DejaVu Sans", 25, "bold"), fg="white", bg="#111111", wraplength=520, justify="center")
         self.current.pack(pady=10)
 
         self.next_hdr = tk.Label(right, text="СЛЕДУЮЩЕЕ ДЕЙСТВИЕ", font=("DejaVu Sans", 14, "bold"), fg="#aaaaaa", bg="#111111")
         self.next_hdr.pack(pady=(10, 2))
-        self.next = tk.Label(right, text="5 с статика A → движение 500 мм → 5 с статика B", font=("DejaVu Sans", 18), fg="white", bg="#111111", wraplength=520, justify="center")
+        self.next = tk.Label(right, text="5 с статика A → движение A → B 500 мм → 5 с статика B", font=("DejaVu Sans", 18), fg="white", bg="#111111", wraplength=520, justify="center")
         self.next.pack(pady=8)
 
         self.status = tk.Label(right, text="Estimator: остановлен", font=("DejaVu Sans", 15), fg="white", bg="#111111", wraplength=520)
@@ -59,7 +74,7 @@ class App:
         self.stop_btn = tk.Button(right, text="АВАРИЙНЫЙ СТОП", font=("DejaVu Sans", 17, "bold"), height=2, command=self.abort)
         self.stop_btn.pack(fill="x", padx=20, pady=8)
 
-        self.log = scrolledtext.ScrolledText(right, height=11, font=("DejaVu Sans Mono", 9), bg="#1b1b1b", fg="white", insertbackground="white")
+        self.log = scrolledtext.ScrolledText(right, height=9, font=("DejaVu Sans Mono", 9), bg="#1b1b1b", fg="white", insertbackground="white")
         self.log.pack(fill="both", expand=True, padx=10, pady=(8, 8))
 
         self.hint = tk.Label(root, text="Esc — НЕМЕДЛЕННО ОСТАНОВИТЬ И ЗАКРЫТЬ   F11 — полноэкранный режим", font=("DejaVu Sans", 12, "bold"), fg="#bbbbbb", bg="#111111")
@@ -71,6 +86,19 @@ class App:
         self.root.focus_force()
         self.root.after(50, self.poll)
         self.root.after(100, self.poll_preview)
+        self.update_ready_text()
+
+    def endpoints(self):
+        if self.direction.get() == "B_TO_A":
+            return "B", "A"
+        return "A", "B"
+
+    def update_ready_text(self):
+        if self.stage != "READY":
+            return
+        start, end = self.endpoints()
+        self.current.config(text=f"Подготовьте стенд в точке {start} и нажмите СТАРТ")
+        self.next.config(text=f"5 с статика {start} → движение {start} → {end} 500 мм → 5 с статика {end}")
 
     def toggle_fullscreen(self, _=None):
         self.root.attributes("-fullscreen", not bool(self.root.attributes("-fullscreen")))
@@ -81,6 +109,11 @@ class App:
         if button is not None:
             self.main_btn.config(text=button)
         self.main_btn.config(state=("normal" if enabled else "disabled"))
+
+    def lock_direction(self, locked):
+        state = "disabled" if locked else "normal"
+        self.rb_ab.config(state=state)
+        self.rb_ba.config(state=state)
 
     def start_estimator(self):
         try:
@@ -104,18 +137,20 @@ class App:
         self.log_q.put("__PROC_DONE__")
 
     def main_action(self):
+        start, end = self.endpoints()
         if self.stage == "READY":
+            self.lock_direction(True)
             self.start_estimator()
-            self.stage = "STILL_A"
+            self.stage = "STILL_START"
             self.countdown_end = time.monotonic() + 5.0
-            self.set_text("СТАТИКА A — НЕ ДВИГАТЬ БПЛА", "После 5 секунд нажмите НАЧАТЬ ДВИЖЕНИЕ", "ПОДОЖДИТЕ...", False)
+            self.set_text(f"СТАТИКА {start} — НЕ ДВИГАТЬ БПЛА", "После 5 секунд нажмите НАЧАТЬ ДВИЖЕНИЕ", "ПОДОЖДИТЕ...", False)
         elif self.stage == "READY_MOVE":
             self.stage = "MOVE"
-            self.set_text("ДВИЖЕНИЕ A → B: РОВНО 500 ММ", "Не вращать и не приподнимать. В точке B нажмите ДОСТИГ ТОЧКИ B", "ДОСТИГ ТОЧКИ B", True)
+            self.set_text(f"ДВИЖЕНИЕ {start} → {end}: РОВНО 500 ММ", f"Не вращать и не приподнимать. В точке {end} нажмите ДОСТИГ ТОЧКИ {end}", f"ДОСТИГ ТОЧКИ {end}", True)
         elif self.stage == "MOVE":
-            self.stage = "STILL_B"
+            self.stage = "STILL_END"
             self.countdown_end = time.monotonic() + 5.0
-            self.set_text("СТАТИКА B — НЕ ДВИГАТЬ БПЛА", "Через 5 секунд тест завершится автоматически", "ПОДОЖДИТЕ...", False)
+            self.set_text(f"СТАТИКА {end} — НЕ ДВИГАТЬ БПЛА", "Через 5 секунд тест завершится автоматически", "ПОДОЖДИТЕ...", False)
         elif self.stage in ("DONE", "ERROR"):
             self.safe_quit()
 
@@ -169,16 +204,17 @@ class App:
             pass
 
         now = time.monotonic()
-        if self.stage == "STILL_A" and self.countdown_end is not None:
+        start, end = self.endpoints()
+        if self.stage == "STILL_START" and self.countdown_end is not None:
             left = max(0.0, self.countdown_end - now)
-            self.current.config(text=f"СТАТИКА A — НЕ ДВИГАТЬ   {left:0.1f} с")
+            self.current.config(text=f"СТАТИКА {start} — НЕ ДВИГАТЬ   {left:0.1f} с")
             if left <= 0:
                 self.stage = "READY_MOVE"
                 self.countdown_end = None
-                self.set_text("СТАТИКА A ЗАПИСАНА", "Нажмите НАЧАТЬ ДВИЖЕНИЕ и переместите стенд A → B ровно на 500 мм", "НАЧАТЬ ДВИЖЕНИЕ", True)
-        elif self.stage == "STILL_B" and self.countdown_end is not None:
+                self.set_text(f"СТАТИКА {start} ЗАПИСАНА", f"Нажмите НАЧАТЬ ДВИЖЕНИЕ и переместите стенд {start} → {end} ровно на 500 мм", "НАЧАТЬ ДВИЖЕНИЕ", True)
+        elif self.stage == "STILL_END" and self.countdown_end is not None:
             left = max(0.0, self.countdown_end - now)
-            self.current.config(text=f"СТАТИКА B — НЕ ДВИГАТЬ   {left:0.1f} с")
+            self.current.config(text=f"СТАТИКА {end} — НЕ ДВИГАТЬ   {left:0.1f} с")
             if left <= 0:
                 self.countdown_end = None
                 self.stop_estimator()

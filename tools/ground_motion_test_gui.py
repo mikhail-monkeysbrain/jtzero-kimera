@@ -136,6 +136,7 @@ class App:
         env["JTZERO_GM_PREVIEW"] = str(PREVIEW)
         self.proc = subprocess.Popen(
             ["bash", str(RUNNER)], cwd=str(ROOT), env=env,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1, preexec_fn=os.setsid
         )
@@ -146,14 +147,16 @@ class App:
         if not self.proc or self.proc.poll() is not None:
             self.source_status.config(text="SRC: сначала запустите estimator")
             return
-        sig = signal.SIGUSR1 if source_set == 1 else signal.SIGUSR2
         try:
-            os.kill(self.proc.pid, sig)
+            if not self.proc.stdin:
+                raise BrokenPipeError
+            self.proc.stdin.write(f"SRC{source_set}\n")
+            self.proc.stdin.flush()
             self.source_status.config(text=f"SRC: запрос SRC{source_set} отправлен, ждём ACK")
             self.log.insert("end", f"GUI: запрос переключения на SRC{source_set}\n")
             self.log.see("end")
-        except ProcessLookupError:
-            self.source_status.config(text="SRC: estimator уже остановлен")
+        except (BrokenPipeError, OSError):
+            self.source_status.config(text="SRC: управляющий канал estimator недоступен")
 
     def reader(self):
         assert self.proc and self.proc.stdout
@@ -227,7 +230,8 @@ class App:
                     self.csv_path = line.strip()[4:]
                 if "EKF SOURCE SET ACK:" in line:
                     try:
-                        result = int(line.split("result=", 1)[1].strip())
+                        result_text = line.split("result=", 1)[1].split()[0]
+                        result = int(result_text)
                         if result == 0:
                             self.source_status.config(text="SRC: FC принял переключение (ACK ACCEPTED)")
                         else:

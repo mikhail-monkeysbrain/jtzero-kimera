@@ -58,6 +58,7 @@ double envMm(const char*name,double def_mm){const char*s=std::getenv(name);if(!s
 
 }
 
+#ifndef JTZERO_V3_LEVER_NO_MAIN
 int main(int argc,char**argv){
   if(argc<7){std::cerr<<"Использование: "<<argv[0]<<" <camera> <luna> <fc> <csv> <camera_yaml> <camera_offset_mm>\n";return 2;}
   const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3],csvpath=argv[4],yaml=argv[5];const double offset_m=std::stod(argv[6])/1000.0;
@@ -87,3 +88,4 @@ int main(int argc,char**argv){
     cv::destroyAllWindows();std::cout<<"CSV: "<<csvpath<<"\n";return 0;
   }catch(const std::exception&e){std::cerr<<"GROUND MOTION V3 LEVER AB FAIL: "<<e.what()<<"\n";return 1;}
 }
+#endif

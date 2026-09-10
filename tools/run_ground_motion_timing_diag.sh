@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN="/tmp/jtzero_ground_motion_timing_diag"
+CAMERA="${JTZERO_GM_CAMERA:-/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9281_USB_Camera_UC762-video-index0}"
+LUNA="${JTZERO_GM_LUNA:-/dev/ttyAMA2}"
+FC="${JTZERO_GM_FC:-/dev/ttyAMA0}"
+STAMP="$(date +%Y%m%d_%H%M%S)"
+OUT="${JTZERO_GM_OUT:-$HOME/jtzero_runs/${STAMP}_GROUND_MOTION_TIMING.csv}"
+mkdir -p "$(dirname "$OUT")"
+if [[ ! -x "$BIN" || "$ROOT/tools/ground_motion_timing_diag.cpp" -nt "$BIN" ]]; then
+  bash "$ROOT/tools/build_ground_motion_timing_diag.sh" "$BIN"
+fi
+echo "======================================================================"
+echo "JT-ZERO GROUND MOTION TIMING DIAG"
+echo "НЕ ДВИГАТЬ СТЕНД — ТОЛЬКО ИЗМЕРЕНИЕ ВРЕМЕНИ"
+echo "Камера: $CAMERA"
+echo "TF-Luna: $LUNA"
+echo "FC: $FC"
+echo "CSV: $OUT"
+echo "======================================================================"
+"$BIN" "$CAMERA" "$LUNA" "$FC" "$OUT"
+RC=$?
+echo "CSV: $OUT"
+exit "$RC"

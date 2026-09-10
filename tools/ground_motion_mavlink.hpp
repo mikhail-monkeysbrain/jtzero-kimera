@@ -1,6 +1,12 @@
 #pragma once
 // MAVLink publisher для Ground Motion MVP.
 // Отправляет ODOMETRY в ArduPilot. Сам по себе НЕ переключает EKF и НЕ меняет параметры FC.
+//
+// Контракт production MVP: Ground Motion является источником горизонтальной СКОРОСТИ.
+// Позиция x/y остаётся в пакете только для диагностики, но pose covariance = NaN,
+// поэтому она не объявляется достоверным pose measurement. Ориентацию estimator не оценивает:
+// q остаётся null-rotation и EKF должен использовать YAW не из ExternalNav.
+//
 // Координаты estimator: NWU. MAVLink LOCAL_FRD: Y и Z имеют противоположный знак.
 
 #include <algorithm>
@@ -26,6 +32,7 @@ struct GroundMotionMavlinkPublisher {
               double vx_nwu,
               double vy_nwu) const {
         if (fd < 0 || !valid) return false;
+        if (!std::isfinite(vx_nwu) || !std::isfinite(vy_nwu)) return false;
 
         const float x_frd = static_cast<float>(x_nwu);
         const float y_frd = static_cast<float>(-y_nwu);
@@ -33,14 +40,20 @@ struct GroundMotionMavlinkPublisher {
         const float vx_frd = static_cast<float>(vx_nwu);
         const float vy_frd = static_cast<float>(-vy_nwu);
         const float vz_frd = 0.0f;
+
+        // Ground Motion не оценивает attitude. Этот quaternion нельзя выбирать
+        // источником yaw/attitude в EKF. Для нашего EKF source set YAW остаётся Compass.
         const float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
+        // ArduPilot ODOMETRY: pose covariance NaN => pose/angle uncertainty не заявляем.
+        // velocity_covariance сейчас ArduPilot не использует, но оставляем NaN честно.
         float pose_cov[21];
         float vel_cov[21];
         for (float &v : pose_cov) v = NAN;
         for (float &v : vel_cov) v = NAN;
 
-        const int quality_pct = std::clamp(static_cast<int>(std::lround(quality01 * 100.0)), 1, 100);
+        const int quality_pct = std::clamp(
+            static_cast<int>(std::lround(quality01 * 100.0)), 1, 100);
 
         mavlink_message_t msg{};
         mavlink_msg_odometry_pack(

@@ -69,6 +69,18 @@ class App:
         self.status = tk.Label(right, text="Estimator: остановлен", font=("DejaVu Sans", 15), fg="white", bg="#111111", wraplength=520)
         self.status.pack(pady=8)
 
+        source_frame = tk.Frame(right, bg="#111111")
+        source_frame.pack(fill="x", padx=20, pady=(2, 8))
+        tk.Label(source_frame, text="ИСТОЧНИК EKF", font=("DejaVu Sans", 13, "bold"), fg="#aaaaaa", bg="#111111").pack()
+        source_buttons = tk.Frame(source_frame, bg="#111111")
+        source_buttons.pack(fill="x", pady=4)
+        self.src1_btn = tk.Button(source_buttons, text="SRC1 — JT-ZERO OLD", font=("DejaVu Sans", 13, "bold"), command=lambda: self.switch_source(1))
+        self.src1_btn.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self.src2_btn = tk.Button(source_buttons, text="SRC2 — GROUND MOTION", font=("DejaVu Sans", 13, "bold"), command=lambda: self.switch_source(2))
+        self.src2_btn.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        self.source_status = tk.Label(source_frame, text="SRC: не переключался", font=("DejaVu Sans", 12), fg="white", bg="#111111")
+        self.source_status.pack()
+
         self.main_btn = tk.Button(right, text="СТАРТ ТЕСТА", font=("DejaVu Sans", 20, "bold"), height=2, command=self.main_action)
         self.main_btn.pack(fill="x", padx=20, pady=(10, 8))
         self.stop_btn = tk.Button(right, text="АВАРИЙНЫЙ СТОП", font=("DejaVu Sans", 17, "bold"), height=2, command=self.abort)
@@ -129,6 +141,19 @@ class App:
         )
         self.status.config(text=f"Estimator: запущен, PID {self.proc.pid}")
         threading.Thread(target=self.reader, daemon=True).start()
+
+    def switch_source(self, source_set):
+        if not self.proc or self.proc.poll() is not None:
+            self.source_status.config(text="SRC: сначала запустите estimator")
+            return
+        sig = signal.SIGUSR1 if source_set == 1 else signal.SIGUSR2
+        try:
+            os.kill(self.proc.pid, sig)
+            self.source_status.config(text=f"SRC: запрос SRC{source_set} отправлен, ждём ACK")
+            self.log.insert("end", f"GUI: запрос переключения на SRC{source_set}\n")
+            self.log.see("end")
+        except ProcessLookupError:
+            self.source_status.config(text="SRC: estimator уже остановлен")
 
     def reader(self):
         assert self.proc and self.proc.stdout
@@ -200,6 +225,15 @@ class App:
                 self.log.see("end")
                 if line.startswith("csv="):
                     self.csv_path = line.strip()[4:]
+                if "EKF SOURCE SET ACK:" in line:
+                    try:
+                        result = int(line.split("result=", 1)[1].strip())
+                        if result == 0:
+                            self.source_status.config(text="SRC: FC принял переключение (ACK ACCEPTED)")
+                        else:
+                            self.source_status.config(text=f"SRC: FC отклонил команду, ACK result={result}")
+                    except Exception:
+                        self.source_status.config(text="SRC: получен COMMAND_ACK")
         except queue.Empty:
             pass
 

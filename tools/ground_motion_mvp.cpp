@@ -8,6 +8,7 @@
 #include <deque>
 #include <cstdlib>
 #include <cstdio>
+#include <string>
 
 namespace {
 int64_t frameTvToNsMvp(const timeval& tv){return (int64_t)tv.tv_sec*1000000000LL+(int64_t)tv.tv_usec*1000LL;}
@@ -19,7 +20,6 @@ void onSource2(int){g_source_req=2;}
 
 struct FcHistory {
   int fd=-1; std::thread th; std::mutex mu; std::deque<Attitude> hist; uint8_t target_sys=0,target_comp=0;
-  // FC в текущей конфигурации имеет SYSID 42. Companion обязан иметь другой SYSID.
   static constexpr uint8_t self_sys=191;
   static constexpr uint8_t self_comp=MAV_COMP_ID_VISUAL_INERTIAL_ODOMETRY;
   ~FcHistory(){stop();}
@@ -41,13 +41,18 @@ int main(int argc,char**argv){
  if(argc<7){std::cerr<<"Использование: "<<argv[0]<<" <camera> <luna> <fc> <csv> <camera_yaml> <camera_offset_mm>\n";return 2;}
  const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3],csvpath=argv[4],yaml=argv[5];const double offset=std::stod(argv[6])/1000.0;const cv::Vec3d lever_b(0.04916,0.00022,0.0);const char* preview_env=std::getenv("JTZERO_GM_PREVIEW");const std::string preview_path=preview_env?preview_env:"";
  try{CameraCalib calib=loadCameraCalib(yaml);Camera cam;cam.openDev(camdev);LunaReader luna;luna.start(lunadev);FcHistory fc;fc.start(fcdev);GroundMotionMavlinkPublisher mavpub;mavpub.system_id=FcHistory::self_sys;mavpub.component_id=FcHistory::self_comp;uint64_t mav_sent=0,mav_skipped=0,range_sent=0,range_skipped=0;int64_t last_range_send_ns=0;std::ofstream csv(csvpath,std::ios::trunc);csv<<"mono_ns,frame,valid,quality,dx_m,dy_m,vx_mps,vy_mps,x_m,y_m,height_m,luna_m,inliers,scatter_m,att_age_ms,luna_age_ms,roll,pitch,yaw,mav_sent\n";cv::setNumThreads(1);std::signal(SIGINT,onSignal);std::signal(SIGTERM,onSignal);std::signal(SIGUSR1,onSource1);std::signal(SIGUSR2,onSource2);
- cv::Mat prev;Attitude prev_att{};double prev_h=0;int64_t prev_ts=0;double x=0,y=0;uint64_t frame=0;
- while(g_running){if(g_source_req){int s=(int)g_source_req;g_source_req=0;if(!fc.selectSourceSet(s))std::cerr<<"\nEKF SOURCE SET: FC ещё не готов, SRC"<<s<<" не отправлен\n";}pollfd p{cam.fd,POLLIN,0};int pr=poll(&p,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0)continue;while(g_running){v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(cam.fd,VIDIOC_DQBUF,&b)<0){if(errno==EAGAIN)break;fail("VIDIOC_DQBUF");}int64_t now=monoNs(),ts=frameTvToNsMvp(b.timestamp);cv::Mat raw(1,(int)b.bytesused,CV_8UC1,cam.bufs[b.index].p);cv::Mat gray=cv::imdecode(raw,cv::IMREAD_GRAYSCALE);if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");if(gray.empty())continue;++frame;
+ cv::Mat prev;Attitude prev_att{};double prev_h=0;int64_t prev_ts=0;double x=0,y=0;uint64_t frame=0;std::string ctrl_buf;
+ while(g_running){
+   // Надёжный управляющий канал GUI -> estimator через stdin. Сигналы оставлены как fallback.
+   pollfd cp{STDIN_FILENO,POLLIN,0};
+   if(poll(&cp,1,0)>0 && (cp.revents&POLLIN)){
+     char cb[64];ssize_t cn=read(STDIN_FILENO,cb,sizeof(cb));
+     if(cn>0){ctrl_buf.append(cb,(size_t)cn);size_t pos=0;while((pos=ctrl_buf.find('\n'))!=std::string::npos){std::string cmd=ctrl_buf.substr(0,pos);ctrl_buf.erase(0,pos+1);if(cmd=="SRC1")g_source_req=1;else if(cmd=="SRC2")g_source_req=2;}}
+   }
+   if(g_source_req){int s=(int)g_source_req;g_source_req=0;if(!fc.selectSourceSet(s))std::cerr<<"\nEKF SOURCE SET: FC ещё не готов, SRC"<<s<<" не отправлен\n";}
+   pollfd p{cam.fd,POLLIN,0};int pr=poll(&p,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0)continue;while(g_running){v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(cam.fd,VIDIOC_DQBUF,&b)<0){if(errno==EAGAIN)break;fail("VIDIOC_DQBUF");}int64_t now=monoNs(),ts=frameTvToNsMvp(b.timestamp);cv::Mat raw(1,(int)b.bytesused,CV_8UC1,cam.bufs[b.index].p);cv::Mat gray=cv::imdecode(raw,cv::IMREAD_GRAYSCALE);if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");if(gray.empty())continue;++frame;
  if(!preview_path.empty() && frame%5==0){const std::string tmp=preview_path+".tmp.pgm";if(cv::imwrite(tmp,gray))std::rename(tmp.c_str(),preview_path.c_str());}
  double lm=0;int strength=0;int64_t lns=0;Attitude att{};double att_age=1e9;bool hl=luna.latest(&lm,&strength,&lns),ha=fc.at(ts,&att,&att_age);double lage=hl?(now-lns)*1e-6:1e9,h=0,down=0;
- // TF-Luna -> FC RangeFinder. Публикуем независимо от валидности optical flow,
- // но только свежий замер и не чаще 20 Гц. Один и тот же FC fd остаётся
- // единственным двунаправленным MAVLink-каналом процесса.
  if(hl&&lage<200&&(last_range_send_ns==0||now-last_range_send_ns>=50000000LL)){
    const bool rs=mavpub.sendDistanceSensor(fc.fd,(uint32_t)(now/1000000LL),lm);
    last_range_send_ns=now;

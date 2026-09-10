@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -24,7 +25,7 @@ struct GroundMotionMavlinkPublisher {
               double y_nwu,
               double vx_nwu,
               double vy_nwu) const {
-        if (fd < 0 || !valid) return false; // fail-closed: плохие оценки не публикуем
+        if (fd < 0 || !valid) return false;
 
         const float x_frd = static_cast<float>(x_nwu);
         const float y_frd = static_cast<float>(-y_nwu);
@@ -63,7 +64,6 @@ struct GroundMotionMavlinkPublisher {
             const ssize_t k = ::write(fd, buf + off, n - off);
             if (k > 0) { off += static_cast<size_t>(k); continue; }
             if (k < 0 && errno == EINTR) continue;
-            // Не блокируем vision loop из-за забитого serial TX.
             if (k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return false;
             return false;
         }

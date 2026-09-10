@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN="${JTZERO_GM_BIN:-/tmp/jtzero_ground_motion_mvp}"
+CAM="${JTZERO_GM_CAMERA:-/dev/video8}"
+LUNA="${JTZERO_GM_LUNA:-/dev/ttyAMA2}"
+FC="${JTZERO_GM_FC:-/dev/ttyAMA0}"
+YAML="${JTZERO_GM_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraParams.yaml}"
+OFFSET="${JTZERO_GM_CAMERA_OFFSET_MM:-0}"
+RUN_DIR="${JTZERO_RUN_DIR:-/home/vio/jtzero_runs}"
+mkdir -p "$RUN_DIR"
+STAMP="$(date +%Y%m%d_%H%M%S)"
+CSV="$RUN_DIR/${STAMP}_GROUND_MOTION_MVP.csv"
+[[ -x "$BIN" ]] || "$ROOT/tools/build_ground_motion_mvp.sh" "$BIN"
+echo "JT-ZERO Ground Motion MVP"
+echo "camera=$CAM luna=$LUNA fc=$FC"
+echo "csv=$CSV"
+exec "$BIN" "$CAM" "$LUNA" "$FC" "$CSV" "$YAML" "$OFFSET"

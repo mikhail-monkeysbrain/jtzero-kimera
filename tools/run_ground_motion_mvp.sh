@@ -2,7 +2,38 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${JTZERO_GM_BIN:-/tmp/jtzero_ground_motion_mvp}"
-CAM="${JTZERO_GM_CAMERA:-/dev/video8}"
+
+find_ov9281_camera() {
+  local byid="/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9281_USB_Camera_UC762-video-index0"
+  if [[ -e "$byid" ]]; then
+    readlink -f "$byid"
+    return 0
+  fi
+
+  local dev
+  while read -r dev; do
+    [[ -n "$dev" ]] || continue
+    if v4l2-ctl -d "$dev" --list-formats-ext 2>/dev/null | grep -q "'MJPG'"; then
+      echo "$dev"
+      return 0
+    fi
+  done < <(
+    v4l2-ctl --list-devices 2>/dev/null |
+      awk '/Arducam OV9281 USB Camera/{found=1; next} found && /^[[:space:]]*\/dev\/video/{print $1} found && NF==0{exit}'
+  )
+
+  return 1
+}
+
+if [[ -n "${JTZERO_GM_CAMERA:-}" ]]; then
+  CAM="$JTZERO_GM_CAMERA"
+else
+  CAM="$(find_ov9281_camera)" || {
+    echo "ОШИБКА: OV9281 capture node не найден" >&2
+    exit 1
+  }
+fi
+
 LUNA="${JTZERO_GM_LUNA:-/dev/ttyAMA2}"
 FC="${JTZERO_GM_FC:-/dev/ttyAMA0}"
 YAML="${JTZERO_GM_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraParams.yaml}"

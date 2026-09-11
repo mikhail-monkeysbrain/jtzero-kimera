@@ -39,11 +39,32 @@ def read_frame_times(path: Path):
     return out
 
 
+def _normalise_detail_row(row):
+    """Нормализует replay_detail.csv старого диагностического формата.
+
+    В раннем deterministic replay строки DECODE/SENSORS/NO_PREV содержали на одно
+    числовое поле меньше заголовка: отсутствовал нулевой dy_m перед x_m/y_m.
+    csv.DictReader поэтому сдвигал x/y влево и оставлял y_m=None.
+    Это дефект только диагностического CSV; сам replay result от него не менялся.
+    """
+    if row.get("y_m") is None:
+        # Старый короткий формат:
+        #   ... dx_m, <x фактически в dy_m>, <y фактически в x_m>, y_m=None
+        row["y_m"] = row.get("x_m")
+        row["x_m"] = row.get("dy_m")
+        row["dy_m"] = "0"
+    return row
+
+
 def read_detail(path: Path):
     by_scenario = {"BASELINE_CURRENT": {}, "BASELINE_ANCHOR": {}}
+    short_rows = 0
     with path.open(newline="") as f:
         r = csv.DictReader(f)
-        for row in r:
+        for raw in r:
+            if raw.get("y_m") is None:
+                short_rows += 1
+            row = _normalise_detail_row(raw)
             sc = row["scenario"]
             if sc not in by_scenario:
                 continue
@@ -57,7 +78,7 @@ def read_detail(path: Path):
                 "x": float(row["x_m"]),
                 "y": float(row["y_m"]),
             }
-    return by_scenario
+    return by_scenario, short_rows
 
 
 def median_state(rows, frame_times, t0, t1):
@@ -88,7 +109,7 @@ def main():
     d = Path(sys.argv[1])
     events = read_events(d / "events.csv")
     frame_times = read_frame_times(d / "frames.csv")
-    detail = read_detail(d / "replay_detail.csv")
+    detail, short_rows = read_detail(d / "replay_detail.csv")
     cur = detail["BASELINE_CURRENT"]
     anc = detail["BASELINE_ANCHOR"]
 
@@ -111,6 +132,8 @@ def main():
     endpoint_delta = vec(anc_move, cur_move)
 
     print("===== NATURAL INVALIDS: BASELINE CURRENT vs ANCHOR =====")
+    if short_rows:
+        print(f"Примечание: нормализовано коротких legacy detail-строк: {short_rows}")
     print(f"MOVE frames={len(move_frames)}")
     print(f"CURRENT move=({cur_move[0]*1000:+.2f},{cur_move[1]*1000:+.2f}) mm |d|={norm(cur_move)*1000:.2f} mm")
     print(f"ANCHOR  move=({anc_move[0]*1000:+.2f},{anc_move[1]*1000:+.2f}) mm |d|={norm(anc_move)*1000:.2f} mm")

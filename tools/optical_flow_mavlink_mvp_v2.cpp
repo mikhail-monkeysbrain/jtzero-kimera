@@ -312,10 +312,16 @@ int main(int argc,char** argv){
   const double focal_scale=std::stod(argv[6]);
   bool guided175=false;
   bool require_armed=false;
+  double bench_height_override=0.0;
   for(int i=7;i<argc;i++){
     const std::string a=argv[i];
     if(a=="--guided-175") guided175=true;
     else if(a=="--require-armed") require_armed=true;
+    else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
+  }
+  if(bench_height_override!=0.0 && !(bench_height_override>=0.55 && bench_height_override<=2.0)){
+    std::cerr<<"ОШИБКА: --bench-height разрешён только 0.55..2.0 м для bench-диагностики\n";
+    return 2;
   }
   if(!(focal_scale>0.5&&focal_scale<2.0)){
     std::cerr<<"ОШИБКА: focal_scale вне разумного диапазона 0.5..2.0\n";
@@ -335,7 +341,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,frame,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
+    csv<<"mono_ns,frame,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -416,6 +422,12 @@ int main(int argc,char** argv){
              <<" (focal_scale="<<focal_scale<<")\n"
              <<"ВАЖНО: publisher выдаёт body-FRD flow; ожидается FLOW_ORIENT_YAW=0, FLOW_OPTIONS=0\n"
              <<"DIAG: запрошен EKF_STATUS_REPORT 5 Hz; LOCAL_POSITION_NED 20 Hz\n";
+    if(bench_height_override>0.0){
+      std::cerr<<"BENCH HEIGHT OVERRIDE: FC получает "<<bench_height_override
+               <<" м вместо реального TF-Luna. Flow-rate масштабируется real/fake,\n"
+               <<"чтобы метрическая скорость оставалась соответствующей реальной высоте.\n"
+               <<"ЭТО ТОЛЬКО СТЕНДОВАЯ ДИАГНОСТИКА, НЕ FLIGHT-РЕЖИМ.\n";
+    }
 
     // Переводим AP_OpticalFlow_MAV в high-precision flow_rate mode.
     // quality=0: это не валидное aiding measurement.
@@ -442,8 +454,9 @@ int main(int argc,char** argv){
         const bool hl=luna.latest(&lm,&strength,&lns);
         const double lage=hl?(now-lns)*1e-6:1e9;
         bool range_sent=false;
+        const double range_to_fc=(bench_height_override>0.0)?bench_height_override:lm;
         if(hl&&lage<200&&(last_range_send_ns==0||now-last_range_send_ns>=50000000LL)){
-          range_sent=range_pub.sendDistanceSensor(fc.fd,(uint32_t)(now/1000000LL),lm);
+          range_sent=range_pub.sendDistanceSensor(fc.fd,(uint32_t)(now/1000000LL),range_to_fc);
           last_range_send_ns=now;
           if(range_sent)++range_sent_total;
         }
@@ -453,10 +466,16 @@ int main(int argc,char** argv){
         if(!prev.empty())s=estimateRawFlow(prev,gray,dt,calib);
 
         bool flow_sent=false; uint8_t quality=0;
+        double flow_send_x=s.flow_body_x, flow_send_y=s.flow_body_y;
+        if(s.valid && bench_height_override>0.0 && hl && lm>0.05){
+          const double k=lm/bench_height_override;
+          flow_send_x*=k;
+          flow_send_y*=k;
+        }
         if(s.valid){
           quality=255;
           flow_sent=sendOpticalFlow(fc.fd,(uint64_t)(now/1000),
-            (float)s.flow_body_x,(float)s.flow_body_y,quality);
+            (float)flow_send_x,(float)flow_send_y,quality);
           if(flow_sent)++flow_sent_total;
         } else if(!prev.empty()){
           ++flow_invalid_total;
@@ -483,7 +502,7 @@ int main(int argc,char** argv){
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','
            <<s.flow_cam_x<<','<<s.flow_cam_y<<','<<s.flow_body_x<<','<<s.flow_body_y<<','
-           <<(int)quality<<','<<lm<<','<<lage<<','<<(flow_sent?1:0)<<','<<(range_sent?1:0)<<','
+           <<(int)quality<<','<<lm<<','<<lage<<','<<range_to_fc<<','<<flow_send_x<<','<<flow_send_y<<','<<(flow_sent?1:0)<<','<<(range_sent?1:0)<<','
            <<(arm_ok?(arm_now?1:0):-1)<<','
            <<(efresh?1:0)<<','<<ep.x<<','<<ep.y<<','<<ep.z<<','<<ep.vx<<','<<ep.vy<<','<<ep.vz<<','<<eage<<','<<ec<<','
            <<(esfresh?1:0)<<','<<es.flags<<','<<esage<<','<<esc<<','

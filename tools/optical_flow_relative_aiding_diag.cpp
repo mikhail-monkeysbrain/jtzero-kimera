@@ -64,7 +64,7 @@ void forcePrimarySourceSet(int fd,uint8_t sys,uint8_t comp){
   mavlink_message_t m{};
   mavlink_msg_command_long_pack(kSelfSys,kSelfComp,&m,sys,comp,
     MAV_CMD_SET_EKF_SOURCE_SET,0,
-    1.0f,0,0,0,0,0,0); // param1=1 => PRIMARY source set
+    1.0f,0,0,0,0,0,0);
   (void)writeMsg(fd,m);
 }
 
@@ -124,12 +124,14 @@ int main(int argc,char**argv){
   forcePrimarySourceSet(fd,sys,comp);
   std::cout<<"RUNTIME: отправлен MAV_CMD_SET_EKF_SOURCE_SET param1=1 (PRIMARY)\n";
 
-  // Переводим MAV backend в high-precision flow_rate mode.
   sendFlow(fd,1.0e-6f,0.0f,0);
 
   uint64_t tx=0,fc_of=0,ekf_n=0,local_n=0; bool source_ack=false; uint8_t source_ack_result=255;
   mavlink_ekf_status_report_t last_ekf{}; mavlink_local_position_ned_t last_local{}; std::map<std::string,float> pv;
-  uint16_t prev_flags=0xFFFF; bool ever_relative=false;
+  uint16_t prev_flags=0xFFFF;
+  bool ever_non_constpos=false;
+  bool statustext_relative=false;
+  bool statustext_fusing_flow=false;
 
   const auto t0=Clock::now(); auto next_tx=Clock::now(); auto next_print=Clock::now()+std::chrono::seconds(5);
   while(elapsed(t0)<duration){
@@ -150,7 +152,7 @@ int main(int argc,char**argv){
                        <<" ["<<flagsText(last_ekf.flags)<<"]\n";
               prev_flags=last_ekf.flags;
             }
-            if((last_ekf.flags&8) && !(last_ekf.flags&128))ever_relative=true;
+            if(!(last_ekf.flags&128)) ever_non_constpos=true;
           }
           else if(msg.msgid==MAVLINK_MSG_ID_LOCAL_POSITION_NED){mavlink_msg_local_position_ned_decode(&msg,&last_local);++local_n;}
           else if(msg.msgid==MAVLINK_MSG_ID_PARAM_VALUE){
@@ -164,6 +166,8 @@ int main(int argc,char**argv){
           }
           else if(msg.msgid==MAVLINK_MSG_ID_STATUSTEXT){
             mavlink_statustext_t q{};mavlink_msg_statustext_decode(&msg,&q); const auto s=statustextText(q);
+            if(s.find("started relative aiding")!=std::string::npos) statustext_relative=true;
+            if(s.find("fusing optical flow")!=std::string::npos) statustext_fusing_flow=true;
             if(s.find("EKF")!=std::string::npos || s.find("aiding")!=std::string::npos || s.find("flow")!=std::string::npos)
               std::cout<<"STATUSTEXT t="<<std::fixed<<std::setprecision(3)<<elapsed(t0)<<"s sev="<<(int)q.severity<<" "<<s<<"\n";
           }
@@ -178,13 +182,19 @@ int main(int argc,char**argv){
     }
   }
 
+  const bool aiding_proven = statustext_relative && statustext_fusing_flow && ever_non_constpos && local_n>0;
+
   std::cout<<"\n===== PARAMS =====\n";
   for(const char*n:params){auto it=pv.find(n);std::cout<<n<<" = ";if(it==pv.end())std::cout<<"NO_RESPONSE\n";else std::cout<<it->second<<"\n";}
 
   std::cout<<"\n===== VERDICT =====\n";
   std::cout<<"SOURCE_SET_PRIMARY_ACK="<<(source_ack?"YES":"NO")<<" result="<<(int)source_ack_result<<"\n";
   std::cout<<"FC_OPTICAL_FLOW_ECHO="<<(fc_of?"YES":"NO")<<"\n";
-  std::cout<<"AID_RELATIVE_OBSERVED="<<(ever_relative?"YES":"NO")<<"\n";
+  std::cout<<"STATUSTEXT_RELATIVE_AIDING="<<(statustext_relative?"YES":"NO")<<"\n";
+  std::cout<<"STATUSTEXT_FUSING_OPTICAL_FLOW="<<(statustext_fusing_flow?"YES":"NO")<<"\n";
+  std::cout<<"EKF_LEFT_CONSTPOS="<<(ever_non_constpos?"YES":"NO")<<"\n";
+  std::cout<<"LOCAL_POSITION_NED_OBSERVED="<<(local_n?"YES":"NO")<<" count="<<local_n<<"\n";
+  std::cout<<"AID_RELATIVE_PROVEN="<<(aiding_proven?"YES":"NO")<<"\n";
   if(ekf_n)std::cout<<"FINAL_EKF flags=0x"<<std::hex<<last_ekf.flags<<std::dec<<" ["<<flagsText(last_ekf.flags)<<"]\n";
   std::cout<<"tx_flow="<<tx<<" fc_of="<<fc_of<<" ekf="<<ekf_n<<" local="<<local_n<<"\n";
   ::close(fd);return 0;

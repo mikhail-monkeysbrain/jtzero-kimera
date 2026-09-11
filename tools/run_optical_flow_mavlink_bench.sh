@@ -83,6 +83,6 @@ CSV:         $CSV
 ======================================================================
 EOF
 
-read -r -p "Параметры проверены, EKF origin после reboot установлен. Запустить? [Enter] " _
+read -r -p "Параметры проверены. EKF origin для OpticalFlow relative aiding не требуется. Запустить? [Enter] " _
 
 exec "$BIN" "$CAMERA" "$LUNA" "$FC" "$CSV" "$CAMERA_YAML" "$FOCAL_SCALE"

@@ -10,13 +10,6 @@ CAMERA_YAML="${JTZERO_FLOW_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraPar
 # Независимая ChArUco physical-height оценка текущей OV9281 дала k=1.0925.
 # Можно переопределить JTZERO_FLOW_FOCAL_SCALE=1.0 для raw saved-K сравнения.
 FOCAL_SCALE="${JTZERO_FLOW_FOCAL_SCALE:-1.0925}"
-GUIDED_MODE="${JTZERO_FLOW_GUIDED_MODE:-guided-175}"
-EXTRA_ARGS=(--guided-175)
-if [[ "$GUIDED_MODE" == "armed" ]]; then
-  EXTRA_ARGS+=(--require-armed)
-elif [[ "$GUIDED_MODE" == "armed-gate-open" ]]; then
-  EXTRA_ARGS+=(--require-armed --bench-height 0.60 --remote-log "$RUN_DIR/remote_ekf.bin")
-fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="${JTZERO_FLOW_RUN_DIR:-/home/vio/jtzero_runs/${STAMP}_OPTICAL_FLOW_MAVLINK_BENCH}"
@@ -24,6 +17,14 @@ BIN="$RUN_DIR/optical_flow_mavlink_mvp"
 CSV="$RUN_DIR/optical_flow_mavlink.csv"
 BUILD_LOG="$RUN_DIR/build.log"
 mkdir -p "$RUN_DIR"
+
+GUIDED_MODE="${JTZERO_FLOW_GUIDED_MODE:-guided-175}"
+EXTRA_ARGS=(--guided-175)
+if [[ "$GUIDED_MODE" == "armed" ]]; then
+  EXTRA_ARGS+=(--require-armed)
+elif [[ "$GUIDED_MODE" == "armed-gate-open" ]]; then
+  EXTRA_ARGS+=(--require-armed --bench-height 0.60 --remote-log "$RUN_DIR/remote_ekf.bin")
+fi
 
 MAVLINK_INC=""
 for d in "$KIMERA_ROOT/third_party/mavlink" "$KIMERA_ROOT/third_party/mavlink/include/mavlink/v2.0" "/usr/local/include/mavlink/v2.0"; do

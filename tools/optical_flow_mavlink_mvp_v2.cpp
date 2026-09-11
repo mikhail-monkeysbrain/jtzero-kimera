@@ -45,6 +45,9 @@ struct FlowFc {
   FlowEkfStatus ekf{};
   uint64_t local_count=0;
   uint64_t ekf_count=0;
+  bool armed=false;
+  bool heartbeat_valid=false;
+  int64_t heartbeat_recv_ns=0;
   uint8_t target_sys=0,target_comp=0;
 
   static constexpr uint8_t self_sys=191;
@@ -101,7 +104,16 @@ struct FlowFc {
           if(!mavlink_parse_char(MAVLINK_COMM_0,buf[i],&m,&st))continue;
           if(m.msgid!=MAVLINK_MSG_ID_HEARTBEAT)continue;
           mavlink_heartbeat_t hb{}; mavlink_msg_heartbeat_decode(&m,&hb);
-          if(hb.autopilot==MAV_AUTOPILOT_ARDUPILOTMEGA){sys=m.sysid;comp=m.compid;break;}
+          if(hb.autopilot==MAV_AUTOPILOT_ARDUPILOTMEGA){
+            sys=m.sysid; comp=m.compid;
+            {
+              std::lock_guard<std::mutex> l(mu);
+              armed=(hb.base_mode & MAV_MODE_FLAG_SAFETY_ARMED)!=0;
+              heartbeat_valid=true;
+              heartbeat_recv_ns=monoNs();
+            }
+            break;
+          }
         }
       }
 
@@ -121,7 +133,15 @@ struct FlowFc {
           for(ssize_t i=0;i<n;i++){
             if(!mavlink_parse_char(MAVLINK_COMM_0,buf[i],&m,&st))continue;
             if(m.sysid!=sys)continue;
-            if(m.msgid==MAVLINK_MSG_ID_LOCAL_POSITION_NED){
+            if(m.msgid==MAVLINK_MSG_ID_HEARTBEAT){
+              mavlink_heartbeat_t hb{}; mavlink_msg_heartbeat_decode(&m,&hb);
+              if(hb.autopilot==MAV_AUTOPILOT_ARDUPILOTMEGA){
+                std::lock_guard<std::mutex> l(mu);
+                armed=(hb.base_mode & MAV_MODE_FLAG_SAFETY_ARMED)!=0;
+                heartbeat_valid=true;
+                heartbeat_recv_ns=monoNs();
+              }
+            } else if(m.msgid==MAVLINK_MSG_ID_LOCAL_POSITION_NED){
               mavlink_local_position_ned_t q{}; mavlink_msg_local_position_ned_decode(&m,&q);
               std::lock_guard<std::mutex> l(mu);
               local.x=q.x; local.y=q.y; local.z=q.z;
@@ -150,6 +170,14 @@ struct FlowFc {
     if(!local.valid)return false;
     *out=local;
     if(age_ms)*age_ms=(monoNs()-local.recv_ns)*1e-6;
+    return true;
+  }
+
+  bool latestArm(bool* out,double* age_ms=nullptr){
+    std::lock_guard<std::mutex> l(mu);
+    if(!heartbeat_valid)return false;
+    *out=armed;
+    if(age_ms)*age_ms=(monoNs()-heartbeat_recv_ns)*1e-6;
     return true;
   }
 
@@ -282,7 +310,13 @@ int main(int argc,char** argv){
   const std::string camdev=argv[1], lunadev=argv[2], fcdev=argv[3];
   const std::string csvpath=argv[4], yaml=argv[5];
   const double focal_scale=std::stod(argv[6]);
-  const bool guided175=(argc>=8 && std::string(argv[7])=="--guided-175");
+  bool guided175=false;
+  bool require_armed=false;
+  for(int i=7;i<argc;i++){
+    const std::string a=argv[i];
+    if(a=="--guided-175") guided175=true;
+    else if(a=="--require-armed") require_armed=true;
+  }
   if(!(focal_scale>0.5&&focal_scale<2.0)){
     std::cerr<<"ОШИБКА: focal_scale вне разумного диапазона 0.5..2.0\n";
     return 2;
@@ -301,7 +335,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,frame,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,flow_sent,range_sent,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
+    csv<<"mono_ns,frame,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -317,6 +351,8 @@ int main(int argc,char** argv){
       guide_thread=std::thread([&]{
         // Даём стартовым строкам camera/FC напечататься до пошаговой инструкции.
         std::this_thread::sleep_for(std::chrono::milliseconds(750));
+        bool arm=false; double arm_age=1e9;
+        const bool have_arm=fc.latestArm(&arm,&arm_age) && arm_age<2500.0;
         std::cerr<<"\n======================================================================\n"
                  <<"GUIDED TEST — ФИЗИЧЕСКИЙ СДВИГ 175 мм\n"
                  <<"======================================================================\n"
@@ -327,7 +363,14 @@ int main(int argc,char** argv){
                  <<"5. Только после полной остановки нажмите Enter.\n"
                  <<"6. Затем аппарат снова НЕ ТРОГАТЬ 5 секунд — тест завершится сам.\n"
                  <<"======================================================================\n"
-                 <<"СТАТИКА 5 секунд. НЕ ДВИГАТЬ.\n";
+                 <<"ARM STATE: "<<(have_arm?(arm?"ARMED":"DISARMED"):"NO_DATA")<<"\n";
+        if(require_armed && (!have_arm || !arm)){
+          std::cerr<<"ОШИБКА: этот A/B-прогон требует ARMED.\n"
+                   <<"Программа сама НЕ армит FC. Сначала безопасно подготовьте аппарат,\n"
+                   <<"уберите пропеллеры/исключите тягу, армируйте штатным способом и запустите тест снова.\n";
+          g_running=false; return;
+        }
+        std::cerr<<"СТАТИКА 5 секунд. НЕ ДВИГАТЬ.\n";
         std::this_thread::sleep_for(std::chrono::seconds(5));
         double age=0; uint64_t count=0;
         if(!fc.latestLocal(&guide_start,&age,&count) || age>500){
@@ -421,11 +464,15 @@ int main(int argc,char** argv){
         const bool esok=fc.latestEkf(&es,&esage,&esc);
         const bool esfresh=esok&&esage<1000.0;
 
+        bool arm_now=false; double arm_age_now=1e9;
+        const bool arm_ok=fc.latestArm(&arm_now,&arm_age_now) && arm_age_now<2500.0;
+
         csv<<now<<','<<frame<<','<<(s.valid?1:0)<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','
            <<s.flow_cam_x<<','<<s.flow_cam_y<<','<<s.flow_body_x<<','<<s.flow_body_y<<','
            <<(int)quality<<','<<lm<<','<<lage<<','<<(flow_sent?1:0)<<','<<(range_sent?1:0)<<','
+           <<(arm_ok?(arm_now?1:0):-1)<<','
            <<(efresh?1:0)<<','<<ep.x<<','<<ep.y<<','<<ep.z<<','<<ep.vx<<','<<ep.vy<<','<<ep.vz<<','<<eage<<','<<ec<<','
            <<(esfresh?1:0)<<','<<es.flags<<','<<esage<<','<<esc<<','
            <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance<<'\n';

@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <sstream>
+#include <atomic>
 
 namespace {
 
@@ -281,6 +282,7 @@ int main(int argc,char** argv){
   const std::string camdev=argv[1], lunadev=argv[2], fcdev=argv[3];
   const std::string csvpath=argv[4], yaml=argv[5];
   const double focal_scale=std::stod(argv[6]);
+  const bool guided175=(argc>=8 && std::string(argv[7])=="--guided-175");
   if(!(focal_scale>0.5&&focal_scale<2.0)){
     std::cerr<<"ОШИБКА: focal_scale вне разумного диапазона 0.5..2.0\n";
     return 2;
@@ -307,6 +309,56 @@ int main(int argc,char** argv){
     cv::Mat prev; int64_t prev_ts=0; uint64_t frame=0;
     uint64_t flow_sent_total=0,flow_invalid_total=0,range_sent_total=0;
     int64_t last_range_send_ns=0;
+
+    std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=done
+    FlowFcLocal guide_start{}, guide_end{};
+    std::thread guide_thread;
+    if(guided175){
+      guide_thread=std::thread([&]{
+        std::cerr<<"\n======================================================================\n"
+                 <<"GUIDED TEST — ФИЗИЧЕСКИЙ СДВИГ 175 мм\n"
+                 <<"======================================================================\n"
+                 <<"1. НЕ ДВИГАЙТЕ аппарат. Сейчас автоматически собирается 5 с статики.\n"
+                 <<"2. После команды ДВИГАЙТЕ сдвиньте ВЕСЬ аппарат строго по столу на 175 мм.\n"
+                 <<"3. НЕ вращайте, не наклоняйте и не приподнимайте аппарат.\n"
+                 <<"4. После сдвига полностью остановите аппарат.\n"
+                 <<"5. Только после полной остановки нажмите Enter.\n"
+                 <<"6. Затем аппарат снова НЕ ТРОГАТЬ 5 секунд — тест завершится сам.\n"
+                 <<"======================================================================\n"
+                 <<"СТАТИКА 5 секунд. НЕ ДВИГАТЬ.\n";
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        double age=0; uint64_t count=0;
+        if(!fc.latestLocal(&guide_start,&age,&count) || age>500){
+          std::cerr<<"\nОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED перед движением.\n";
+          g_running=false; return;
+        }
+        guide_stage=1;
+        std::cerr<<"\n>>> ДВИГАЙТЕ: сдвиньте аппарат на 175 мм строго по столу.\n"
+                 <<">>> После полной остановки нажмите Enter.\n";
+        std::string line; std::getline(std::cin,line);
+        guide_stage=2;
+        std::cerr<<"\n>>> СТОП. НЕ ТРОГАТЬ аппарат 5 секунд. Идёт финальная статика...\n";
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        if(!fc.latestLocal(&guide_end,&age,&count) || age>500){
+          std::cerr<<"\nОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED после движения.\n";
+          g_running=false; return;
+        }
+        guide_stage=3;
+        const double dn=guide_end.x-guide_start.x, de=guide_end.y-guide_start.y;
+        const double dist=std::hypot(dn,de);
+        std::cerr<<"\n======================================================================\n"
+                 <<"GUIDED 175 мм — РЕЗУЛЬТАТ\n"
+                 <<"======================================================================\n"
+                 <<"START N/E = ("<<guide_start.x<<", "<<guide_start.y<<") m\n"
+                 <<"END   N/E = ("<<guide_end.x<<", "<<guide_end.y<<") m\n"
+                 <<"DELTA N/E = ("<<dn<<", "<<de<<") m\n"
+                 <<"EKF horizontal displacement = "<<dist*1000.0<<" mm\n"
+                 <<"Target = 175.0 mm\n"
+                 <<"Error  = "<<(dist*1000.0-175.0)<<" mm ("<<((dist/0.175)-1.0)*100.0<<" %)\n"
+                 <<"======================================================================\n";
+        g_running=false;
+      });
+    }
 
     std::cerr<<"JT-ZERO OPTICAL FLOW MAVLINK MVP v2\n"
              <<"camera="<<camdev<<"\n"
@@ -402,7 +454,9 @@ int main(int argc,char** argv){
       }
     }
 
-    g_running=false; fc.stop(); luna.stop();
+    g_running=false;
+    if(guide_thread.joinable()) guide_thread.join();
+    fc.stop(); luna.stop();
     std::cerr<<"\nОстановлено. CSV: "<<csvpath
              <<" flow_sent="<<flow_sent_total
              <<" invalid="<<flow_invalid_total

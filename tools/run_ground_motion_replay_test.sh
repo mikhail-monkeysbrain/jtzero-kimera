@@ -14,6 +14,7 @@ STAMP="$(date +%Y%m%d_%H%M%S)"
 OUTDIR="${JTZERO_GM_REPLAY_OUT:-$HOME/jtzero_runs/${STAMP}_GROUND_MOTION_REPLAY_DATASET}"
 EVENTS="$OUTDIR/events.csv"
 CONSOLE="$OUTDIR/record_console.log"
+BUILD_LOG="$OUTDIR/build.log"
 SUMMARY="$OUTDIR/replay_summary.csv"
 DETAIL="$OUTDIR/replay_detail.csv"
 
@@ -55,17 +56,31 @@ if [[ -z "$MAVLINK_DIR" ]]; then
 fi
 
 echo "Собираю diagnostic recorder и deterministic replay..."
-g++ -std=c++17 -O2 -DNDEBUG -pthread \
+: > "$BUILD_LOG"
+
+if ! g++ -std=c++17 -O2 -DNDEBUG -pthread -Wno-address-of-packed-member \
   $(pkg-config --cflags opencv4) -I"$MAVLINK_DIR" \
   "$ROOT/tools/ground_motion_replay_record_diag.cpp" \
   -o "$REC_BIN" \
-  $(pkg-config --libs opencv4) -lpthread
+  $(pkg-config --libs opencv4) -lpthread >>"$BUILD_LOG" 2>&1; then
+  echo "ОШИБКА: не собрался diagnostic recorder. Последние строки:"
+  tail -80 "$BUILD_LOG"
+  echo "Полный лог: $BUILD_LOG"
+  exit 1
+fi
 
-g++ -std=c++17 -O2 -DNDEBUG -pthread \
+if ! g++ -std=c++17 -O2 -DNDEBUG -pthread -Wno-address-of-packed-member \
   $(pkg-config --cflags opencv4) -I"$MAVLINK_DIR" \
-  "$ROOT/tools/ground_motion_replay_compare_validmask.cpp" \
+  "$ROOT/tools/ground_motion_replay_compare_validmask_v2.cpp" \
   -o "$REPLAY_BIN" \
-  $(pkg-config --libs opencv4) -lpthread
+  $(pkg-config --libs opencv4) -lpthread >>"$BUILD_LOG" 2>&1; then
+  echo "ОШИБКА: не собрался deterministic replay. Последние строки:"
+  tail -80 "$BUILD_LOG"
+  echo "Полный лог: $BUILD_LOG"
+  exit 1
+fi
+
+echo "Сборка OK. Подробный build log: $BUILD_LOG"
 
 printf 'mono_ns,event,note\n' > "$EVENTS"
 
@@ -172,4 +187,5 @@ echo "EVENTS:  $EVENTS"
 echo "SUMMARY: $SUMMARY"
 echo "DETAIL:  $DETAIL"
 echo "CONSOLE: $CONSOLE"
+echo "BUILD:   $BUILD_LOG"
 echo "======================================================================"

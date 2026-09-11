@@ -1,8 +1,15 @@
 // JT-Zero Ground Motion — deterministic replay с масками только по реально valid production-шагам.
-// Production-код не меняет. Базовую реализацию replay переиспользуем в том же translation unit.
-#define main jtzero_ground_motion_replay_compare_legacy_main
-#include "ground_motion_replay_compare.cpp"
+// Production-код не меняет. Сначала подключаем базовый Ground Motion глобально,
+// затем legacy replay — в отдельном namespace, чтобы его main() не конфликтовал
+// с main() этого valid-mask runner.
+#define main jtzero_ground_motion_replay_prelude_unused_main
+#include "ground_motion_live_v2_v3_ab.cpp"
 #undef main
+
+namespace jtzero_replay_base {
+#include "ground_motion_replay_compare.cpp"
+}
+using namespace jtzero_replay_base;
 
 namespace {
 

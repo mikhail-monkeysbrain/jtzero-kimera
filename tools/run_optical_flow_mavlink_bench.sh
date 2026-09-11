@@ -14,6 +14,8 @@ GUIDED_MODE="${JTZERO_FLOW_GUIDED_MODE:-guided-175}"
 EXTRA_ARGS=(--guided-175)
 if [[ "$GUIDED_MODE" == "armed" ]]; then
   EXTRA_ARGS+=(--require-armed)
+elif [[ "$GUIDED_MODE" == "armed-gate-open" ]]; then
+  EXTRA_ARGS+=(--require-armed --bench-height 0.60)
 fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
@@ -85,6 +87,11 @@ CSV:         $CSV
   LOCAL      — LOCAL_POSITION_NED, если ArduPilot считает position/velocity валидными.
 
 РЕЖИМ: guided 175 мм.
+Если JTZERO_FLOW_GUIDED_MODE=armed-gate-open:
+  - FC получает bench-высоту 0.60 м;
+  - raw flow перед отправкой масштабируется real_height/0.60;
+  - метрический масштаб сохраняется;
+  - режим предназначен ТОЛЬКО для стенда, не для полёта.
 
 ИНСТРУКЦИЯ БУДЕТ ПОВТОРЕНА САМОЙ ПРОГРАММОЙ:
   1) сначала 5 секунд вообще не двигать аппарат;

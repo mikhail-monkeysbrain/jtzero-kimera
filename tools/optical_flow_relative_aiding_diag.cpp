@@ -10,6 +10,7 @@
 
 #include "ardupilotmega/mavlink.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>

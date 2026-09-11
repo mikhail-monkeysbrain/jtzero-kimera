@@ -15,7 +15,7 @@ EXTRA_ARGS=(--guided-175)
 if [[ "$GUIDED_MODE" == "armed" ]]; then
   EXTRA_ARGS+=(--require-armed)
 elif [[ "$GUIDED_MODE" == "armed-gate-open" ]]; then
-  EXTRA_ARGS+=(--require-armed --bench-height 0.60)
+  EXTRA_ARGS+=(--require-armed --bench-height 0.60 --remote-log "$RUN_DIR/remote_ekf.bin")
 fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
@@ -91,7 +91,10 @@ CSV:         $CSV
   - FC получает bench-высоту 0.60 м;
   - raw flow перед отправкой масштабируется real_height/0.60;
   - метрический масштаб сохраняется;
-  - режим предназначен ТОЛЬКО для стенда, не для полёта.
+  - режим предназначен ТОЛЬКО для стенда, не для полёта;
+  - одновременно пытается писать DataFlash BIN с XKF5 на RPi:
+    $RUN_DIR/remote_ekf.bin
+    Для этого LOG_BACKEND_TYPE должен включать MAVLink backend (2) и FC должен быть reboot после изменения.
 
 ИНСТРУКЦИЯ БУДЕТ ПОВТОРЕНА САМОЙ ПРОГРАММОЙ:
   1) сначала 5 секунд вообще не двигать аппарат;

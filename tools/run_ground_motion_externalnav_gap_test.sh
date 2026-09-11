@@ -128,8 +128,8 @@ mark STATIC_PRE_END
 assert_alive
 
 echo
-mark GAP_START "ExternalNav publication OFF; GM продолжает интегрировать"
 touch "$GATE"
+mark GAP_START "ExternalNav publication OFF; GM продолжает интегрировать"
 echo "ExternalNav ОТКЛЮЧЁН программно. Камера остаётся открытой."
 echo "3 секунды статики перед движением — НЕ ДВИГАТЬ."
 sleep 3

@@ -135,9 +135,8 @@ def segment_report(name: str, seg) -> None:
     )
 
 
-def window_state(rows, t: int, half_s: float = 0.25):
-    half = int(half_s * NS)
-    s = [r for r in rows if abs(r["t"] - t) <= half]
+def interval_state(rows, a: int, b: int):
+    s = [r for r in rows if a <= r["t"] <= b]
     if not s:
         return None
     ekf = [r for r in s if r["ekfv"]]
@@ -151,21 +150,6 @@ def window_state(rows, t: int, half_s: float = 0.25):
         "valid": sum(r["valid"] for r in s),
         "sent": sum(r["sent"] for r in s),
         "rows": len(s),
-    }
-
-
-def tail_state(rows, a: int, b: int):
-    s = [r for r in rows if a <= r["t"] <= b]
-    if not s:
-        return None
-    ekf = [r for r in s if r["ekfv"]]
-    if not ekf:
-        return None
-    return {
-        "gn": med([r["gn"] for r in s]),
-        "ge": med([r["ge"] for r in s]),
-        "en": med([r["en"] for r in ekf]),
-        "ee": med([r["ee"] for r in ekf]),
     }
 
 
@@ -253,23 +237,26 @@ def main() -> int:
     else:
         print("  valid-runs: НЕТ")
 
-    before = window_state(rows, ev["BLIND_MOVE_START"])
-    after = window_state(rows, ev["BLIND_MOVE_END"])
-    final = tail_state(rows, ev["RECOVERY_END"] - 2 * NS, ev["RECOVERY_END"])
-    baseline = tail_state(rows, ev["STATIC_PRE_END"] - NS, ev["STATIC_PRE_END"])
+    # Только односторонние окна: 0.5 с ДО старта движения и 0.5 с ПОСЛЕ
+    # подтверждённой остановки. Так реальные кадры движения не смешиваются
+    # с baseline/post state.
+    before = interval_state(rows, ev["BLIND_MOVE_START"] - int(0.5 * NS), ev["BLIND_MOVE_START"])
+    after = interval_state(rows, ev["BLIND_MOVE_END"], ev["BLIND_MOVE_END"] + int(0.5 * NS))
+    final = interval_state(rows, ev["RECOVERY_END"] - 2 * NS, ev["RECOVERY_END"])
+    baseline = interval_state(rows, ev["STATIC_PRE_END"] - NS, ev["STATIC_PRE_END"])
 
     print("\n===== ПОТЕРЯННОЕ ПЕРЕМЕЩЕНИЕ =====")
     if before and after:
         gdn, gde, gd = vec((before["gn"], before["ge"]), (after["gn"], after["ge"]))
         edn, ede, ed = vec((before["en"], before["ee"]), (after["en"], after["ee"]))
         print(
-            f"между BLIND_MOVE_START и BLIND_MOVE_END:\n"
+            f"состояние 0.5 с ДО движения -> 0.5 с ПОСЛЕ остановки:\n"
             f"  GM  delta=({fmt_mm(gdn)},{fmt_mm(gde)}) mm |d|={gd*1000:.1f} мм\n"
             f"  EKF delta=({fmt_mm(edn)},{fmt_mm(ede)}) mm |d|={ed*1000:.1f} мм\n"
             f"  физический target={target_mm:.1f} мм"
         )
     else:
-        print("Недостаточно данных около BLIND_MOVE_START/END")
+        print("Недостаточно данных до/после BLIND_MOVE")
 
     if baseline and final:
         gdn, gde, gd = vec((baseline["gn"], baseline["ge"]), (final["gn"], final["ge"]))

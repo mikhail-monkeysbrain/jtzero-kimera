@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Анализ теста потери Ground Motion / ExternalNav.
+"""Анализ blind-move теста Ground Motion / ExternalNav.
 
-Использует CSV production Ground Motion и отдельный events.csv от
-run_ground_motion_loss_test.sh. Ничего не меняет в FC и estimator.
+Сценарий:
+  1) исходная статика с открытой камерой;
+  2) камера полностью закрывается;
+  3) после выдержки стенд перемещается на известное расстояние при закрытой камере;
+  4) после остановки камера всё ещё закрыта;
+  5) камера открывается, затем наблюдается recovery.
 
-Важно: гарантированно закрытый интервал камеры — BLOCK_START ..
-BLOCK_10S_REACHED. Интервал BLOCK_10S_REACHED .. BLOCK_END — это ручное
-открытие камеры и подтверждение оператором, поэтому его нельзя считать
-потерей изображения.
+Цель — не оценивать точность 150 мм как обычный optical-flow тест, а проверить,
+теряет ли интегральная Ground Motion координата перемещение, произошедшее во
+время visual dropout, и к какой координате затем сходится EKF.
 """
 
 from __future__ import annotations
@@ -17,18 +20,9 @@ import csv
 import math
 import statistics
 from pathlib import Path
-from typing import Dict, List
-
+from typing import Dict, List, Tuple
 
 NS = 1_000_000_000
-
-
-def f(v: str) -> float:
-    return float(v)
-
-
-def i(v: str) -> int:
-    return int(v)
 
 
 def med(vals: List[float]) -> float:
@@ -39,12 +33,14 @@ def pct(n: int, d: int) -> float:
     return 100.0 * n / d if d else 0.0
 
 
-def read_events(path: Path) -> Dict[str, int]:
-    out: Dict[str, int] = {}
+def read_events(path: Path) -> Tuple[Dict[str, int], Dict[str, str]]:
+    ts: Dict[str, int] = {}
+    notes: Dict[str, str] = {}
     with path.open(newline="") as fh:
         for r in csv.DictReader(fh):
-            out[r["event"]] = int(r["mono_ns"])
-    return out
+            ts[r["event"]] = int(r["mono_ns"])
+            notes[r["event"]] = r.get("note", "")
+    return ts, notes
 
 
 def read_rows(path: Path):
@@ -62,20 +58,20 @@ def read_rows(path: Path):
             raise RuntimeError(f"{path}: нет колонок: {', '.join(sorted(miss))}")
         for r in rd:
             rows.append({
-                "t": i(r["mono_ns"]),
-                "valid": i(r["valid"]) != 0,
-                "sent": i(r["mav_sent"]) != 0,
-                "quality": f(r["quality"]),
-                "inliers": i(r["inliers"]),
-                "scatter": f(r["scatter_m"]),
-                # estimator хранит NWU; publisher отправляет NED: N=x, E=-y
-                "gn": f(r["x_m"]),
-                "ge": -f(r["y_m"]),
-                "ekfv": i(r["ekf_local_valid"]) != 0,
-                "en": f(r["ekf_x_ned"]),
-                "ee": f(r["ekf_y_ned"]),
-                "evn": f(r["ekf_vx_ned"]),
-                "eve": f(r["ekf_vy_ned"]),
+                "t": int(r["mono_ns"]),
+                "valid": int(r["valid"]) != 0,
+                "sent": int(r["mav_sent"]) != 0,
+                "quality": float(r["quality"]),
+                "inliers": int(r["inliers"]),
+                "scatter": float(r["scatter_m"]),
+                # estimator хранит NWU; publisher отправляет NED N=x, E=-y
+                "gn": float(r["x_m"]),
+                "ge": -float(r["y_m"]),
+                "ekfv": int(r["ekf_local_valid"]) != 0,
+                "en": float(r["ekf_x_ned"]),
+                "ee": float(r["ekf_y_ned"]),
+                "evn": float(r["ekf_vx_ned"]),
+                "eve": float(r["ekf_vy_ned"]),
             })
     return rows
 
@@ -84,7 +80,7 @@ def between(rows, a: int, b: int):
     return [r for r in rows if a <= r["t"] <= b]
 
 
-def edge_median(seg, field: str, from_start: bool, width_s: float = 0.5) -> float:
+def edge_value(seg, field: str, from_start: bool, width_s: float = 0.4) -> float:
     if not seg:
         return float("nan")
     if from_start:
@@ -96,14 +92,19 @@ def edge_median(seg, field: str, from_start: bool, width_s: float = 0.5) -> floa
     return med(sub)
 
 
-def vec_drift(seg, x: str, y: str):
+def vec_between(seg, x: str, y: str):
     if not seg:
         return float("nan"), float("nan"), float("nan")
-    x0 = edge_median(seg, x, True)
-    y0 = edge_median(seg, y, True)
-    x1 = edge_median(seg, x, False)
-    y1 = edge_median(seg, y, False)
+    x0 = edge_value(seg, x, True)
+    y0 = edge_value(seg, y, True)
+    x1 = edge_value(seg, x, False)
+    y1 = edge_value(seg, y, False)
     dx, dy = x1 - x0, y1 - y0
+    return dx, dy, math.hypot(dx, dy)
+
+
+def vec(a: Tuple[float, float], b: Tuple[float, float]):
+    dx, dy = b[0] - a[0], b[1] - a[1]
     return dx, dy, math.hypot(dx, dy)
 
 
@@ -118,38 +119,63 @@ def segment_report(name: str, seg) -> None:
     valid = sum(r["valid"] for r in seg)
     sent = sum(r["sent"] for r in seg)
     ekfv = sum(r["ekfv"] for r in seg)
-    gdn, gde, gd = vec_drift(seg, "gn", "ge")
-    edn, ede, ed = vec_drift(seg, "en", "ee")
+    gdn, gde, gd = vec_between(seg, "gn", "ge")
+    edn, ede, ed = vec_between(seg, "en", "ee")
     vmax = max((math.hypot(r["evn"], r["eve"]) for r in seg if r["ekfv"]), default=0.0)
     dur = (seg[-1]["t"] - seg[0]["t"]) / NS
     print(
-        f"{name:<18} dur={dur:5.2f}s rows={len(seg):4d} "
+        f"{name:<22} dur={dur:5.2f}s rows={len(seg):4d} "
         f"GMvalid={valid:4d}/{len(seg):4d} ({pct(valid,len(seg)):5.1f}%) "
         f"MAVsent={sent:4d} EKFlocal={ekfv:4d}/{len(seg):4d}"
     )
     print(
-        f"  GM drift N/E=({fmt_mm(gdn)},{fmt_mm(gde)}) mm |d|={fmt_mm(gd)} mm; "
-        f"EKF drift=({fmt_mm(edn)},{fmt_mm(ede)}) mm |d|={fmt_mm(ed)} mm; "
+        f"  GM delta=({fmt_mm(gdn)},{fmt_mm(gde)}) mm |d|={fmt_mm(gd)} mm; "
+        f"EKF delta=({fmt_mm(edn)},{fmt_mm(ede)}) mm |d|={fmt_mm(ed)} mm; "
         f"EKF vmax={vmax:.3f} m/s"
     )
 
 
-def first_after(rows, t0: int, pred):
-    for r in rows:
-        if r["t"] >= t0 and pred(r):
-            return r
-    return None
+def window_state(rows, t: int, half_s: float = 0.25):
+    half = int(half_s * NS)
+    s = [r for r in rows if abs(r["t"] - t) <= half]
+    if not s:
+        return None
+    ekf = [r for r in s if r["ekfv"]]
+    if not ekf:
+        return None
+    return {
+        "gn": med([r["gn"] for r in s]),
+        "ge": med([r["ge"] for r in s]),
+        "en": med([r["en"] for r in ekf]),
+        "ee": med([r["ee"] for r in ekf]),
+        "valid": sum(r["valid"] for r in s),
+        "sent": sum(r["sent"] for r in s),
+        "rows": len(s),
+    }
+
+
+def tail_state(rows, a: int, b: int):
+    s = [r for r in rows if a <= r["t"] <= b]
+    if not s:
+        return None
+    ekf = [r for r in s if r["ekfv"]]
+    if not ekf:
+        return None
+    return {
+        "gn": med([r["gn"] for r in s]),
+        "ge": med([r["ge"] for r in s]),
+        "en": med([r["en"] for r in ekf]),
+        "ee": med([r["ee"] for r in ekf]),
+    }
 
 
 def valid_runs(seg, origin_ns: int):
-    """Собрать последовательные valid участки и их характеристики."""
     idx = [k for k, r in enumerate(seg) if r["valid"]]
     if not idx:
         return []
     runs = []
     a = p = idx[0]
     for k in idx[1:]:
-        # Новый run, если между valid строками был хотя бы один invalid.
         if k != p + 1:
             runs.append((a, p))
             a = k
@@ -171,109 +197,119 @@ def valid_runs(seg, origin_ns: int):
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Анализ теста потери Ground Motion / ExternalNav")
+    ap = argparse.ArgumentParser(description="Анализ blind-move теста Ground Motion / ExternalNav")
     ap.add_argument("csv", type=Path)
     ap.add_argument("events", type=Path)
     args = ap.parse_args()
 
-    ev = read_events(args.events)
+    ev, notes = read_events(args.events)
     rows = read_rows(args.csv)
 
     required = [
-        "STATIC_PRE_START", "STATIC_PRE_END", "MOVE_START", "MOVE_END",
-        "STATIC_AFTER_MOVE_START", "STATIC_AFTER_MOVE_END",
-        "BLOCK_START", "BLOCK_10S_REACHED", "BLOCK_END",
-        "RECOVERY_START", "RECOVERY_END",
+        "BLIND_MOVE_TARGET_MM",
+        "STATIC_PRE_START", "STATIC_PRE_END",
+        "BLOCK_START", "BLIND_SETTLE_END",
+        "BLIND_MOVE_START", "BLIND_MOVE_END",
+        "BLIND_STATIC_AFTER_MOVE_START", "BLIND_STATIC_AFTER_MOVE_END",
+        "OPEN_START", "BLOCK_END", "RECOVERY_START", "RECOVERY_END",
     ]
     miss = [x for x in required if x not in ev]
     if miss:
         raise RuntimeError("events.csv неполный, отсутствуют: " + ", ".join(miss))
 
+    try:
+        target_mm = float(notes["BLIND_MOVE_TARGET_MM"].replace("\\", "").strip())
+    except ValueError:
+        target_mm = float("nan")
+
     segs = {
         "STATIC_PRE": between(rows, ev["STATIC_PRE_START"], ev["STATIC_PRE_END"]),
-        "MOVE": between(rows, ev["MOVE_START"], ev["MOVE_END"]),
-        "STATIC_AFTER_MOVE": between(rows, ev["STATIC_AFTER_MOVE_START"], ev["STATIC_AFTER_MOVE_END"]),
-        # Только этот интервал гарантированно соответствует полностью закрытой камере.
-        "BLOCKED_STRICT": between(rows, ev["BLOCK_START"], ev["BLOCK_10S_REACHED"]),
-        # Здесь оператор уже открывает камеру и затем подтверждает Enter.
-        "UNBLOCKING": between(rows, ev["BLOCK_10S_REACHED"], ev["BLOCK_END"]),
+        "BLOCKED_PRE_MOVE": between(rows, ev["BLOCK_START"], ev["BLIND_MOVE_START"]),
+        "BLIND_MOVE": between(rows, ev["BLIND_MOVE_START"], ev["BLIND_MOVE_END"]),
+        "BLOCKED_POST_MOVE": between(rows, ev["BLIND_MOVE_END"], ev["OPEN_START"]),
+        "UNBLOCKING": between(rows, ev["OPEN_START"], ev["BLOCK_END"]),
         "RECOVERY": between(rows, ev["RECOVERY_START"], ev["RECOVERY_END"]),
     }
 
-    print("\n===== LOSS TEST: СЕГМЕНТЫ =====")
+    print("\n===== BLIND-MOVE TEST: СЕГМЕНТЫ =====")
+    print(f"Физическое перемещение при закрытой камере: {target_mm:.1f} мм")
     for name, seg in segs.items():
         segment_report(name, seg)
 
-    block_start = ev["BLOCK_START"]
-    block_strict_end = ev["BLOCK_10S_REACHED"]
-    block_end = ev["BLOCK_END"]
+    guaranteed_blocked = between(rows, ev["BLOCK_START"], ev["OPEN_START"])
+    runs = valid_runs(guaranteed_blocked, ev["BLOCK_START"])
 
-    first_invalid = first_after(rows, block_start, lambda r: not r["valid"])
-    first_valid_recovery = first_after(rows, block_end, lambda r: r["valid"])
-    first_sent_recovery = first_after(rows, block_end, lambda r: r["sent"])
-
-    # Отбрасываем первую 1 с после закрытия как переходный участок; конец — строго
-    # BLOCK_10S_REACHED, а не BLOCK_END.
-    core = between(rows, block_start + NS, block_strict_end)
-    core_valid = sum(r["valid"] for r in core)
-    core_sent = sum(r["sent"] for r in core)
-
-    print("\n===== ПОТЕРЯ / ВОССТАНОВЛЕНИЕ =====")
-    if first_invalid:
-        print(f"first invalid after BLOCK_START: {(first_invalid['t']-block_start)/1e6:.1f} ms")
-    else:
-        print("first invalid after BLOCK_START: НЕ ОБНАРУЖЕН")
-
+    print("\n===== VALID ВО ВРЕМЯ ГАРАНТИРОВАННО ЗАКРЫТОЙ КАМЕРЫ =====")
     print(
-        f"strict blocked core (1..10 с): rows={len(core)} "
-        f"valid={core_valid} MAVsent={core_sent}"
+        f"rows={len(guaranteed_blocked)} valid={sum(r['valid'] for r in guaranteed_blocked)} "
+        f"MAVsent={sum(r['sent'] for r in guaranteed_blocked)}"
     )
-
-    runs = valid_runs(core, block_start)
     if runs:
-        print("valid-runs внутри strict blocked core:")
         for n, r in enumerate(runs, 1):
             print(
                 f"  #{n}: t={r['t0']:.3f}..{r['t1']:.3f}s n={r['n']} "
                 f"qmax={r['q']:.3f} inliers_max={r['inl']} scatter_min={r['sc']*1000:.3f}mm"
             )
     else:
-        print("valid-runs внутри strict blocked core: НЕТ")
+        print("  valid-runs: НЕТ")
 
-    if first_valid_recovery:
-        print(f"first valid after BLOCK_END: {(first_valid_recovery['t']-block_end)/1e6:.1f} ms")
+    before = window_state(rows, ev["BLIND_MOVE_START"])
+    after = window_state(rows, ev["BLIND_MOVE_END"])
+    final = tail_state(rows, ev["RECOVERY_END"] - 2 * NS, ev["RECOVERY_END"])
+    baseline = tail_state(rows, ev["STATIC_PRE_END"] - NS, ev["STATIC_PRE_END"])
+
+    print("\n===== ПОТЕРЯННОЕ ПЕРЕМЕЩЕНИЕ =====")
+    if before and after:
+        gdn, gde, gd = vec((before["gn"], before["ge"]), (after["gn"], after["ge"]))
+        edn, ede, ed = vec((before["en"], before["ee"]), (after["en"], after["ee"]))
+        print(
+            f"между BLIND_MOVE_START и BLIND_MOVE_END:\n"
+            f"  GM  delta=({fmt_mm(gdn)},{fmt_mm(gde)}) mm |d|={gd*1000:.1f} мм\n"
+            f"  EKF delta=({fmt_mm(edn)},{fmt_mm(ede)}) mm |d|={ed*1000:.1f} мм\n"
+            f"  физический target={target_mm:.1f} мм"
+        )
     else:
-        print("first valid after BLOCK_END: НЕ ВОССТАНОВИЛСЯ")
+        print("Недостаточно данных около BLIND_MOVE_START/END")
 
-    if first_sent_recovery:
-        print(f"first MAV send after BLOCK_END: {(first_sent_recovery['t']-block_end)/1e6:.1f} ms")
+    if baseline and final:
+        gdn, gde, gd = vec((baseline["gn"], baseline["ge"]), (final["gn"], final["ge"]))
+        edn, ede, ed = vec((baseline["en"], baseline["ee"]), (final["en"], final["ee"]))
+        dfn, dfe, dfd = vec((final["gn"], final["ge"]), (final["en"], final["ee"]))
+        print("\n===== ИТОГ ПОСЛЕ 10 с RECOVERY =====")
+        print(
+            f"GM от исходной точки:  ({fmt_mm(gdn)},{fmt_mm(gde)}) mm |d|={gd*1000:.1f} мм\n"
+            f"EKF от исходной точки: ({fmt_mm(edn)},{fmt_mm(ede)}) mm |d|={ed*1000:.1f} мм\n"
+            f"EKF-GM в финале:       ({fmt_mm(dfn)},{fmt_mm(dfe)}) mm |d|={dfd*1000:.1f} мм\n"
+            f"Физически стенд был смещён на {target_mm:.1f} мм при закрытой камере."
+        )
+
+        print("\n===== ИНТЕРПРЕТАЦИЯ =====")
+        if math.isfinite(target_mm) and target_mm > 0:
+            if gd * 1000 < 0.25 * target_mm:
+                print(
+                    "RESULT: после recovery Ground Motion сохранил почти старую координату и "
+                    "не восстановил большую часть blind displacement."
+                )
+            else:
+                print(
+                    "CHECK: Ground Motion координата заметно изменилась; нужно проверить, "
+                    "какая часть возникла из false-valid/reacquire и соответствует ли она реальному сдвигу."
+                )
+        if dfd * 1000 < 20.0:
+            print(
+                "RESULT: к концу recovery EKF снова почти совпал с координатой Ground Motion. "
+                "Это доказывает reacquire, но НЕ доказывает правильность абсолютной координаты после blind move."
+            )
+        else:
+            print(
+                "CHECK: спустя 10 с recovery EKF ещё не сошёлся к Ground Motion; требуется разбор timeline."
+            )
     else:
-        print("first MAV send after BLOCK_END: НЕ ВОССТАНОВИЛСЯ")
+        print("\nНедостаточно baseline/final данных для итогового сравнения.")
 
-    blocked = segs["BLOCKED_STRICT"]
-    edn, ede, ed = vec_drift(blocked, "en", "ee")
     print(
-        f"EKF drift during strict 10 s camera block: dN={fmt_mm(edn)} mm "
-        f"dE={fmt_mm(ede)} mm |d|={fmt_mm(ed)} mm"
-    )
-
-    print("\n===== ИНТЕРПРЕТАЦИЯ =====")
-    if core and core_valid == 0 and core_sent == 0:
-        print("PASS estimator/publisher: после 1 с перехода и до конца гарантированно закрытого интервала valid=0, ExternalNav не отправляется.")
-    elif core:
-        print("CHECK estimator: внутри гарантированно закрытого интервала остались valid кадры; publisher отправлял их в соответствии с valid.")
-    else:
-        print("CHECK: strict blocked core пуст — проверить timestamps events/CSV.")
-
-    if first_valid_recovery and first_sent_recovery:
-        print("PASS recovery: после подтверждённого открытия камеры Ground Motion снова стал valid и публикация возобновилась.")
-    else:
-        print("FAIL recovery: после открытия камеры valid/publish не восстановились в пределах теста.")
-
-    print(
-        "Важно: ekf_local_valid означает только свежий LOCAL_POSITION_NED от FC, "
-        "а не факт fusion ExternalNav. Для точного статуса aiding/timeout нужен "
-        "EKF_STATUS_REPORT или FC DataFlash XKF4 timeout/status лог."
+        "\nВажно: физический target известен только как длина перемещения вдоль рельса. "
+        "Его N/E компоненты здесь не предполагаются и не выдумываются."
     )
     return 0
 

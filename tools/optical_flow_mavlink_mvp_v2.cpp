@@ -345,6 +345,7 @@ int main(int argc,char** argv){
     int64_t last_range_send_ns=0;
 
     std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=done
+    std::atomic<bool> arm_lost{false};
     FlowFcLocal guide_start{}, guide_end{};
     std::thread guide_thread;
     if(guided175){
@@ -386,6 +387,10 @@ int main(int argc,char** argv){
         std::this_thread::sleep_for(std::chrono::seconds(5));
         if(!fc.latestLocal(&guide_end,&age,&count) || age>500){
           std::cerr<<"\nОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED после движения.\n";
+          g_running=false; return;
+        }
+        if(require_armed && arm_lost.load()){
+          std::cerr<<"\nARMed-test прерван из-за DISARM. Итог 175 мм не вычисляется.\n";
           g_running=false; return;
         }
         guide_stage=3;
@@ -466,6 +471,13 @@ int main(int argc,char** argv){
 
         bool arm_now=false; double arm_age_now=1e9;
         const bool arm_ok=fc.latestArm(&arm_now,&arm_age_now) && arm_age_now<2500.0;
+        if(require_armed && arm_ok && !arm_now && guide_stage.load()<3){
+          if(!arm_lost.exchange(true)){
+            std::cerr<<"\nОШИБКА: FC ПЕРЕШЁЛ В DISARMED ВО ВРЕМЯ ARMED-ТЕСТА.\n"
+                     <<"Тест остановлен; результат движения недействителен.\n";
+          }
+          g_running=false;
+        }
 
         csv<<now<<','<<frame<<','<<(s.valid?1:0)<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','

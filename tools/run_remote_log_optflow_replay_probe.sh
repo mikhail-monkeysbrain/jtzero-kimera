@@ -8,7 +8,7 @@ PY="${PYTHON:-/home/vio/venv-jtzero-mav/bin/python}"
 if [[ ! -x "$PY" ]]; then PY=python3; fi
 FC="${JTZERO_FLOW_FC:-/dev/ttyAMA0}"
 BAUD="${JTZERO_FC_BAUD:-460800}"
-DURATION="${JTZERO_REPLAY_PROBE_DURATION:-12}"
+DURATION="${JTZERO_REPLAY_PROBE_DURATION:-40}"
 
 PARAM_TOOL="$ROOT/tools/set_fc_param_checked.py"
 ANALYZER="$ROOT/tools/analyze_remote_ekf3_optflow_ingress.py"
@@ -29,11 +29,13 @@ restore_replay() {
 trap restore_replay EXIT INT TERM
 
 echo "======================================================================"
-echo "JT-ZERO — SHORT EKF3 OPTFLOW REPLAY PROBE"
+echo "JT-ZERO — EKF3 OPTFLOW REPLAY PROBE"
 echo "======================================================================"
-echo "Цель: включить LOG_REPLAY только на время короткого теста и проверить ROFH."
+echo "Цель: включить LOG_REPLAY только на время теста и проверить ROFH."
 echo "Нового физического движения не требуется. Камера и TF-Luna не используются."
 echo "Synthetic OPTICAL_FLOW отправляется существующим remote-log diagnostic."
+echo "40 секунд выбраны специально: при MAVLink logger replay FMT/parameter startup"
+echo "может занять заметную часть первых секунд; 12-секундный прогон оказался слишком коротким."
 echo
 echo "Исходный LOG_REPLAY=$OLD_REPLAY"
 echo "Временно ставлю LOG_REPLAY=1 с read-back..."

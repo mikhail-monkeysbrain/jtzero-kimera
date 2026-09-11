@@ -10,6 +10,7 @@ CAMERA_YAML="${JTZERO_FLOW_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraPar
 # Независимая ChArUco physical-height оценка текущей OV9281 дала k=1.0925.
 # Можно переопределить JTZERO_FLOW_FOCAL_SCALE=1.0 для raw saved-K сравнения.
 FOCAL_SCALE="${JTZERO_FLOW_FOCAL_SCALE:-1.0925}"
+GUIDED_ARG="${JTZERO_FLOW_GUIDED_ARG:---guided-175}"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="${JTZERO_FLOW_RUN_DIR:-/home/vio/jtzero_runs/${STAMP}_OPTICAL_FLOW_MAVLINK_BENCH}"
@@ -79,10 +80,10 @@ CSV:         $CSV
   EKFSTAT    — EKF_STATUS_REPORT flags;
   LOCAL      — LOCAL_POSITION_NED, если ArduPilot считает position/velocity валидными.
 
-Аппарат DISARMED и неподвижен 8-10 секунд. Остановка Ctrl-C.
+РЕЖИМ: guided 175 мм.\n\nИНСТРУКЦИЯ БУДЕТ ПОВТОРЕНА САМОЙ ПРОГРАММОЙ:\n  1) сначала 5 секунд вообще не двигать аппарат;\n  2) дождаться строки "ДВИГАЙТЕ";\n  3) сдвинуть ВЕСЬ аппарат строго по столу на 175 мм;\n  4) не вращать, не наклонять и не приподнимать;\n  5) полностью остановить аппарат и только тогда нажать Enter;\n  6) после Enter ещё 5 секунд ничего не трогать;\n  7) тест остановится автоматически и напечатает DELTA N/E, длину и ошибку.\n\nНе начинайте движение до явной команды программы.
 ======================================================================
 EOF
 
 read -r -p "Параметры проверены. EKF origin для OpticalFlow relative aiding не требуется. Запустить? [Enter] " _
 
-exec "$BIN" "$CAMERA" "$LUNA" "$FC" "$CSV" "$CAMERA_YAML" "$FOCAL_SCALE"
+exec "$BIN" "$CAMERA" "$LUNA" "$FC" "$CSV" "$CAMERA_YAML" "$FOCAL_SCALE" "$GUIDED_ARG"

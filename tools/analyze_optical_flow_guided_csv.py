@@ -56,6 +56,22 @@ def main():
 
     raw_net=math.hypot(dx,dy)
 
+    # Что именно получил FC после возможного bench-height override.
+    fdx=fdy=0.0
+    fpath=0.0
+    have_presented=("range_to_fc_m" in rows[0] and "flow_send_x" in rows[0] and "flow_send_y" in rows[0])
+    if have_presented:
+        for i in range(i0,i1+1):
+            r=rows[i]
+            dt=f(r,"dt_s")
+            hfc=f(r,"range_to_fc_m")
+            if not (0 < dt < 0.2 and 0.05 < hfc < 20 and int(f(r,"valid"))==1):
+                continue
+            ddx=hfc*f(r,"flow_send_x")*dt
+            ddy=hfc*f(r,"flow_send_y")*dt
+            fdx+=ddx; fdy+=ddy; fpath+=math.hypot(ddx,ddy)
+    fc_metric_net=math.hypot(fdx,fdy) if have_presented else float("nan")
+
     # EKF position delta over the same envelope
     fresh=[i for i in range(i0,i1+1) if int(f(rows[i],"ekf_local_valid"))==1]
     if fresh:
@@ -90,11 +106,16 @@ def main():
 
     print(f"raw peak flow={peak_flow:.4f} rad/s median_range={med_h:.3f} m")
     print(f"RAW integral vector=({dx*1000:+.1f},{dy*1000:+.1f}) mm net={raw_net*1000:.1f} mm path={path*1000:.1f} mm")
+    if have_presented:
+        print(f"FC-PRESENTED metric integral=({fdx*1000:+.1f},{fdy*1000:+.1f}) mm net={fc_metric_net*1000:.1f} mm path={fpath*1000:.1f} mm")
     print(f"EKF position delta=({dN*1000:+.1f},{dE*1000:+.1f}) mm net={ekf_pos*1000:.1f} mm")
     print(f"EKF velocity integral=({evN*1000:+.1f},{evE*1000:+.1f}) mm net={ekf_vel_int*1000:.1f} mm")
     print(f"EKF peak horizontal speed={ekf_v_peak:.4f} m/s flags={flags}")
     print(f"RAW scale vs 175mm = {raw_net/0.175:.3f}x")
     print(f"EKF pos vs RAW = {(ekf_pos/raw_net if raw_net>1e-9 else float('nan')):.4f}x")
+    if have_presented and fc_metric_net>1e-9:
+        print(f"EKF pos vs FC-PRESENTED = {ekf_pos/fc_metric_net:.4f}x")
+        print(f"FC-PRESENTED vs RAW = {fc_metric_net/raw_net:.4f}x")
 
     print("\n===== INTERPRETATION =====")
     if 0.5 <= raw_net/0.175 <= 1.5 and ekf_pos < 0.2*raw_net:

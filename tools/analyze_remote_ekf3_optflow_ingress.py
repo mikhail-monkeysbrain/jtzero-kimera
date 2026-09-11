@@ -3,6 +3,7 @@
 #
 # Использует remote DataFlash BIN и live PARAM_REQUEST_READ:
 #   - ROFH: AP_DAL replay-запись writeOptFlowMeas;
+#   - RFRH/RFRF: признаки того, что replay-поток вообще успел стартовать;
 #   - EK2_ENABLE: если параметр отсутствует, EKF2 в этой прошивке недоступен.
 #
 # Важно: ROFH пишется только при LOG_REPLAY=1.
@@ -70,7 +71,7 @@ def main() -> int:
 
     data = open(path, 'rb').read()
     fmts = read_formats(data)
-    wanted = {'ROFH', 'OF', 'XKFS', 'XKF4'}
+    wanted = {'ROFH', 'RFRH', 'RFRF', 'OF', 'XKFS', 'XKF4'}
     rec = parse_records(data, fmts, wanted)
     for name in wanted:
         rec[name].sort(key=key_time)
@@ -82,6 +83,13 @@ def main() -> int:
     print(f'bytes={len(data)} formats={len(fmts)}')
     for name in sorted(wanted):
         print(f'{name}: {len(rec[name])} records')
+
+    print('\n===== REPLAY STREAM HEALTH =====')
+    replay_started = bool(rec['RFRH']) and bool(rec['RFRF'])
+    print(f'REPLAY_FRAMES_PRESENT={"YES" if replay_started else "NO"}')
+    print(f'RFRH={len(rec["RFRH"])} RFRF={len(rec["RFRF"])}')
+    if not replay_started:
+        print('NOTE: replay frame stream не виден; при коротком MAVLink remote log startup headers могли не успеть завершиться.')
 
     print('\n===== ROFH =====')
     if rec['ROFH']:
@@ -139,8 +147,14 @@ def main() -> int:
         print('ROFH есть, но EKF2 также может быть доступен, поэтому ROFH сам по себе не доказывает EKF3 path.')
         return 4
 
+    if not replay_started:
+        print('EKF3_WRITE_OPTFLOW_PATH=INCONCLUSIVE_STARTUP')
+        print('ROFH нет, но и replay frame stream RFRH/RFRF не успел появиться.')
+        print('Этот BIN слишком ранний для отрицательного вывода о EKF3 ingress.')
+        return 6
+
     print('EKF3_WRITE_OPTFLOW_PATH=NOT_PROVEN')
-    print('ROFH в BIN отсутствует. Если этот BIN записан при LOG_REPLAY=0, это ожидаемо.')
+    print('Replay stream активен, но ROFH отсутствует.')
     return 5
 
 

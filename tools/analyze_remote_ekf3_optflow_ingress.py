@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 # JT-Zero — прямое доказательство доставки OpticalFlow до NavEKF3::writeOptFlowMeas.
 #
-# Использует уже сохранённый remote DataFlash BIN и live PARAM_REQUEST_READ:
+# Использует remote DataFlash BIN и live PARAM_REQUEST_READ:
 #   - ROFH: AP_DAL replay-запись writeOptFlowMeas;
 #   - EK2_ENABLE: если параметр отсутствует, EKF2 в этой прошивке недоступен.
 #
-# На штатном MatekH743 Copter-4.7.0 HAL_NAVEKF2_AVAILABLE отключён.
-# Поэтому сочетание ROFH>0 + EK2_ENABLE absent означает, что ROFH мог быть
-# сформирован только путём NavEKF3::writeOptFlowMeas(), который далее вызывает
-# core[i].writeOptFlowMeas() для всех EKF3 lanes.
-#
+# Важно: ROFH пишется только при LOG_REPLAY=1.
 # Параметры FC не изменяет.
 
 from __future__ import annotations
@@ -31,18 +27,25 @@ def last_remote_bin() -> str | None:
     return max(files, key=os.path.getmtime) if files else None
 
 
-def request_param(master, name: str, timeout: float = 2.0):
-    # target component 1 is the autopilot component for PARAM protocol.
-    master.mav.param_request_read_send(
-        master.target_system,
-        1,
-        name.encode('ascii'),
-        -1,
-    )
+def wait_fc(master, timeout: float = 10.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        m = master.recv_match(type='HEARTBEAT', blocking=True, timeout=0.5)
+        if m is None:
+            continue
+        if int(getattr(m, 'autopilot', -1)) == int(mavutil.mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA):
+            return int(m.get_srcSystem()), int(m.get_srcComponent())
+    return None
+
+
+def request_param(master, sysid: int, compid: int, name: str, timeout: float = 2.0):
+    master.mav.param_request_read_send(sysid, compid, name.encode('ascii'), -1)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         m = master.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.2)
         if m is None:
+            continue
+        if int(m.get_srcSystem()) != sysid:
             continue
         pid = m.param_id
         if isinstance(pid, bytes):
@@ -83,8 +86,6 @@ def main() -> int:
     print('\n===== ROFH =====')
     if rec['ROFH']:
         t = [key_time(r) for r in rec['ROFH'] if key_time(r) > 0]
-        # msecFlowMeas is the actual flow measurement timestamp stored by DAL.
-        ms = [int(r.get('TimeMS', r.get('msecFlowMeas', r.get('T', 0)))) for r in rec['ROFH']]
         q = [int(r.get('Qual', r.get('Q', 0))) for r in rec['ROFH']]
         print(f'ROFH_PRESENT=YES count={len(rec["ROFH"])}')
         if t:
@@ -104,21 +105,24 @@ def main() -> int:
         source_component=197,
         autoreconnect=False,
     )
-    hb = master.wait_heartbeat(timeout=10)
-    if hb is None:
-        print('ОШИБКА: HEARTBEAT не получен')
+    fc = wait_fc(master)
+    if fc is None:
+        print('ОШИБКА: HEARTBEAT ArduPilot не получен')
         return 3
-    print(f'FC heartbeat sys={master.target_system} comp={hb.get_srcComponent()}')
+    sysid, compid = fc
+    print(f'FC heartbeat sys={sysid} comp={compid}')
 
-    ek2 = request_param(master, 'EK2_ENABLE')
-    ek3_flow = request_param(master, 'EK3_FLOW_USE')
-    ek3_velxy = request_param(master, 'EK3_SRC1_VELXY')
-    ahrs = request_param(master, 'AHRS_EKF_TYPE')
+    ek2 = request_param(master, sysid, compid, 'EK2_ENABLE')
+    ek3_flow = request_param(master, sysid, compid, 'EK3_FLOW_USE')
+    ek3_velxy = request_param(master, sysid, compid, 'EK3_SRC1_VELXY')
+    ahrs = request_param(master, sysid, compid, 'AHRS_EKF_TYPE')
+    log_replay = request_param(master, sysid, compid, 'LOG_REPLAY')
 
     print(f'EK2_ENABLE={"ABSENT" if ek2 is None else ek2}')
     print(f'EK3_FLOW_USE={ek3_flow}')
     print(f'EK3_SRC1_VELXY={ek3_velxy}')
     print(f'AHRS_EKF_TYPE={ahrs}')
+    print(f'LOG_REPLAY={log_replay}')
 
     print('\n===== VERDICT =====')
     rofh = bool(rec['ROFH'])
@@ -126,18 +130,17 @@ def main() -> int:
     if rofh and ek2_absent:
         print('EKF3_WRITE_OPTFLOW_PATH=PROVEN')
         print('ROFH присутствует, а EKF2 parameter surface отсутствует.')
-        print('Для этой конфигурации запись ROFH могла пройти через NavEKF3::writeOptFlowMeas().')
+        print('Для этой конфигурации replay-запись ROFH прошла через NavEKF3::writeOptFlowMeas().')
         print('NavEKF3::writeOptFlowMeas() затем вызывает core[i].writeOptFlowMeas() для каждого EKF3 core.')
-        print('Следовательно compile-time отсутствие EKF3 optical-flow fusion и разрыв AP_AHRS->EKF3 исключаются.')
         return 0
 
     if rofh:
         print('EKF3_WRITE_OPTFLOW_PATH=AMBIGUOUS')
-        print('ROFH есть, но EKF2 также может быть скомпилирован/доступен, поэтому ROFH сам по себе не доказывает EKF3 path.')
+        print('ROFH есть, но EKF2 также может быть доступен, поэтому ROFH сам по себе не доказывает EKF3 path.')
         return 4
 
     print('EKF3_WRITE_OPTFLOW_PATH=NOT_PROVEN')
-    print('ROFH в remote BIN отсутствует.')
+    print('ROFH в BIN отсутствует. Если этот BIN записан при LOG_REPLAY=0, это ожидаемо.')
     return 5
 
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Детальная временная шкала теста потери Ground Motion / ExternalNav.
+"""Детальная временная шкала blind-move теста Ground Motion / ExternalNav.
 
-Показывает абсолютное расхождение EKF и Ground Motion по N/E до, во время
-и после потери изображения. Ничего не меняет в FC или estimator.
+Показывает абсолютное расхождение EKF и Ground Motion до закрытия камеры,
+во время реального перемещения при visual dropout и после reacquire.
+Ничего не меняет в FC или estimator.
 """
 
 from __future__ import annotations
@@ -60,12 +61,9 @@ def read_rows(path: Path):
 def snapshot(rows, t, half_ms=150):
     half = half_ms * 1_000_000
     s = [r for r in rows if abs(r["t"] - t) <= half]
-    gm = [r for r in s if r["valid"]]
     ekf = [r for r in s if r["ekfv"]]
-    if not ekf:
+    if not s or not ekf:
         return None
-    # GM x/y сохраняются и при invalid, поэтому для абсолютной последней GM
-    # позиции берём все строки окна, а valid считаем отдельно.
     gn = med([r["gn"] for r in s])
     ge = med([r["ge"] for r in s])
     en = med([r["en"] for r in ekf])
@@ -81,7 +79,7 @@ def snapshot(rows, t, half_ms=150):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Timeline потери Ground Motion")
+    ap = argparse.ArgumentParser(description="Timeline blind-move теста Ground Motion")
     ap.add_argument("csv", type=Path)
     ap.add_argument("events", type=Path)
     ap.add_argument("--bin", type=float, default=0.5, help="ширина bin, секунд")
@@ -90,27 +88,35 @@ def main():
     ev = read_events(args.events)
     rows = read_rows(args.csv)
 
-    required = ["STATIC_AFTER_MOVE_END", "BLOCK_START", "BLOCK_10S_REACHED", "BLOCK_END", "RECOVERY_END"]
+    required = [
+        "STATIC_PRE_END",
+        "BLOCK_START", "BLIND_SETTLE_END",
+        "BLIND_MOVE_START", "BLIND_MOVE_END",
+        "BLIND_STATIC_AFTER_MOVE_END",
+        "OPEN_START", "BLOCK_END", "RECOVERY_END",
+    ]
     miss = [x for x in required if x not in ev]
     if miss:
         raise RuntimeError("events.csv неполный: " + ", ".join(miss))
 
+    start = ev["STATIC_PRE_END"]
+    end = ev["RECOVERY_END"]
+
     print("===== СОБЫТИЯ / EKF-GM OFFSET =====")
     for name in required:
         s = snapshot(rows, ev[name])
+        rel = (ev[name] - start) / NS
         if s is None:
-            print(f"{name:<24} нет EKF данных")
+            print(f"{name:<29} t={rel:7.3f}s нет EKF данных")
             continue
         print(
-            f"{name:<24} "
+            f"{name:<29} t={rel:7.3f}s "
             f"GM=({s['gn']*1000:+8.1f},{s['ge']*1000:+8.1f}) mm "
             f"EKF=({s['en']*1000:+8.1f},{s['ee']*1000:+8.1f}) mm "
             f"EKF-GM=({s['dn']*1000:+8.1f},{s['de']*1000:+8.1f}) "
             f"|D|={s['d']*1000:7.1f} mm valid={s['valid']}/{s['rows']} sent={s['sent']}"
         )
 
-    start = ev["STATIC_AFTER_MOVE_END"]
-    end = ev["RECOVERY_END"]
     bin_ns = max(1, int(args.bin * NS))
 
     print("\n===== TIMELINE =====")
@@ -123,25 +129,25 @@ def main():
         b = [r for r in rows if t <= r["t"] < t1]
         if b:
             ekf = [r for r in b if r["ekfv"]]
-            gn = med([r["gn"] for r in b])
-            ge = med([r["ge"] for r in b])
-            en = med([r["en"] for r in ekf])
-            ee = med([r["ee"] for r in ekf])
-            dn, de = en - gn, ee - ge
-            d = math.hypot(dn, de)
-            vmax = max((math.hypot(r["evn"], r["eve"]) for r in ekf), default=float("nan"))
-            print(
-                f"{(t-start)/NS:6.2f} "
-                f"{sum(r['valid'] for r in b):5d} {sum(r['sent'] for r in b):4d} "
-                f"{gn*1000:+8.1f} {ge*1000:+8.1f} "
-                f"{en*1000:+8.1f} {ee*1000:+8.1f} "
-                f"{dn*1000:+8.1f} {de*1000:+8.1f} {d*1000:7.1f} "
-                f"{vmax:6.3f}"
-            )
+            if ekf:
+                gn = med([r["gn"] for r in b])
+                ge = med([r["ge"] for r in b])
+                en = med([r["en"] for r in ekf])
+                ee = med([r["ee"] for r in ekf])
+                dn, de = en - gn, ee - ge
+                d = math.hypot(dn, de)
+                vmax = max((math.hypot(r["evn"], r["eve"]) for r in ekf), default=float("nan"))
+                print(
+                    f"{(t-start)/NS:6.2f} "
+                    f"{sum(r['valid'] for r in b):5d} {sum(r['sent'] for r in b):4d} "
+                    f"{gn*1000:+8.1f} {ge*1000:+8.1f} "
+                    f"{en*1000:+8.1f} {ee*1000:+8.1f} "
+                    f"{dn*1000:+8.1f} {de*1000:+8.1f} {d*1000:7.1f} "
+                    f"{vmax:6.3f}"
+                )
         k += 1
         t = start + k * bin_ns
 
-    # Итоговая оценка: последние 2 секунды recovery.
     tail_start = ev["RECOVERY_END"] - 2 * NS
     tail = [r for r in rows if tail_start <= r["t"] <= ev["RECOVERY_END"] and r["ekfv"]]
     if tail:

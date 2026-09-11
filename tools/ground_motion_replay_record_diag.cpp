@@ -54,34 +54,60 @@ struct CaptureFcHistory {
   }
   void stop(){if(th.joinable())th.join();if(fd>=0){::close(fd);fd=-1;}}
 };
+
+struct PendingMeta {
+  uint64_t frame=0,offset=0,size=0;
+  int64_t mono_ns=0,ts_ns=0;
+  bool decode_ok=false,luna_valid=false;
+  double luna_m=0,luna_age_ms=1e9;
+};
 }
 
 int main(int argc,char**argv){
   if(argc<7){std::cerr<<"Использование: "<<argv[0]<<" <camera> <luna> <fc> <out_dir> <camera_yaml> <camera_offset_mm>\n";return 2;}
-  const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3];const std::filesystem::path outdir=argv[4];const std::string yaml=argv[5];
+  const std::string camdev=argv[1],lunadev=argv[2],fcdev=argv[3];const std::filesystem::path outdir=argv[4];
   const double offset=std::stod(argv[6])/1000.0;const cv::Vec3d lever_b(0.04916,0.00022,0.0);
   try{
     std::filesystem::create_directories(outdir);Camera cam;cam.openDev(camdev);LunaReader luna;luna.start(lunadev);CaptureFcHistory fc;fc.start(fcdev);
     std::ofstream payload(outdir/"frames.mjpgbin",std::ios::binary|std::ios::trunc),meta(outdir/"frames.csv",std::ios::trunc);
     if(!payload||!meta)throw std::runtime_error("не удалось создать файлы dataset");
-    meta<<"frame,mono_ns,ts_ns,offset_bytes,size_bytes,decode_ok,luna_valid,luna_m,luna_age_ms,att_valid,att_age_ms,roll,pitch,yaw,height_m,sensors_valid\n";
-    cv::setNumThreads(1);std::signal(SIGINT,onSignal);std::signal(SIGTERM,onSignal);uint64_t frame=0;
+    meta<<"frame,mono_ns,ts_ns,offset_bytes,size_bytes,decode_ok,luna_valid,luna_m,luna_age_ms,att_valid,att_age_ms,roll,pitch,yaw,height_m,sensors_valid,sync_wait_ms,sync_timeout\n";
+    cv::setNumThreads(1);std::signal(SIGINT,onSignal);std::signal(SIGTERM,onSignal);
+    uint64_t frame=0,att_ok_count=0,sensors_ok_count=0,sync_timeout_count=0;std::deque<PendingMeta>pending;
+    constexpr int64_t kSyncGraceNs=80000000LL; // 80 ms: > 1 ATTITUDE period at 50 Hz, без блокировки capture.
+
+    auto flushPending=[&](bool force){
+      while(!pending.empty()){
+        const PendingMeta&p=pending.front();Attitude att{};double att_age=1e9;bool ha=fc.at(p.ts_ns,&att,&att_age);
+        const int64_t cur=monoNs();const bool timeout=(cur-p.mono_ns)>=kSyncGraceNs;
+        if(!ha&&!force&&!timeout)break;
+        if(ha)++att_ok_count;else if(timeout||force)++sync_timeout_count;
+        double h=0,down=0;if(p.luna_valid&&ha){auto R=attitudeFluToNwu(att);down=-(R*cv::Vec3d(0,0,-1))[2];h=p.luna_m*down-offset+(R*lever_b)[2];}
+        const bool sensors=p.decode_ok&&p.luna_valid&&ha&&down>0.20&&h>0.05&&p.luna_age_ms<200&&att_age<30;
+        if(sensors)++sensors_ok_count;
+        const double wait_ms=(cur-p.mono_ns)*1e-6;
+        meta<<p.frame<<','<<p.mono_ns<<','<<p.ts_ns<<','<<p.offset<<','<<p.size<<','<<(p.decode_ok?1:0)<<','<<(p.luna_valid?1:0)<<','<<p.luna_m<<','<<p.luna_age_ms<<','<<(ha?1:0)<<','<<att_age<<','
+            <<att.roll<<','<<att.pitch<<','<<att.yaw<<','<<h<<','<<(sensors?1:0)<<','<<wait_ms<<','<<((!ha&&(timeout||force))?1:0)<<'\n';
+        pending.pop_front();
+      }
+    };
+
     while(g_running){
-      pollfd p{cam.fd,POLLIN,0};int pr=poll(&p,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0)continue;
+      pollfd pfd{cam.fd,POLLIN,0};int pr=poll(&pfd,1,20);if(pr<0){if(errno==EINTR)continue;fail("camera poll");}if(pr<=0){flushPending(false);continue;}
       while(g_running){
         v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;b.memory=V4L2_MEMORY_MMAP;if(xioctl(cam.fd,VIDIOC_DQBUF,&b)<0){if(errno==EAGAIN)break;fail("VIDIOC_DQBUF");}
-        int64_t now=monoNs(),ts=frameTvToNsReplayRecord(b.timestamp);std::vector<uint8_t>raw((uint8_t*)cam.bufs[b.index].p,(uint8_t*)cam.bufs[b.index].p+b.bytesused);
-        if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");++frame;uint64_t off=(uint64_t)payload.tellp();
+        const int64_t now=monoNs(),ts=frameTvToNsReplayRecord(b.timestamp);std::vector<uint8_t>raw((uint8_t*)cam.bufs[b.index].p,(uint8_t*)cam.bufs[b.index].p+b.bytesused);
+        if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");++frame;const uint64_t off=(uint64_t)payload.tellp();
         payload.write(reinterpret_cast<const char*>(raw.data()),(std::streamsize)raw.size());if(!payload)throw std::runtime_error("ошибка записи frames.mjpgbin");
-        cv::Mat one(1,(int)raw.size(),CV_8UC1,raw.data());cv::Mat gray=cv::imdecode(one,cv::IMREAD_GRAYSCALE);bool decode_ok=!gray.empty();
-        double lm=0;int strength=0;int64_t lns=0;Attitude att{};double att_age=1e9;bool hl=luna.latest(&lm,&strength,&lns),ha=fc.at(ts,&att,&att_age);
-        double lage=hl?(now-lns)*1e-6:1e9,h=0,down=0;if(hl&&ha){auto R=attitudeFluToNwu(att);down=-(R*cv::Vec3d(0,0,-1))[2];h=lm*down-offset+(R*lever_b)[2];}
-        bool sensors=decode_ok&&hl&&ha&&down>0.20&&h>0.05&&lage<200&&att_age<30;
-        meta<<frame<<','<<now<<','<<ts<<','<<off<<','<<raw.size()<<','<<(decode_ok?1:0)<<','<<(hl?1:0)<<','<<lm<<','<<lage<<','<<(ha?1:0)<<','<<att_age<<','
-            <<att.roll<<','<<att.pitch<<','<<att.yaw<<','<<h<<','<<(sensors?1:0)<<'\n';
-        if(frame%100==0){meta.flush();payload.flush();std::cerr<<"REC frame="<<frame<<" bytes="<<off+raw.size()<<" sensors="<<(sensors?1:0)<<"\r"<<std::flush;}
+        cv::Mat one(1,(int)raw.size(),CV_8UC1,raw.data());const bool decode_ok=!cv::imdecode(one,cv::IMREAD_GRAYSCALE).empty();
+        double lm=0;int strength=0;int64_t lns=0;const bool hl=luna.latest(&lm,&strength,&lns);const double lage=hl?(now-lns)*1e-6:1e9;
+        pending.push_back(PendingMeta{frame,off,(uint64_t)raw.size(),now,ts,decode_ok,hl,lm,lage});
+        flushPending(false);
+        if(frame%100==0){meta.flush();payload.flush();std::cerr<<"REC frame="<<frame<<" bytes="<<off+raw.size()<<" pending="<<pending.size()<<" att_ok="<<att_ok_count<<" sensors="<<sensors_ok_count<<" timeout="<<sync_timeout_count<<"\r"<<std::flush;}
       }
+      flushPending(false);
     }
-    g_running=false;fc.stop();luna.stop();meta.flush();payload.flush();std::cerr<<"\nЗапись завершена: "<<outdir<<" frames="<<frame<<"\n";return 0;
+    flushPending(true);g_running=false;fc.stop();luna.stop();meta.flush();payload.flush();
+    std::cerr<<"\nЗапись завершена: "<<outdir<<" frames="<<frame<<" att_ok="<<att_ok_count<<" sensors="<<sensors_ok_count<<" sync_timeout="<<sync_timeout_count<<"\n";return 0;
   }catch(const std::exception&e){g_running=false;std::cerr<<"ОШИБКА: "<<e.what()<<"\n";return 1;}
 }

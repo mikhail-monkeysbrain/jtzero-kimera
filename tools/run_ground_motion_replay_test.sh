@@ -63,7 +63,7 @@ g++ -std=c++17 -O2 -DNDEBUG -pthread \
 
 g++ -std=c++17 -O2 -DNDEBUG -pthread \
   $(pkg-config --cflags opencv4) -I"$MAVLINK_DIR" \
-  "$ROOT/tools/ground_motion_replay_compare.cpp" \
+  "$ROOT/tools/ground_motion_replay_compare_validmask.cpp" \
   -o "$REPLAY_BIN" \
   $(pkg-config --libs opencv4) -lpthread
 
@@ -94,7 +94,7 @@ echo "======================================================================"
 echo "Цель: один физический прогон записать один раз, затем offline сравнить:"
 echo "  1) BASELINE_CURRENT — текущее production prev-поведение;"
 echo "  2) DROP_CURRENT — кадры действительно отсутствуют;"
-echo "  3) REJECT_CURRENT — кадры пришли, но visual-step отвергнут и prev сдвинут;"
+echo "  3) REJECT_CURRENT — baseline-valid visual-step искусственно отвергнут;"
 echo "  4) REJECT_ANCHOR — тот же reject, но опора остаётся на последнем"
 echo "     реально учтённом кадре, пока dt < 0.2 s."
 echo

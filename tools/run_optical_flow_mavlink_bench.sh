@@ -20,19 +20,20 @@ mkdir -p "$RUN_DIR"
 
 MAVLINK_INC=""
 for d in "$KIMERA_ROOT/third_party/mavlink" "$KIMERA_ROOT/third_party/mavlink/include/mavlink/v2.0" "/usr/local/include/mavlink/v2.0"; do
-  if [[ -f "$d/common/mavlink.h" ]]; then MAVLINK_INC="-I$d"; break; fi
+  if [[ -f "$d/common/mavlink.h" && -f "$d/ardupilotmega/mavlink.h" ]]; then MAVLINK_INC="-I$d"; break; fi
 done
-[[ -n "$MAVLINK_INC" ]] || { echo "ОШИБКА: common/mavlink.h не найден"; exit 2; }
+[[ -n "$MAVLINK_INC" ]] || { echo "ОШИБКА: common/ и ardupilotmega/ MAVLink headers не найдены"; exit 2; }
 [[ -e "$CAMERA" ]] || { echo "ОШИБКА: камера не найдена: $CAMERA"; exit 2; }
 [[ -e "$LUNA" ]] || { echo "ОШИБКА: TF-Luna port не найден: $LUNA"; exit 2; }
 [[ -e "$FC" ]] || { echo "ОШИБКА: FC port не найден: $FC"; exit 2; }
 [[ -f "$CAMERA_YAML" ]] || { echo "ОШИБКА: camera yaml не найден: $CAMERA_YAML"; exit 2; }
 
-echo "Собираю отдельный OpticalFlow MAVLink MVP..."
+echo "Собираю отдельный OpticalFlow MAVLink MVP v2 (с EKF_STATUS_REPORT)..."
 if ! g++ -std=c++17 -O2 -DNDEBUG -pthread \
+  -Wno-address-of-packed-member \
   $(pkg-config --cflags opencv4) \
   $MAVLINK_INC \
-  "$ROOT/tools/optical_flow_mavlink_mvp.cpp" \
+  "$ROOT/tools/optical_flow_mavlink_mvp_v2.cpp" \
   -o "$BIN" \
   $(pkg-config --libs opencv4) -lpthread \
   >"$BUILD_LOG" 2>&1; then
@@ -46,7 +47,7 @@ echo "BUILD: $BUILD_LOG"
 echo
 cat <<EOF
 ======================================================================
-JT-ZERO — MAVLink OPTICAL FLOW BENCH
+JT-ZERO — MAVLink OPTICAL FLOW BENCH v2
 ======================================================================
 Это ОТДЕЛЬНЫЙ диагностический контур. production ground_motion_mvp.cpp не меняется.
 
@@ -73,11 +74,15 @@ camera yaml: $CAMERA_YAML
 focal scale: $FOCAL_SCALE
 CSV:         $CSV
 
-Первый запуск: аппарат DISARMED и неподвижен 10-20 секунд.
-Смотри строку rateFRD и EKF vN/E. Остановка Ctrl-C.
+Диагностика теперь печатает одновременно:
+  rateFRD    — наш raw optical flow;
+  EKFSTAT    — EKF_STATUS_REPORT flags;
+  LOCAL      — LOCAL_POSITION_NED, если ArduPilot считает position/velocity валидными.
+
+Аппарат DISARMED и неподвижен 8-10 секунд. Остановка Ctrl-C.
 ======================================================================
 EOF
 
-read -r -p "Параметры проверены, FC после FLOW_TYPE reboot выполнен. Запустить? [Enter] " _
+read -r -p "Параметры проверены, EKF origin после reboot установлен. Запустить? [Enter] " _
 
 exec "$BIN" "$CAMERA" "$LUNA" "$FC" "$CSV" "$CAMERA_YAML" "$FOCAL_SCALE"

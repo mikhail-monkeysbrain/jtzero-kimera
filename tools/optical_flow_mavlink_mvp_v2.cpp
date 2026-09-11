@@ -315,6 +315,8 @@ int main(int argc,char** argv){
     std::thread guide_thread;
     if(guided175){
       guide_thread=std::thread([&]{
+        // Даём стартовым строкам camera/FC напечататься до пошаговой инструкции.
+        std::this_thread::sleep_for(std::chrono::milliseconds(750));
         std::cerr<<"\n======================================================================\n"
                  <<"GUIDED TEST — ФИЗИЧЕСКИЙ СДВИГ 175 мм\n"
                  <<"======================================================================\n"
@@ -428,7 +430,8 @@ int main(int argc,char** argv){
            <<(esfresh?1:0)<<','<<es.flags<<','<<esage<<','<<esc<<','
            <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance<<'\n';
 
-        if(frame%100==0){
+        // В guided-режиме подробная телеметрия остаётся в CSV, но не засоряет терминал.
+        if(!guided175 && frame%100==0){
           std::cerr<<"OF frame="<<frame
                    <<" valid="<<(s.valid?1:0)
                    <<" rateFRD=("<<s.flow_body_x<<","<<s.flow_body_y<<") rad/s"

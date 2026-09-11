@@ -134,10 +134,10 @@ struct GroundMotionMavlinkPublisher {
                             uint32_t time_boot_ms,
                             double distance_m) const {
         if (fd < 0 || !std::isfinite(distance_m)) return false;
-        if (distance_m < 0.20 || distance_m > 8.00) return false;
+        if (distance_m < 0.10 || distance_m > 8.00) return false;
         const uint16_t current_cm = static_cast<uint16_t>(
-            std::lround(std::clamp(distance_m, 0.20, 8.00) * 100.0));
-        constexpr uint16_t min_cm = 20;
+            std::lround(std::clamp(distance_m, 0.10, 8.00) * 100.0));
+        constexpr uint16_t min_cm = 10;
         constexpr uint16_t max_cm = 800;
         constexpr uint8_t sensor_id = 0;
         constexpr uint8_t covariance = 0;

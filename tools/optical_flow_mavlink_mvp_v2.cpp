@@ -17,6 +17,9 @@
 #include <deque>
 #include <sstream>
 #include <atomic>
+#include <array>
+#include <map>
+#include <fstream>
 
 namespace {
 
@@ -50,6 +53,14 @@ struct FlowFc {
   int64_t heartbeat_recv_ns=0;
   uint8_t target_sys=0,target_comp=0;
 
+  static constexpr size_t remote_block_size=MAVLINK_MSG_REMOTE_LOG_DATA_BLOCK_FIELD_DATA_LEN;
+  std::ofstream remote_ofs;
+  std::map<uint32_t,std::array<uint8_t,remote_block_size>> remote_pending;
+  uint32_t remote_expected=0;
+  uint64_t remote_blocks_rx=0,remote_blocks_written=0,remote_duplicates=0;
+  bool remote_active=false;
+  std::string remote_path;
+
   static constexpr uint8_t self_sys=191;
   static constexpr uint8_t self_comp=MAV_COMP_ID_VISUAL_INERTIAL_ODOMETRY;
 
@@ -66,6 +77,14 @@ struct FlowFc {
       if(k<0&&errno==EINTR)continue;
       fail("FC write");
     }
+  }
+
+  static void sendRemoteStatus(int fd,uint8_t sys,uint8_t comp,uint32_t seq,uint8_t status){
+    mavlink_message_t m{};
+    mavlink_msg_remote_log_block_status_pack(self_sys,self_comp,&m,sys,comp,seq,status);
+    uint8_t b[MAVLINK_MAX_PACKET_LEN];
+    const auto n=mavlink_msg_to_send_buffer(b,&m);
+    writeAll(fd,b,n);
   }
 
   static void requestRate(int fd,uint8_t sys,uint8_t comp,uint32_t msgid,int hz){
@@ -133,7 +152,28 @@ struct FlowFc {
           for(ssize_t i=0;i<n;i++){
             if(!mavlink_parse_char(MAVLINK_COMM_0,buf[i],&m,&st))continue;
             if(m.sysid!=sys)continue;
-            if(m.msgid==MAVLINK_MSG_ID_HEARTBEAT){
+            if(m.msgid==MAVLINK_MSG_ID_REMOTE_LOG_DATA_BLOCK){
+              mavlink_remote_log_data_block_t q{}; mavlink_msg_remote_log_data_block_decode(&m,&q);
+              std::lock_guard<std::mutex> l(mu);
+              if(remote_active && q.target_system==self_sys && q.target_component==self_comp){
+                ++remote_blocks_rx;
+                if(q.seqno<remote_expected || remote_pending.count(q.seqno)){
+                  ++remote_duplicates;
+                } else {
+                  std::array<uint8_t,remote_block_size> a{};
+                  std::memcpy(a.data(),q.data,remote_block_size);
+                  remote_pending.emplace(q.seqno,a);
+                }
+                sendRemoteStatus(fd,sys,comp,q.seqno,MAV_REMOTE_LOG_DATA_BLOCK_ACK);
+                for(;;){
+                  auto it=remote_pending.find(remote_expected);
+                  if(it==remote_pending.end())break;
+                  remote_ofs.write(reinterpret_cast<const char*>(it->second.data()),remote_block_size);
+                  remote_pending.erase(it);
+                  ++remote_expected; ++remote_blocks_written;
+                }
+              }
+            } else if(m.msgid==MAVLINK_MSG_ID_HEARTBEAT){
               mavlink_heartbeat_t hb{}; mavlink_msg_heartbeat_decode(&m,&hb);
               if(hb.autopilot==MAV_AUTOPILOT_ARDUPILOTMEGA){
                 std::lock_guard<std::mutex> l(mu);
@@ -173,6 +213,53 @@ struct FlowFc {
     return true;
   }
 
+  bool startRemoteLog(const std::string& path,double timeout_s=5.0){
+    const int64_t deadline=monoNs()+(int64_t)(timeout_s*1e9);
+    while(g_running && monoNs()<deadline){
+      {
+        std::lock_guard<std::mutex> l(mu);
+        if(target_sys!=0)break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    uint8_t sys=0,comp=0;
+    {
+      std::lock_guard<std::mutex> l(mu);
+      sys=target_sys; comp=target_comp;
+      if(!sys)return false;
+      remote_ofs.open(path,std::ios::binary|std::ios::trunc);
+      if(!remote_ofs)return false;
+      remote_path=path;
+      remote_pending.clear(); remote_expected=0;
+      remote_blocks_rx=remote_blocks_written=remote_duplicates=0;
+      remote_active=true;
+    }
+    sendRemoteStatus(fd,sys,comp,MAV_REMOTE_LOG_DATA_BLOCK_START,MAV_REMOTE_LOG_DATA_BLOCK_ACK);
+    return true;
+  }
+
+  void stopRemoteLog(){
+    uint8_t sys=0,comp=0;
+    {
+      std::lock_guard<std::mutex> l(mu);
+      if(!remote_active)return;
+      sys=target_sys; comp=target_comp;
+      remote_active=false;
+    }
+    if(sys)sendRemoteStatus(fd,sys,comp,MAV_REMOTE_LOG_DATA_BLOCK_STOP,MAV_REMOTE_LOG_DATA_BLOCK_ACK);
+    std::lock_guard<std::mutex> l(mu);
+    remote_ofs.flush();
+    remote_ofs.close();
+  }
+
+  void remoteStats(uint64_t* rx,uint64_t* written,uint64_t* dup,size_t* pending){
+    std::lock_guard<std::mutex> l(mu);
+    if(rx)*rx=remote_blocks_rx;
+    if(written)*written=remote_blocks_written;
+    if(dup)*dup=remote_duplicates;
+    if(pending)*pending=remote_pending.size();
+  }
+
   bool latestArm(bool* out,double* age_ms=nullptr){
     std::lock_guard<std::mutex> l(mu);
     if(!heartbeat_valid)return false;
@@ -191,6 +278,7 @@ struct FlowFc {
   }
 
   void stop(){
+    if(remote_active)stopRemoteLog();
     if(th.joinable())th.join();
     if(fd>=0){::close(fd);fd=-1;}
   }
@@ -313,11 +401,13 @@ int main(int argc,char** argv){
   bool guided175=false;
   bool require_armed=false;
   double bench_height_override=0.0;
+  std::string remote_log_path;
   for(int i=7;i<argc;i++){
     const std::string a=argv[i];
     if(a=="--guided-175") guided175=true;
     else if(a=="--require-armed") require_armed=true;
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
+    else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
   }
   if(bench_height_override!=0.0 && !(bench_height_override>=0.55 && bench_height_override<=2.0)){
     std::cerr<<"ОШИБКА: --bench-height разрешён только 0.55..2.0 м для bench-диагностики\n";
@@ -336,6 +426,14 @@ int main(int argc,char** argv){
     Camera cam; cam.openDev(camdev);
     LunaReader luna; luna.start(lunadev);
     FlowFc fc; fc.start(fcdev);
+    if(!remote_log_path.empty()){
+      if(fc.startRemoteLog(remote_log_path)){
+        std::cerr<<"REMOTE DATAFLASH: запись запущена -> "<<remote_log_path<<"\n";
+      } else {
+        std::cerr<<"ПРЕДУПРЕЖДЕНИЕ: не удалось запустить REMOTE DATAFLASH logging.\n"
+                 <<"Проверь LOG_BACKEND_TYPE=2 и reboot FC. Тест продолжится без BIN.\n";
+      }
+    }
     GroundMotionMavlinkPublisher range_pub;
     range_pub.system_id=FlowFc::self_sys;
     range_pub.component_id=FlowFc::self_comp;
@@ -537,6 +635,14 @@ int main(int argc,char** argv){
 
     g_running=false;
     if(guide_thread.joinable()) guide_thread.join();
+    if(!remote_log_path.empty()){
+      uint64_t rrx=0,rwr=0,rdup=0; size_t rpend=0;
+      fc.remoteStats(&rrx,&rwr,&rdup,&rpend);
+      fc.stopRemoteLog();
+      std::cerr<<"REMOTE DATAFLASH: blocks_rx="<<rrx<<" written="<<rwr
+               <<" duplicates="<<rdup<<" pending="<<rpend
+               <<" BIN="<<remote_log_path<<"\n";
+    }
     fc.stop(); luna.stop();
     std::cerr<<"\nОстановлено. CSV: "<<csvpath
              <<" flow_sent="<<flow_sent_total

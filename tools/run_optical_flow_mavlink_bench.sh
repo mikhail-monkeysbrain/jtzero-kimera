@@ -62,7 +62,7 @@ JT-ZERO — MAVLink OPTICAL FLOW BENCH v2
   EK3_SRC1_VELXY     = 5      # OpticalFlow
   EK3_SRC1_POSZ      = 2      # RangeFinder, как в текущем JT-Zero
   EK3_SRC1_VELZ      = 0
-  EK3_SRC1_YAW       = 1      # Compass
+  EK3_SRC1_YAW       = 0      # None; текущий GPS-denied bench без независимого yaw
   EK3_SRC_OPTIONS    = 0
 
 RNGFND параметры НЕ меняем: текущий TF-Luna -> DISTANCE_SENSOR уже проверен.

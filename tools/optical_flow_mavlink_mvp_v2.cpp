@@ -382,7 +382,8 @@ int main(int argc,char** argv){
                    <<" rateFRD=("<<s.flow_body_x<<","<<s.flow_body_y<<") rad/s"
                    <<" inliers="<<s.inliers<<"/"<<s.tracked
                    <<" sent="<<flow_sent_total<<" invalid="<<flow_invalid_total
-                   <<" range="<<range_sent_total\n                   <<" luna="<<(hl?lm:-1.0)<<"m age="<<(hl?lage:-1.0)<<"ms";
+                   <<" range="<<range_sent_total
+                   <<" luna="<<(hl?lm:-1.0)<<"m age="<<(hl?lage:-1.0)<<"ms";
           if(esfresh){
             std::cerr<<" EKFSTAT flags=0x"<<std::hex<<es.flags<<std::dec
                      <<" ["<<ekfFlagsText(es.flags)<<"]"

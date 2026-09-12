@@ -972,9 +972,21 @@ int main(int argc,char** argv){
               flow_send_y*=k;
             }
           } else if(hl && lm>0.05){
-            const double k=lm/bench_height_override;
-            flow_send_x*=k;
-            flow_send_y*=k;
+            // Hand-carry/bench diagnostic: ArduPilot receives a synthetic
+            // range above its <0.5 m pre-takeoff optical-flow clamp, while
+            // angular flow is rescaled so the metric velocity still follows
+            // the REAL camera focal-point height.
+            double real_camera_height=lm;
+            double fake_camera_height=bench_height_override;
+            if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+              real_camera_height=lm-(diag_camera_z_m-diag_range_z_m);
+              fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
+            }
+            if(real_camera_height>0.02 && fake_camera_height>0.02){
+              const double k=real_camera_height/fake_camera_height;
+              flow_send_x*=k;
+              flow_send_y*=k;
+            }
           }
         }
         int64_t flow_send_ns=monoNs();

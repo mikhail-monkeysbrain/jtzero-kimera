@@ -12,7 +12,7 @@ def f(r,k,d=0.0):
     try: return float(r.get(k,d) or d)
     except Exception: return d
 
-def one(path: Path, threshold: float):
+def one(path: Path, threshold: float, target_m: float):
     rows=list(csv.DictReader(path.open(newline="")))
     mags=[math.hypot(f(r,"flow_body_x"),f(r,"flow_body_y")) for r in rows]
     idx=[i for i,m in enumerate(mags) if m>=threshold and int(f(rows[i],"valid"))==1]
@@ -47,7 +47,7 @@ def one(path: Path, threshold: float):
 
     return {
         "path":str(path),"ok":True,"raw":raw,"fc":fcp,"ekf":ekf,
-        "raw_scale":raw/TARGET,"ekf_scale":ekf/TARGET,
+        "raw_scale":raw/target_m,"ekf_scale":ekf/target_m,
         "ekf_vs_raw": ekf/raw if raw>1e-9 else float("nan")
     }
 
@@ -58,11 +58,15 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("csv",nargs="+")
     ap.add_argument("--flow-threshold",type=float,default=0.03)
+    ap.add_argument("--target-mm",type=float,default=175.0)
     args=ap.parse_args()
-    rr=[one(Path(p),args.flow_threshold) for p in args.csv]
+    if not (50.0 <= args.target_mm <= 1000.0):
+        raise SystemExit("ОШИБКА: --target-mm должен быть 50..1000")
+    target_m=args.target_mm*0.001
+    rr=[one(Path(p),args.flow_threshold,target_m) for p in args.csv]
 
     print("="*78)
-    print("JT-ZERO — 175 мм OPTICAL FLOW REPEATABILITY")
+    print(f"JT-ZERO — {args.target_mm:g} мм OPTICAL FLOW REPEATABILITY")
     print("="*78)
     good=[]
     for n,r in enumerate(rr,1):
@@ -72,7 +76,7 @@ def main():
         good.append(r)
         print(f"RUN {n}: RAW={r['raw']*1000:7.2f} mm  FC={r['fc']*1000:7.2f} mm  "
               f"EKF={r['ekf']*1000:7.2f} mm  EKF/RAW={r['ekf_vs_raw']:.4f}  "
-              f"RAWerr={(r['raw']/TARGET-1)*100:+6.2f}%  EKFerr={(r['ekf']/TARGET-1)*100:+6.2f}%")
+              f"RAWerr={(r['raw']/target_m-1)*100:+6.2f}%  EKFerr={(r['ekf']/target_m-1)*100:+6.2f}%")
         print(f"       {r['path']}")
 
     if len(good)<2:
@@ -90,8 +94,8 @@ def main():
     print(f"EKF/RAW      : mean={m:.4f}  sd={sd:.4f}  min={mn:.4f}  max={mx:.4f}")
     rawm=statistics.mean([r["raw"] for r in good])
     ekfm=statistics.mean([r["ekf"] for r in good])
-    print(f"RAW mean error vs 175 mm = {(rawm/TARGET-1)*100:+.2f}%")
-    print(f"EKF mean error vs 175 mm = {(ekfm/TARGET-1)*100:+.2f}%")
+    print(f"RAW mean error vs {args.target_mm:g} mm = {(rawm/target_m-1)*100:+.2f}%")
+    print(f"EKF mean error vs {args.target_mm:g} mm = {(ekfm/target_m-1)*100:+.2f}%")
 
     print("\n===== VERDICT =====")
     raw_cv=statistics.pstdev([r["raw"] for r in good])/rawm*100

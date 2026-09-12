@@ -22,8 +22,57 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <memory>
+
+#if __has_include(<opencv2/freetype.hpp>)
+#include <opencv2/freetype.hpp>
+#define JTZERO_GUI_FREETYPE 1
+#else
+#define JTZERO_GUI_FREETYPE 0
+#endif
 
 namespace {
+
+#if JTZERO_GUI_FREETYPE
+cv::Ptr<cv::freetype::FreeType2> g_gui_font;
+#endif
+
+bool initGuiFont(){
+#if JTZERO_GUI_FREETYPE
+  const std::array<const char*,6> candidates{{
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/usr/share/fonts/opentype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf"
+  }};
+  for(const char* p:candidates){
+    std::ifstream fh(p,std::ios::binary);
+    if(!fh.good()) continue;
+    try{
+      g_gui_font=cv::freetype::createFreeType2();
+      g_gui_font->loadFontData(p,0);
+      std::cerr<<"GUI: русский UTF-8 шрифт: "<<p<<"\n";
+      return true;
+    }catch(const cv::Exception&){}
+  }
+#endif
+  std::cerr<<"ПРЕДУПРЕЖДЕНИЕ: UTF-8 шрифт GUI не найден; кириллица может отображаться некорректно.\n";
+  return false;
+}
+
+void putGuiText(cv::Mat& img,const std::string& text,cv::Point org,
+                double scale,cv::Scalar color,int thickness=1){
+#if JTZERO_GUI_FREETYPE
+  if(g_gui_font){
+    const int h=std::max(12,(int)std::lround(31.0*scale));
+    g_gui_font->putText(img,text,org,h,color,thickness,cv::LINE_AA,true);
+    return;
+  }
+#endif
+  cv::putText(img,text,org,cv::FONT_HERSHEY_SIMPLEX,scale,color,thickness,cv::LINE_AA);
+}
 
 struct FlowFcLocal {
   float x=0,y=0,z=0,vx=0,vy=0,vz=0;
@@ -624,11 +673,13 @@ int main(int argc,char** argv){
     double return_b_body_dx=0.0,return_b_body_dy=0.0;
     double return_b_ned_n=0.0,return_b_ned_e=0.0;
     int pending_return_event=0; // 1=A/target, 2=B/turn, 3=H/physical-home mark
+    const std::string return_window_name="JT-Zero — Возврат в исходную точку";
     if(return_gui){
-      cv::namedWindow("JT-Zero Return-to-Target",cv::WINDOW_NORMAL);
-      cv::resizeWindow("JT-Zero Return-to-Target",1500,900);
-      std::cerr<<"RETURN GUI: "<<(return_manual_target?"MANUAL A after lift":"auto A after FLIGHT READY")<<".\n"
-               <<"Keys: SPACE=set A/target, B=mark turn point, H=mark physical HOME, C=clear trail, Q/ESC=quit.\n";
+      initGuiFont();
+      cv::namedWindow(return_window_name,cv::WINDOW_NORMAL);
+      cv::resizeWindow(return_window_name,1500,900);
+      std::cerr<<"GUI ВОЗВРАТА: "<<(return_manual_target?"точка A задаётся вручную после подъёма":"точка A задаётся автоматически после готовности")<<".\n"
+               <<"Клавиши: SPACE=A/домой, B=дальняя точка, H=физический возврат, C=очистить хвост, Q/ESC=выход.\n";
     }
 
     std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=wait-next, 4=done
@@ -1015,40 +1066,40 @@ int main(int argc,char** argv){
           cv::Mat hud(900,1500,CV_8UC3,cv::Scalar(20,20,20));
           const cv::Point center(450,450);
 
-          // Large operator protocol banner for screen recording.
+          // Крупная русская инструкция оператору — её видно на записи экрана.
           std::string step_title, step_line1, step_line2;
           cv::Scalar step_color(220,220,220);
           if(!flight_ready){
-            step_title="STEP 1 / 5  WAIT FOR FLIGHT READY";
-            step_line1="Keep the vehicle still. Do not start the test yet.";
-            step_line2="When FLIGHT READY appears, lift to a comfortable working height.";
+            step_title="ШАГ 1 / 5 — ЖДИТЕ ГОТОВНОСТИ";
+            step_line1="Держите аппарат неподвижно. Тест пока не начинайте.";
+            step_line2="После ГОТОВНОСТИ поднимите аппарат на удобную высоту.";
             step_color=cv::Scalar(0,200,255);
           } else if(!return_target_set){
-            step_title="STEP 2 / 5  SET PHYSICAL A";
-            step_line1="Lift and hold steady at a comfortable height.";
-            step_line2="When stable, press SPACE. This exact pose becomes A/HOME.";
+            step_title="ШАГ 2 / 5 — ЗАДАЙТЕ ФИЗИЧЕСКУЮ ТОЧКУ A";
+            step_line1="Поднимите аппарат и удерживайте его неподвижно 2–3 секунды.";
+            step_line2="Нажмите SPACE. Эта позиция станет точкой A / ДОМОЙ.";
             step_color=cv::Scalar(0,255,255);
           } else if(!return_b_marked){
-            step_title="STEP 3 / 5  MOVE A -> B";
-            step_line1="Carry the vehicle naturally 300-500 mm. Height/attitude may vary.";
-            step_line2="Stop completely at B, wait 2-3 s, then press B.";
+            step_title="ШАГ 3 / 5 — ПЕРЕНЕСИТЕ A → B";
+            step_line1="Естественно перенесите аппарат примерно на 300–500 мм.";
+            step_line2="В точке B остановитесь на 2–3 секунды и нажмите B.";
             step_color=cv::Scalar(0,255,0);
           } else if(!return_home_marked){
-            step_title="STEP 4 / 5  RETURN PHYSICALLY TO A";
-            step_line1="Return to the same PHYSICAL A position, not the GUI target.";
-            step_line2="Stop completely, wait 2-3 s, then press H.";
+            step_title="ШАГ 4 / 5 — ФИЗИЧЕСКИ ВЕРНИТЕСЬ В A";
+            step_line1="Вернитесь в реальную исходную точку, НЕ по метке EKF.";
+            step_line2="Полностью остановитесь на 2–3 секунды и нажмите H.";
             step_color=cv::Scalar(0,180,255);
           } else {
-            step_title="STEP 5 / 5  COMPLETE";
-            step_line1="Keep still for 2-3 s. Results are printed in the terminal.";
-            step_line2="Press Q or ESC to finish.";
+            step_title="ШАГ 5 / 5 — ТЕСТ ЗАВЕРШЁН";
+            step_line1="Ещё 2–3 секунды держите аппарат неподвижно.";
+            step_line2="Результат уже записан. Нажмите Q или ESC для выхода.";
             step_color=cv::Scalar(255,255,0);
           }
           cv::rectangle(hud,cv::Rect(25,255,840,105),cv::Scalar(30,30,30),cv::FILLED);
           cv::rectangle(hud,cv::Rect(25,255,840,105),step_color,2);
-          cv::putText(hud,step_title,{45,285},cv::FONT_HERSHEY_SIMPLEX,0.72,step_color,2,cv::LINE_AA);
-          cv::putText(hud,step_line1,{45,318},cv::FONT_HERSHEY_SIMPLEX,0.48,cv::Scalar(230,230,230),1,cv::LINE_AA);
-          cv::putText(hud,step_line2,{45,345},cv::FONT_HERSHEY_SIMPLEX,0.48,cv::Scalar(230,230,230),1,cv::LINE_AA);
+          putGuiText(hud,step_title,{45,285},0.72,step_color,2);
+          putGuiText(hud,step_line1,{45,318},0.48,cv::Scalar(230,230,230),1);
+          putGuiText(hud,step_line2,{45,345},0.48,cv::Scalar(230,230,230),1);
           cv::line(hud,{450,45},{450,855},cv::Scalar(70,70,70),1);
           cv::line(hud,{45,450},{855,450},cv::Scalar(70,70,70),1);
           cv::circle(hud,center,16,cv::Scalar(0,220,0),2);
@@ -1092,7 +1143,7 @@ int main(int argc,char** argv){
 
             if(dist<=0.025){
               cv::circle(hud,center,34,cv::Scalar(0,255,0),3);
-              cv::putText(hud,"TARGET REACHED",{285,95},cv::FONT_HERSHEY_SIMPLEX,1.0,cv::Scalar(0,255,0),3,cv::LINE_AA);
+              putGuiText(hud,"ТОЧКА ДОСТИГНУТА",{285,95},1.0,cv::Scalar(0,255,0),3);
             }
           }
 
@@ -1104,39 +1155,38 @@ int main(int argc,char** argv){
           const double yaw_deg=fg_ok?fg.yaw*180.0/M_PI:0.0;
           const double dyaw_deg=(fg_ok&&return_yaw0_set)?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0;
           std::ostringstream l1,l2,l3,l4,l5,l6,l7,l8,l9,l10;
-          l1<<std::fixed<<std::setprecision(0)<<"DIST TO TARGET: "<<dist*1000.0<<" mm";
-          l2<<std::fixed<<std::setprecision(1)<<"N error: "<<dn*1000.0<<" mm";
-          l3<<std::fixed<<std::setprecision(1)<<"E error: "<<de*1000.0<<" mm";
-          l4<<std::fixed<<std::setprecision(3)<<"vH: "<<vh<<" m/s   range: "<<(hl?lm:-1.0)<<" m";
-          l5<<std::fixed<<std::setprecision(2)<<"view: +/-"<<return_view_halfspan_m<<" m";
-          l6<<std::fixed<<std::setprecision(1)<<"RAW LOS legacy: "<<raw_closure_mm<<" mm";
-          l7<<std::fixed<<std::setprecision(1)<<"yaw: "<<yaw_deg<<" deg   dYaw(A): "<<dyaw_deg<<" deg";
-          l8<<std::fixed<<std::setprecision(1)<<"RAW NED closure: "<<raw_ned_closure_mm
-            <<" mm  dN/E "<<return_ned_n*1000.0<<"/"<<return_ned_e*1000.0;
-          l9<<std::fixed<<std::setprecision(1)<<"RAW BODY metric: "<<raw_body_closure_mm
-            <<" mm  dX/Y "<<return_body_dx*1000.0<<"/"<<return_body_dy*1000.0;
-          l10<<std::fixed<<std::setprecision(1)<<"att R/P/Y: "<<roll_deg<<"/"<<pitch_deg<<"/"<<yaw_deg
-             <<" deg   TF-Luna: "<<(hl?lm:-1.0)<<" m";
-          cv::putText(hud,return_target_set?l1.str():"WAITING FOR FLIGHT READY / TARGET...",{35,40},
-                      cv::FONT_HERSHEY_SIMPLEX,0.85,cv::Scalar(240,240,240),2,cv::LINE_AA);
-          cv::putText(hud,l2.str(),{35,75},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
-          cv::putText(hud,l3.str(),{35,105},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
-          cv::putText(hud,l6.str(),{35,140},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(190,190,190),1,cv::LINE_AA);
-          cv::putText(hud,l8.str(),{35,172},cv::FONT_HERSHEY_SIMPLEX,0.62,cv::Scalar(0,220,255),2,cv::LINE_AA);
-          cv::putText(hud,l9.str(),{35,204},cv::FONT_HERSHEY_SIMPLEX,0.55,cv::Scalar(190,190,190),1,cv::LINE_AA);
-          cv::putText(hud,l7.str(),{35,236},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(190,190,190),1,cv::LINE_AA);
-          cv::putText(hud,l10.str(),{35,382},cv::FONT_HERSHEY_SIMPLEX,0.52,
-                      (hl&&lm<0.20)?cv::Scalar(0,80,255):cv::Scalar(190,190,190),1,cv::LINE_AA);
+          l1<<std::fixed<<std::setprecision(0)<<"ДО ЦЕЛИ: "<<dist*1000.0<<" мм";
+          l2<<std::fixed<<std::setprecision(1)<<"ОШИБКА N: "<<dn*1000.0<<" мм";
+          l3<<std::fixed<<std::setprecision(1)<<"ОШИБКА E: "<<de*1000.0<<" мм";
+          l4<<std::fixed<<std::setprecision(3)<<"СКОРОСТЬ XY: "<<vh<<" м/с   ДАЛЬНОМЕР: "<<(hl?lm:-1.0)<<" м";
+          l5<<std::fixed<<std::setprecision(2)<<"МАСШТАБ: ±"<<return_view_halfspan_m<<" м";
+          l6<<std::fixed<<std::setprecision(1)<<"RAW LOS, старый: "<<raw_closure_mm<<" мм";
+          l7<<std::fixed<<std::setprecision(1)<<"КУРС: "<<yaw_deg<<"°   ΔКУРС(A): "<<dyaw_deg<<"°";
+          l8<<std::fixed<<std::setprecision(1)<<"RAW NED, замыкание: "<<raw_ned_closure_mm
+            <<" мм   ΔN/E "<<return_ned_n*1000.0<<"/"<<return_ned_e*1000.0;
+          l9<<std::fixed<<std::setprecision(1)<<"RAW BODY: "<<raw_body_closure_mm
+            <<" мм   ΔX/Y "<<return_body_dx*1000.0<<"/"<<return_body_dy*1000.0;
+          l10<<std::fixed<<std::setprecision(1)<<"КРЕН/ТАНГАЖ/КУРС: "<<roll_deg<<"/"<<pitch_deg<<"/"<<yaw_deg
+             <<"°   TF-Luna: "<<(hl?lm:-1.0)<<" м";
+          putGuiText(hud,return_target_set?l1.str():"ОЖИДАНИЕ ГОТОВНОСТИ / ТОЧКИ A",{35,40},0.85,cv::Scalar(240,240,240),2);
+          putGuiText(hud,l2.str(),{35,75},0.65,cv::Scalar(220,220,220),2);
+          putGuiText(hud,l3.str(),{35,105},0.65,cv::Scalar(220,220,220),2);
+          putGuiText(hud,l6.str(),{35,140},0.58,cv::Scalar(190,190,190),1);
+          putGuiText(hud,l8.str(),{35,172},0.62,cv::Scalar(0,220,255),2);
+          putGuiText(hud,l9.str(),{35,204},0.55,cv::Scalar(190,190,190),1);
+          putGuiText(hud,l7.str(),{35,236},0.58,cv::Scalar(190,190,190),1);
+          putGuiText(hud,l10.str(),{35,382},0.52,
+                      (hl&&lm<0.20)?cv::Scalar(0,80,255):cv::Scalar(190,190,190),1);
           if(hl&&lm<0.20){
-            cv::putText(hud,"TF-LUNA RANGE < 0.20 m: bench health may be poor",{35,410},
-                        cv::FONT_HERSHEY_SIMPLEX,0.50,cv::Scalar(0,80,255),1,cv::LINE_AA);
+            putGuiText(hud,"TF-LUNA < 0,20 м: показания могут быть ненадёжны",{35,410},
+                        0.50,cv::Scalar(0,80,255),1);
           }
-          cv::putText(hud,l4.str(),{35,850},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(200,200,200),1,cv::LINE_AA);
-          cv::putText(hud,l5.str(),{650,850},cv::FONT_HERSHEY_SIMPLEX,0.52,cv::Scalar(180,180,180),1,cv::LINE_AA);
+          putGuiText(hud,l4.str(),{35,850},0.58,cv::Scalar(200,200,200),1);
+          putGuiText(hud,l5.str(),{650,850},0.52,cv::Scalar(180,180,180),1);
           cv::putText(hud,"N",{458,65},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
           cv::putText(hud,"E",{825,440},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
-          cv::putText(hud,"SPACE:A target   B:turn mark   H:physical home   C:clear   Q/ESC:quit",{35,885},
-                      cv::FONT_HERSHEY_SIMPLEX,0.50,cv::Scalar(160,160,160),1,cv::LINE_AA);
+          putGuiText(hud,"SPACE: ТОЧКА A   B: ДАЛЬНЯЯ   H: ВОЗВРАТ   C: ОЧИСТИТЬ   Q/ESC: ВЫХОД",{35,885},
+                      0.50,cv::Scalar(160,160,160),1);
 
           // Live camera panel. Use the already decoded frame so this does not
           // open a second V4L2 stream or alter the optical-flow pipeline.
@@ -1155,18 +1205,18 @@ int main(int argc,char** argv){
             const int ry1=cam_y+(int)std::lround(g_feature_roi.y1*cam_h);
             cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),
                           cv::Scalar(0,255,255),2,cv::LINE_AA);
-            cv::putText(hud,"OV9281 LIVE",{cam_x,70},cv::FONT_HERSHEY_SIMPLEX,0.80,
-                        cv::Scalar(240,240,240),2,cv::LINE_AA);
-            cv::putText(hud,"yellow = KLT feature ROI",{cam_x,cam_y+cam_h+32},
-                        cv::FONT_HERSHEY_SIMPLEX,0.55,cv::Scalar(0,255,255),1,cv::LINE_AA);
+            putGuiText(hud,"OV9281 — ЖИВОЕ ВИДЕО",{cam_x,70},0.80,
+                        cv::Scalar(240,240,240),2);
+            putGuiText(hud,"ЖЁЛТАЯ РАМКА — ОБЛАСТЬ KLT",{cam_x,cam_y+cam_h+32},
+                        0.55,cv::Scalar(0,255,255),1);
             std::ostringstream cam_diag;
-            cam_diag<<"frame "<<frame<<"  valid "<<(s.valid?1:0)
-                    <<"  inliers "<<s.inliers<<"/"<<s.tracked;
-            cv::putText(hud,cam_diag.str(),{cam_x,cam_y+cam_h+62},
-                        cv::FONT_HERSHEY_SIMPLEX,0.52,cv::Scalar(210,210,210),1,cv::LINE_AA);
+            cam_diag<<"КАДР "<<frame<<"   ВАЛИДЕН "<<(s.valid?1:0)
+                    <<"   ИНЛАЙЕРЫ "<<s.inliers<<"/"<<s.tracked;
+            putGuiText(hud,cam_diag.str(),{cam_x,cam_y+cam_h+62},
+                        0.52,cv::Scalar(210,210,210),1);
           }
 
-          cv::imshow("JT-Zero Return-to-Target",hud);
+          cv::imshow(return_window_name,hud);
           const int key=cv::waitKey(1)&0xff;
           if(key==' ' && efresh){
             return_target_n=ep.x; return_target_e=ep.y;

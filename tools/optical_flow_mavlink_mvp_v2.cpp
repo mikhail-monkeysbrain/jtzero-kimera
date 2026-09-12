@@ -401,6 +401,7 @@ int main(int argc,char** argv){
   bool guided=false;
   double guided_target_mm=175.0;
   bool require_armed=false;
+  bool nominal_target_only=false;
   double bench_height_override=0.0;
   std::string remote_log_path;
   for(int i=7;i<argc;i++){
@@ -408,6 +409,7 @@ int main(int argc,char** argv){
     if(a=="--guided-175"){ guided=true; guided_target_mm=175.0; }
     else if(a=="--guided-mm" && i+1<argc){ guided=true; guided_target_mm=std::stod(argv[++i]); }
     else if(a=="--require-armed") require_armed=true;
+    else if(a=="--nominal-target") nominal_target_only=true;
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
   }
@@ -557,10 +559,16 @@ int main(int argc,char** argv){
                  <<"START N/E = ("<<guide_start.x<<", "<<guide_start.y<<") m\n"
                  <<"END   N/E = ("<<guide_end.x<<", "<<guide_end.y<<") m\n"
                  <<"DELTA N/E = ("<<dn<<", "<<de<<") m\n"
-                 <<"EKF horizontal displacement = "<<dist*1000.0<<" mm\n"
-                 <<"Target = "<<guided_target_mm<<" mm\n"
-                 <<"Error  = "<<(dist*1000.0-guided_target_mm)<<" mm ("<<((dist/(guided_target_mm*0.001))-1.0)*100.0<<" %)\n"
-                 <<"======================================================================\n";
+                 <<"EKF horizontal displacement = "<<dist*1000.0<<" mm\n";
+        if(nominal_target_only){
+          std::cerr<<"Nominal guided target = "<<guided_target_mm
+                   <<" mm (ТОЛЬКО ИНСТРУКЦИЯ; фактическое расстояние вводится в GUI)\n"
+                   <<"Error vs nominal target = НЕ СЧИТАЕТСЯ\n";
+        } else {
+          std::cerr<<"Target = "<<guided_target_mm<<" mm\n"
+                   <<"Error  = "<<(dist*1000.0-guided_target_mm)<<" mm ("<<((dist/(guided_target_mm*0.001))-1.0)*100.0<<" %)\n";
+        }
+        std::cerr<<"======================================================================\n";
         g_running=false;
       });
     }

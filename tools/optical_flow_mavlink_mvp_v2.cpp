@@ -608,12 +608,18 @@ int main(int argc,char** argv){
     // Return-to-target forensic state. RAW is accumulated in native body-flow
     // measurement coordinates using the camera height above the observed plane.
     // It is intentionally kept independent from EKF position.
+    // Native LOS integral is kept for continuity with earlier diagnostics.
     double return_raw_x=0.0,return_raw_y=0.0;
+    // AP-model translational displacement, first in body FRD, then rotated to NED.
+    double return_body_dx=0.0,return_body_dy=0.0;
+    double return_ned_n=0.0,return_ned_e=0.0;
     double return_yaw0=0.0;
     bool return_yaw0_set=false;
     bool return_b_marked=false;
     double return_b_n=0.0,return_b_e=0.0;
     double return_b_raw_x=0.0,return_b_raw_y=0.0,return_b_yaw=0.0;
+    double return_b_body_dx=0.0,return_b_body_dy=0.0;
+    double return_b_ned_n=0.0,return_b_ned_e=0.0;
     int pending_return_event=0; // 1=A/target, 2=B/turn, 3=H/physical-home mark
     if(return_gui){
       cv::namedWindow("JT-Zero Return-to-Target",cv::WINDOW_NORMAL);
@@ -939,20 +945,47 @@ int main(int argc,char** argv){
             }
           }
           if(hcam>0.02){
-            // flow_send is already scaled for the synthetic range in fixed-height
-            // bench mode; recover native metric closure with the true camera height
-            // only when no synthetic scaling is active.
+            double native_fx=flow_send_x, native_fy=flow_send_y;
             if(bench_true_camera_height>0.0 && bench_height_override>0.0){
               double fake_camera_height=bench_height_override;
               if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
                 fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
               }
-              const double k=(bench_true_camera_height>0.0)?fake_camera_height/bench_true_camera_height:1.0;
-              return_raw_x += flow_send_x*k*hcam*dt;
-              return_raw_y += flow_send_y*k*hcam*dt;
-            } else {
-              return_raw_x += flow_send_x*hcam*dt;
-              return_raw_y += flow_send_y*hcam*dt;
+              const double undo=(bench_true_camera_height>0.0)?fake_camera_height/bench_true_camera_height:1.0;
+              native_fx*=undo; native_fy*=undo;
+            }
+
+            // Legacy/native LOS integral.
+            return_raw_x += native_fx*hcam*dt;
+            return_raw_y += native_fy*hcam*dt;
+
+            // Mirror ArduPilot EKF3 optical-flow conventions:
+            //   internal flowRadXY = -rawFlowRates
+            //   flowRadXYcomp = flowRadXY + bodyRateXY
+            //   losPred.x = v_body_y/range
+            //   losPred.y = -v_body_x/range
+            // Therefore:
+            //   v_body_x = -flowComp.y * range
+            //   v_body_y =  flowComp.x * range
+            // Use FC ATTITUDE/gyro from the same camera interval average.
+            if(fg_ok){
+              const double comp_x=-native_fx + fg.x;
+              const double comp_y=-native_fy + fg.y;
+              const double dbx=(-comp_y)*hcam*dt;
+              const double dby=( comp_x)*hcam*dt;
+              return_body_dx += dbx;
+              return_body_dy += dby;
+
+              // Full 3-2-1 body-FRD -> NED rotation, planar body displacement z=0.
+              const double cr=std::cos(fg.roll),  sr=std::sin(fg.roll);
+              const double cp=std::cos(fg.pitch), sp=std::sin(fg.pitch);
+              const double cy=std::cos(fg.yaw),   sy=std::sin(fg.yaw);
+              const double r00=cy*cp;
+              const double r01=cy*sp*sr-sy*cr;
+              const double r10=sy*cp;
+              const double r11=sy*sp*sr+cy*cr;
+              return_ned_n += r00*dbx + r01*dby;
+              return_ned_e += r10*dbx + r11*dby;
             }
           }
         }
@@ -964,6 +997,8 @@ int main(int argc,char** argv){
             return_target_set=true;
             return_trail.clear();
             return_raw_x=return_raw_y=0.0;
+            return_body_dx=return_body_dy=0.0;
+            return_ned_n=return_ned_e=0.0;
             return_b_marked=false;
             if(fg_ok){ return_yaw0=fg.yaw; return_yaw0_set=true; }
             pending_return_event=1;
@@ -1010,6 +1045,12 @@ int main(int argc,char** argv){
             cv::circle(hud,cur,10,cv::Scalar(0,180,255),-1);
             cv::arrowedLine(hud,cur,center,cv::Scalar(0,220,255),3,cv::LINE_AA,0,0.08);
 
+            // Cyan RAW-NED point: independent optical-flow+gyro+attitude integration.
+            const cv::Point raw_cur(
+              std::clamp((int)std::lround(center.x+return_ned_e*px_per_m),50,850),
+              std::clamp((int)std::lround(center.y-return_ned_n*px_per_m),50,850));
+            cv::circle(hud,raw_cur,8,cv::Scalar(255,255,0),2,cv::LINE_AA);
+
             if(dist<=0.025){
               cv::circle(hud,center,34,cv::Scalar(0,255,0),3);
               cv::putText(hud,"TARGET REACHED",{285,95},cv::FONT_HERSHEY_SIMPLEX,1.0,cv::Scalar(0,255,0),3,cv::LINE_AA);
@@ -1017,22 +1058,30 @@ int main(int argc,char** argv){
           }
 
           const double raw_closure_mm=1000.0*std::hypot(return_raw_x,return_raw_y);
+          const double raw_ned_closure_mm=1000.0*std::hypot(return_ned_n,return_ned_e);
+          const double raw_body_closure_mm=1000.0*std::hypot(return_body_dx,return_body_dy);
           const double yaw_deg=fg_ok?fg.yaw*180.0/M_PI:0.0;
           const double dyaw_deg=(fg_ok&&return_yaw0_set)?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0;
-          std::ostringstream l1,l2,l3,l4,l5,l6,l7;
+          std::ostringstream l1,l2,l3,l4,l5,l6,l7,l8,l9;
           l1<<std::fixed<<std::setprecision(0)<<"DIST TO TARGET: "<<dist*1000.0<<" mm";
           l2<<std::fixed<<std::setprecision(1)<<"N error: "<<dn*1000.0<<" mm";
           l3<<std::fixed<<std::setprecision(1)<<"E error: "<<de*1000.0<<" mm";
           l4<<std::fixed<<std::setprecision(3)<<"vH: "<<vh<<" m/s   range: "<<(hl?lm:-1.0)<<" m";
           l5<<std::fixed<<std::setprecision(2)<<"view: +/-"<<return_view_halfspan_m<<" m";
-          l6<<std::fixed<<std::setprecision(1)<<"RAW closure proxy: "<<raw_closure_mm<<" mm";
+          l6<<std::fixed<<std::setprecision(1)<<"RAW LOS legacy: "<<raw_closure_mm<<" mm";
           l7<<std::fixed<<std::setprecision(1)<<"yaw: "<<yaw_deg<<" deg   dYaw(A): "<<dyaw_deg<<" deg";
+          l8<<std::fixed<<std::setprecision(1)<<"RAW NED closure: "<<raw_ned_closure_mm
+            <<" mm  dN/E "<<return_ned_n*1000.0<<"/"<<return_ned_e*1000.0;
+          l9<<std::fixed<<std::setprecision(1)<<"RAW BODY metric: "<<raw_body_closure_mm
+            <<" mm  dX/Y "<<return_body_dx*1000.0<<"/"<<return_body_dy*1000.0;
           cv::putText(hud,return_target_set?l1.str():"WAITING FOR FLIGHT READY / TARGET...",{35,40},
                       cv::FONT_HERSHEY_SIMPLEX,0.85,cv::Scalar(240,240,240),2,cv::LINE_AA);
           cv::putText(hud,l2.str(),{35,75},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
           cv::putText(hud,l3.str(),{35,105},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
-          cv::putText(hud,l6.str(),{35,140},cv::FONT_HERSHEY_SIMPLEX,0.62,cv::Scalar(210,210,210),2,cv::LINE_AA);
-          cv::putText(hud,l7.str(),{35,172},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(190,190,190),1,cv::LINE_AA);
+          cv::putText(hud,l6.str(),{35,140},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(190,190,190),1,cv::LINE_AA);
+          cv::putText(hud,l8.str(),{35,172},cv::FONT_HERSHEY_SIMPLEX,0.62,cv::Scalar(0,220,255),2,cv::LINE_AA);
+          cv::putText(hud,l9.str(),{35,204},cv::FONT_HERSHEY_SIMPLEX,0.55,cv::Scalar(190,190,190),1,cv::LINE_AA);
+          cv::putText(hud,l7.str(),{35,236},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(190,190,190),1,cv::LINE_AA);
           cv::putText(hud,l4.str(),{35,850},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(200,200,200),1,cv::LINE_AA);
           cv::putText(hud,l5.str(),{650,850},cv::FONT_HERSHEY_SIMPLEX,0.52,cv::Scalar(180,180,180),1,cv::LINE_AA);
           cv::putText(hud,"N",{458,65},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
@@ -1075,6 +1124,8 @@ int main(int argc,char** argv){
             return_target_set=true; return_trail.clear();
             return_view_halfspan_m=0.50;
             return_raw_x=return_raw_y=0.0;
+            return_body_dx=return_body_dy=0.0;
+            return_ned_n=return_ned_e=0.0;
             return_b_marked=false;
             if(fg_ok){ return_yaw0=fg.yaw; return_yaw0_set=true; }
             pending_return_event=1;
@@ -1084,24 +1135,37 @@ int main(int argc,char** argv){
             return_b_marked=true;
             return_b_n=ep.x; return_b_e=ep.y;
             return_b_raw_x=return_raw_x; return_b_raw_y=return_raw_y;
+            return_b_body_dx=return_body_dx; return_b_body_dy=return_body_dy;
+            return_b_ned_n=return_ned_n; return_b_ned_e=return_ned_e;
             return_b_yaw=fg_ok?fg.yaw:0.0;
             pending_return_event=2;
             std::cerr<<"RETURN GUI B MARK: EKF_from_A="<<1000.0*std::hypot(ep.x-return_target_n,ep.y-return_target_e)
-                     <<" mm RAW_from_A="<<1000.0*std::hypot(return_raw_x,return_raw_y)
+                     <<" mm RAW_NED_from_A="<<1000.0*std::hypot(return_ned_n,return_ned_e)
+                     <<" mm RAW_BODY_from_A="<<1000.0*std::hypot(return_body_dx,return_body_dy)
+                     <<" mm RAW_LOS_legacy="<<1000.0*std::hypot(return_raw_x,return_raw_y)
                      <<" mm dYaw="<<(fg_ok&&return_yaw0_set?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0)<<" deg\n";
           } else if((key=='h'||key=='H') && efresh){
             pending_return_event=3;
             const double ekf_close=1000.0*std::hypot(ep.x-return_target_n,ep.y-return_target_e);
             const double raw_close=1000.0*std::hypot(return_raw_x,return_raw_y);
+            const double raw_body_close=1000.0*std::hypot(return_body_dx,return_body_dy);
+            const double raw_ned_close=1000.0*std::hypot(return_ned_n,return_ned_e);
             std::cerr<<"\n======================================================================\n"
                      <<"RETURN CLOSURE MARK (PHYSICAL HOME)\n"
                      <<"EKF closure = "<<ekf_close<<" mm\n"
-                     <<"RAW native closure proxy = "<<raw_close<<" mm\n";
+                     <<"RAW NED closure = "<<raw_ned_close<<" mm"
+                     <<"  dN/E="<<return_ned_n*1000.0<<"/"<<return_ned_e*1000.0<<" mm\n"
+                     <<"RAW BODY metric closure = "<<raw_body_close<<" mm\n"
+                     <<"RAW LOS legacy closure = "<<raw_close<<" mm\n";
             if(return_b_marked){
               std::cerr<<"A->B EKF = "<<1000.0*std::hypot(return_b_n-return_target_n,return_b_e-return_target_e)<<" mm\n"
                        <<"B->H EKF = "<<1000.0*std::hypot(ep.x-return_b_n,ep.y-return_b_e)<<" mm\n"
-                       <<"A->B RAW = "<<1000.0*std::hypot(return_b_raw_x,return_b_raw_y)<<" mm\n"
-                       <<"B->H RAW = "<<1000.0*std::hypot(return_raw_x-return_b_raw_x,return_raw_y-return_b_raw_y)<<" mm\n";
+                       <<"A->B RAW NED = "<<1000.0*std::hypot(return_b_ned_n,return_b_ned_e)<<" mm\n"
+                       <<"B->H RAW NED = "<<1000.0*std::hypot(return_ned_n-return_b_ned_n,return_ned_e-return_b_ned_e)<<" mm\n"
+                       <<"A->B RAW BODY = "<<1000.0*std::hypot(return_b_body_dx,return_b_body_dy)<<" mm\n"
+                       <<"B->H RAW BODY = "<<1000.0*std::hypot(return_body_dx-return_b_body_dx,return_body_dy-return_b_body_dy)<<" mm\n"
+                       <<"A->B RAW LOS legacy = "<<1000.0*std::hypot(return_b_raw_x,return_b_raw_y)<<" mm\n"
+                       <<"B->H RAW LOS legacy = "<<1000.0*std::hypot(return_raw_x-return_b_raw_x,return_raw_y-return_b_raw_y)<<" mm\n";
             }
             std::cerr<<"dYaw(A->H) = "<<(fg_ok&&return_yaw0_set?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0)<<" deg\n"
                      <<"======================================================================\n";

@@ -20,6 +20,7 @@
 #include <array>
 #include <map>
 #include <fstream>
+#include <iomanip>
 
 namespace {
 
@@ -485,6 +486,7 @@ int main(int argc,char** argv){
   double guided_target_mm=175.0;
   bool require_armed=false;
   bool nominal_target_only=false;
+  bool return_gui=false;
   double bench_height_override=0.0;
   double pre_static_sec=5.0;
   double post_static_sec=5.0;
@@ -498,6 +500,7 @@ int main(int argc,char** argv){
     }
     else if(a=="--require-armed") require_armed=true;
     else if(a=="--nominal-target") nominal_target_only=true;
+    else if(a=="--return-gui") return_gui=true;
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
     else if(a=="--pre-static-sec" && i+1<argc) pre_static_sec=std::stod(argv[++i]);
@@ -579,6 +582,17 @@ int main(int argc,char** argv){
     constexpr double kReadyMinRangeM=0.10;
     constexpr double kReadyMaxRangeM=10.0;
     constexpr double kReadyMaxSpeedMps=0.03;
+
+    bool return_target_set=false;
+    double return_target_n=0.0,return_target_e=0.0;
+    double return_view_halfspan_m=0.50;
+    std::deque<cv::Point2d> return_trail;
+    if(return_gui){
+      cv::namedWindow("JT-Zero Return-to-Target",cv::WINDOW_NORMAL);
+      cv::resizeWindow("JT-Zero Return-to-Target",900,900);
+      std::cerr<<"RETURN GUI: target will be captured automatically after FLIGHT READY.\n"
+               <<"Keys: SPACE=set current position as target, C=clear trail, Q/ESC=quit.\n";
+    }
 
     std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=wait-next, 4=done
     std::atomic<int> guide_leg{0};
@@ -850,6 +864,89 @@ int main(int argc,char** argv){
             std::cerr<<"\nПРЕДУПРЕЖДЕНИЕ: FLIGHT READY не достигнут за "
                      <<kReadyTimeoutSec<<" с. Publisher продолжает работать; взлёт не выполнять.\n";
             flight_gate_begin_ns=now;
+          }
+        }
+
+        if(return_gui){
+          if(flight_ready && efresh && !return_target_set){
+            return_target_n=ep.x;
+            return_target_e=ep.y;
+            return_target_set=true;
+            return_trail.clear();
+            std::cerr<<"RETURN GUI TARGET SET: N="<<return_target_n<<" E="<<return_target_e<<"\n";
+          }
+
+          cv::Mat hud(900,900,CV_8UC3,cv::Scalar(20,20,20));
+          const cv::Point center(450,450);
+          cv::line(hud,{450,45},{450,855},cv::Scalar(70,70,70),1);
+          cv::line(hud,{45,450},{855,450},cv::Scalar(70,70,70),1);
+          cv::circle(hud,center,16,cv::Scalar(0,220,0),2);
+          cv::line(hud,{435,450},{465,450},cv::Scalar(0,220,0),2);
+          cv::line(hud,{450,435},{450,465},cv::Scalar(0,220,0),2);
+
+          double dn=0.0,de=0.0,dist=0.0,vh=0.0;
+          if(return_target_set && efresh){
+            dn=(double)ep.x-return_target_n;
+            de=(double)ep.y-return_target_e;
+            dist=std::hypot(dn,de);
+            vh=std::hypot((double)ep.vx,(double)ep.vy);
+
+            return_view_halfspan_m=std::max(0.30,std::max(return_view_halfspan_m*0.999,
+                                      1.20*std::max(std::abs(dn),std::abs(de))));
+            return_view_halfspan_m=std::min(return_view_halfspan_m,5.0);
+            const double px_per_m=360.0/return_view_halfspan_m;
+            const cv::Point cur(
+              std::clamp((int)std::lround(center.x+de*px_per_m),50,850),
+              std::clamp((int)std::lround(center.y-dn*px_per_m),50,850));
+
+            return_trail.emplace_back(de,dn);
+            while(return_trail.size()>1200)return_trail.pop_front();
+            for(size_t ti=1;ti<return_trail.size();++ti){
+              const cv::Point a(
+                std::clamp((int)std::lround(center.x+return_trail[ti-1].x*px_per_m),50,850),
+                std::clamp((int)std::lround(center.y-return_trail[ti-1].y*px_per_m),50,850));
+              const cv::Point bpt(
+                std::clamp((int)std::lround(center.x+return_trail[ti].x*px_per_m),50,850),
+                std::clamp((int)std::lround(center.y-return_trail[ti].y*px_per_m),50,850));
+              cv::line(hud,a,bpt,cv::Scalar(110,110,110),1);
+            }
+            cv::circle(hud,cur,10,cv::Scalar(0,180,255),-1);
+            cv::arrowedLine(hud,cur,center,cv::Scalar(0,220,255),3,cv::LINE_AA,0,0.08);
+
+            if(dist<=0.025){
+              cv::circle(hud,center,34,cv::Scalar(0,255,0),3);
+              cv::putText(hud,"TARGET REACHED",{285,95},cv::FONT_HERSHEY_SIMPLEX,1.0,cv::Scalar(0,255,0),3,cv::LINE_AA);
+            }
+          }
+
+          std::ostringstream l1,l2,l3,l4,l5;
+          l1<<std::fixed<<std::setprecision(0)<<"DIST TO TARGET: "<<dist*1000.0<<" mm";
+          l2<<std::fixed<<std::setprecision(1)<<"N error: "<<dn*1000.0<<" mm";
+          l3<<std::fixed<<std::setprecision(1)<<"E error: "<<de*1000.0<<" mm";
+          l4<<std::fixed<<std::setprecision(3)<<"vH: "<<vh<<" m/s   range: "<<(hl?lm:-1.0)<<" m";
+          l5<<std::fixed<<std::setprecision(2)<<"view: +/-"<<return_view_halfspan_m<<" m";
+          cv::putText(hud,return_target_set?l1.str():"WAITING FOR FLIGHT READY / TARGET...",{35,40},
+                      cv::FONT_HERSHEY_SIMPLEX,0.85,cv::Scalar(240,240,240),2,cv::LINE_AA);
+          cv::putText(hud,l2.str(),{35,75},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
+          cv::putText(hud,l3.str(),{35,105},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
+          cv::putText(hud,l4.str(),{35,850},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(200,200,200),1,cv::LINE_AA);
+          cv::putText(hud,l5.str(),{650,850},cv::FONT_HERSHEY_SIMPLEX,0.52,cv::Scalar(180,180,180),1,cv::LINE_AA);
+          cv::putText(hud,"N",{458,65},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
+          cv::putText(hud,"E",{825,440},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
+          cv::putText(hud,"SPACE: set target   C: clear trail   Q/ESC: quit",{35,885},
+                      cv::FONT_HERSHEY_SIMPLEX,0.50,cv::Scalar(160,160,160),1,cv::LINE_AA);
+
+          cv::imshow("JT-Zero Return-to-Target",hud);
+          const int key=cv::waitKey(1)&0xff;
+          if(key==' ' && efresh){
+            return_target_n=ep.x; return_target_e=ep.y;
+            return_target_set=true; return_trail.clear();
+            return_view_halfspan_m=0.50;
+            std::cerr<<"RETURN GUI TARGET RESET: N="<<return_target_n<<" E="<<return_target_e<<"\n";
+          } else if(key=='c'||key=='C'){
+            return_trail.clear();
+          } else if(key=='q'||key=='Q'||key==27){
+            g_running=false;
           }
         }
 

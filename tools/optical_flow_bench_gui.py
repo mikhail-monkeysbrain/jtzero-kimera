@@ -239,6 +239,7 @@ class BenchGui:
         env = os.environ.copy()
         env["JTZERO_FLOW_FOCAL_SCALE"] = FOCAL_SCALE
         env["JTZERO_FLOW_TARGET_MM"] = NOMINAL_MM
+        env["JTZERO_FLOW_TARGET_IS_NOMINAL"] = "1"
         env["JTZERO_FLOW_GUIDED_MODE"] = "armed-gate-open"
 
         master, slave = pty.openpty()

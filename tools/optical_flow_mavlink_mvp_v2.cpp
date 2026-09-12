@@ -40,14 +40,24 @@ struct FlowEkfStatus {
   bool valid=false;
 };
 
+struct FlowFcGyro {
+  double x=0,y=0,z=0;          // body FRD rad/s from ATTITUDE roll/pitch/yaw rates
+  int64_t recv_ns=0;
+  bool valid=false;
+};
+
 struct FlowFc {
   int fd=-1;
   std::thread th;
   std::mutex mu;
   FlowFcLocal local{};
   FlowEkfStatus ekf{};
+  FlowFcGyro gyro{};
   uint64_t local_count=0;
   uint64_t ekf_count=0;
+  uint64_t gyro_count=0;
+  double gyro_sum_x=0,gyro_sum_y=0,gyro_sum_z=0;
+  uint64_t gyro_sum_count=0;
   bool armed=false;
   bool heartbeat_valid=false;
   int64_t heartbeat_recv_ns=0;
@@ -141,6 +151,7 @@ struct FlowFc {
       std::cerr<<"FC: ArduPilot heartbeat sys="<<(int)sys<<" comp="<<(int)comp<<"\n";
       requestRate(fd,sys,comp,MAVLINK_MSG_ID_LOCAL_POSITION_NED,20);
       requestRate(fd,sys,comp,MAVLINK_MSG_ID_EKF_STATUS_REPORT,5);
+      requestRate(fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,100);
 
       while(g_running){
         pollfd p{fd,POLLIN,0};
@@ -181,6 +192,13 @@ struct FlowFc {
                 heartbeat_valid=true;
                 heartbeat_recv_ns=monoNs();
               }
+            } else if(m.msgid==MAVLINK_MSG_ID_ATTITUDE){
+              mavlink_attitude_t q{}; mavlink_msg_attitude_decode(&m,&q);
+              std::lock_guard<std::mutex> l(mu);
+              gyro.x=q.rollspeed; gyro.y=q.pitchspeed; gyro.z=q.yawspeed;
+              gyro.recv_ns=monoNs(); gyro.valid=true; ++gyro_count;
+              gyro_sum_x+=q.rollspeed; gyro_sum_y+=q.pitchspeed; gyro_sum_z+=q.yawspeed;
+              ++gyro_sum_count;
             } else if(m.msgid==MAVLINK_MSG_ID_LOCAL_POSITION_NED){
               mavlink_local_position_ned_t q{}; mavlink_msg_local_position_ned_decode(&m,&q);
               std::lock_guard<std::mutex> l(mu);
@@ -265,6 +283,24 @@ struct FlowFc {
     if(!heartbeat_valid)return false;
     *out=armed;
     if(age_ms)*age_ms=(monoNs()-heartbeat_recv_ns)*1e-6;
+    return true;
+  }
+
+  bool consumeGyroAverage(FlowFcGyro* out,double* age_ms,uint64_t* sample_count=nullptr){
+    std::lock_guard<std::mutex> l(mu);
+    if(!gyro.valid)return false;
+    *out=gyro;
+    if(gyro_sum_count>0){
+      out->x=gyro_sum_x/gyro_sum_count;
+      out->y=gyro_sum_y/gyro_sum_count;
+      out->z=gyro_sum_z/gyro_sum_count;
+      if(sample_count)*sample_count=gyro_sum_count;
+      gyro_sum_x=gyro_sum_y=gyro_sum_z=0.0;
+      gyro_sum_count=0;
+    } else {
+      if(sample_count)*sample_count=0;
+    }
+    if(age_ms)*age_ms=(monoNs()-gyro.recv_ns)*1e-6;
     return true;
   }
 
@@ -522,7 +558,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -745,6 +781,9 @@ int main(int argc,char** argv){
         const bool esok=fc.latestEkf(&es,&esage,&esc);
         const bool esfresh=esok&&esage<1000.0;
 
+        FlowFcGyro fg{}; double fg_age=1e9; uint64_t fg_samples=0;
+        const bool fg_ok=fc.consumeGyroAverage(&fg,&fg_age,&fg_samples);
+
         bool arm_now=false; double arm_age_now=1e9;
         const bool arm_ok=fc.latestArm(&arm_now,&arm_age_now) && arm_age_now<2500.0;
         if(require_armed && arm_ok && !arm_now && guide_stage.load()<3){
@@ -764,7 +803,8 @@ int main(int argc,char** argv){
            <<(arm_ok?(arm_now?1:0):-1)<<','
            <<(efresh?1:0)<<','<<ep.x<<','<<ep.y<<','<<ep.z<<','<<ep.vx<<','<<ep.vy<<','<<ep.vz<<','<<eage<<','<<ec<<','
            <<(esfresh?1:0)<<','<<es.flags<<','<<esage<<','<<esc<<','
-           <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance;
+           <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance<<','
+           <<(fg_ok?fg.x:0.0)<<','<<(fg_ok?fg.y:0.0)<<','<<(fg_ok?fg.z:0.0)<<','<<(fg_ok?fg_age:-1.0)<<','<<fg_samples;
         for(int ci=0;ci<9;ci++){
           csv<<','<<s.cell_n[ci]<<','<<s.cell_body_x[ci]<<','<<s.cell_body_y[ci];
         }

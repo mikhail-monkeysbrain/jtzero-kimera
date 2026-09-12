@@ -473,6 +473,19 @@ int main(int argc,char** argv){
     uint64_t flow_sent_total=0,flow_invalid_total=0,range_sent_total=0;
     int64_t last_range_send_ns=0;
 
+    // Flight-only readiness gate. It does not arm or inhibit ArduPilot; it is an
+    // explicit operator indication that the same signals used by the EKF are healthy.
+    const bool flight_ready_gate=!guided && bench_height_override<=0.0;
+    bool flight_ready=false;
+    int64_t flight_ready_since_ns=0;
+    int64_t flight_gate_begin_ns=monoNs();
+    int64_t last_not_ready_print_ns=0;
+    constexpr double kReadyStableSec=3.0;
+    constexpr double kReadyTimeoutSec=20.0;
+    constexpr double kReadyMinRangeM=0.10;
+    constexpr double kReadyMaxRangeM=10.0;
+    constexpr double kReadyMaxSpeedMps=0.03;
+
     std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=wait-next, 4=done
     std::atomic<int> guide_leg{0};
     std::atomic<bool> arm_lost{false};
@@ -694,6 +707,49 @@ int main(int argc,char** argv){
            <<(efresh?1:0)<<','<<ep.x<<','<<ep.y<<','<<ep.z<<','<<ep.vx<<','<<ep.vy<<','<<ep.vz<<','<<eage<<','<<ec<<','
            <<(esfresh?1:0)<<','<<es.flags<<','<<esage<<','<<esc<<','
            <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance<<'\n';
+
+        if(flight_ready_gate && !flight_ready){
+          const double speed_h=efresh?std::hypot((double)ep.vx,(double)ep.vy):1e9;
+          const bool luna_ok=hl && lage>=-2.0 && lage<100.0 &&
+                             lm>=kReadyMinRangeM && lm<=kReadyMaxRangeM;
+          const bool flow_ok=s.valid && flow_sent && s.inliers>=30;
+          const bool ekf_ok=esfresh &&
+                            (es.flags & EKF_ATTITUDE) &&
+                            (es.flags & EKF_VELOCITY_HORIZ) &&
+                            (es.flags & EKF_POS_HORIZ_REL) &&
+                            !(es.flags & EKF_UNINITIALIZED);
+          const bool local_ok=efresh && speed_h<=kReadyMaxSpeedMps;
+          const bool ready_now=luna_ok && flow_ok && ekf_ok && local_ok;
+          if(ready_now){
+            if(flight_ready_since_ns==0) flight_ready_since_ns=now;
+            if((now-flight_ready_since_ns)*1e-9>=kReadyStableSec){
+              flight_ready=true;
+              std::cerr<<"\n======================================================================\n"
+                       <<"FLIGHT READY\n"
+                       <<"range="<<lm<<" m, flow valid, EKF velH/posRel valid, |vH|="
+                       <<speed_h<<" m/s\n"
+                       <<"Состояние было непрерывно стабильным "<<kReadyStableSec<<" с.\n"
+                       <<"======================================================================\n";
+            }
+          }else{
+            flight_ready_since_ns=0;
+            if(last_not_ready_print_ns==0 || now-last_not_ready_print_ns>1000000000LL){
+              std::cerr<<"\nNOT READY:"
+                       <<" luna="<<(luna_ok?"OK":"NO")
+                       <<" flow="<<(flow_ok?"OK":"NO")
+                       <<" ekf="<<(ekf_ok?"OK":"NO")
+                       <<" local="<<(local_ok?"OK":"NO")
+                       <<" range="<<(hl?lm:-1.0)
+                       <<" vH="<<(efresh?speed_h:-1.0)<<"\n";
+              last_not_ready_print_ns=now;
+            }
+          }
+          if((now-flight_gate_begin_ns)*1e-9>kReadyTimeoutSec && !flight_ready){
+            std::cerr<<"\nПРЕДУПРЕЖДЕНИЕ: FLIGHT READY не достигнут за "
+                     <<kReadyTimeoutSec<<" с. Publisher продолжает работать; взлёт не выполнять.\n";
+            flight_gate_begin_ns=now;
+          }
+        }
 
         // В guided-режиме подробная телеметрия остаётся в CSV, но не засоряет терминал.
         if(!guided && frame%100==0){

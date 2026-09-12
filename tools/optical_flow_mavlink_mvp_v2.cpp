@@ -629,14 +629,16 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
 
     cv::Mat prev; int64_t prev_ts=0; uint64_t frame=0;
     uint64_t flow_sent_total=0,flow_invalid_total=0,range_sent_total=0;
+    uint64_t camera_queue_dropped_total=0, stale_flow_rejected_total=0;
     int64_t last_range_send_ns=0;
+    constexpr double kMaxFlowPipelineAgeMs=80.0;
 
     // Flight-only readiness gate. It does not arm or inhibit ArduPilot; it is an
     // explicit operator indication that the same signals used by the EKF are healthy.
@@ -840,16 +842,35 @@ int main(int argc,char** argv){
       if(pr<0){if(errno==EINTR)continue;fail("camera poll");}
       if(pr<=0)continue;
 
+      // КРИТИЧЕСКИ: обработка KLT медленнее capture-rate камеры. Если
+      // обрабатывать каждый queued MJPEG кадр, возникает постоянный backlog
+      // (~0.4-0.8 с в плохом прогоне), а ArduPilot компенсирует такой старый
+      // flow СВЕЖИМ gyro. Поэтому всегда выкидываем промежуточные queued
+      // кадры и обрабатываем только самый свежий доступный кадр.
+      std::vector<uint8_t> latest_jpeg;
+      int64_t ts=0;
+      uint64_t camera_queue_dropped=0;
       while(g_running){
         v4l2_buffer b{}; b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE; b.memory=V4L2_MEMORY_MMAP;
-        if(xioctl(cam.fd,VIDIOC_DQBUF,&b)<0){if(errno==EAGAIN)break;fail("VIDIOC_DQBUF");}
-        const int64_t now=monoNs();
-        const int64_t ts=(int64_t)b.timestamp.tv_sec*1000000000LL+(int64_t)b.timestamp.tv_usec*1000LL;
-        cv::Mat raw(1,(int)b.bytesused,CV_8UC1,cam.bufs[b.index].p);
-        cv::Mat gray=cv::imdecode(raw,cv::IMREAD_GRAYSCALE);
+        if(xioctl(cam.fd,VIDIOC_DQBUF,&b)<0){
+          if(errno==EAGAIN)break;
+          fail("VIDIOC_DQBUF");
+        }
+        const int64_t bts=(int64_t)b.timestamp.tv_sec*1000000000LL+(int64_t)b.timestamp.tv_usec*1000LL;
+        if(!latest_jpeg.empty()) ++camera_queue_dropped;
+        const uint8_t* pjpeg=reinterpret_cast<const uint8_t*>(cam.bufs[b.index].p);
+        latest_jpeg.assign(pjpeg,pjpeg+b.bytesused);
+        ts=bts;
         if(xioctl(cam.fd,VIDIOC_QBUF,&b)<0)fail("VIDIOC_QBUF");
-        if(gray.empty())continue;
-        ++frame;
+      }
+      if(latest_jpeg.empty()) continue;
+      camera_queue_dropped_total += camera_queue_dropped;
+
+      const int64_t now=monoNs();
+      cv::Mat raw(1,(int)latest_jpeg.size(),CV_8UC1,latest_jpeg.data());
+      cv::Mat gray=cv::imdecode(raw,cv::IMREAD_GRAYSCALE);
+      if(gray.empty()) continue;
+      ++frame;
 
         double lm=0; int strength=0; int64_t lns=0;
         const bool hl=luna.latest(&lm,&strength,&lns);
@@ -889,18 +910,22 @@ int main(int argc,char** argv){
             flow_send_y*=k;
           }
         }
-        int64_t flow_send_ns=0;
-        if(s.valid){
+        int64_t flow_send_ns=monoNs();
+        const double frame_pipeline_latency_ms =
+          (ts>0) ? (flow_send_ns-ts)*1e-6 : -1.0;
+        const bool flow_fresh = frame_pipeline_latency_ms>=0.0 &&
+                                frame_pipeline_latency_ms<=kMaxFlowPipelineAgeMs;
+        if(s.valid && flow_fresh){
           quality=255;
-          flow_send_ns=monoNs();
+          // AP_OpticalFlow_MAV currently timestamps measurement by RECEIVE time,
+          // not packet.time_usec, so low pipeline latency is mandatory.
           flow_sent=sendOpticalFlow(fc.fd,(uint64_t)(flow_send_ns/1000),
             (float)flow_send_x,(float)flow_send_y,quality);
           if(flow_sent)++flow_sent_total;
-        } else if(!prev.empty()){
-          ++flow_invalid_total;
+        } else {
+          if(!prev.empty() && !s.valid) ++flow_invalid_total;
+          if(s.valid && !flow_fresh) ++stale_flow_rejected_total;
         }
-        const double frame_pipeline_latency_ms =
-          (ts>0 && flow_send_ns>0) ? (flow_send_ns-ts)*1e-6 : -1.0;
 
         FlowFcLocal ep{}; double eage=1e9; uint64_t ec=0;
         const bool eok=fc.latestLocal(&ep,&eage,&ec);
@@ -923,6 +948,7 @@ int main(int argc,char** argv){
         }
 
         csv<<now<<','<<ts<<','<<flow_send_ns<<','<<frame_pipeline_latency_ms<<','
+           <<camera_queue_dropped<<','<<camera_queue_dropped_total<<','
            <<frame<<','<<guide_leg.load()<<','<<guide_stage.load()<<','<<(s.valid?1:0)<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','
@@ -961,7 +987,7 @@ int main(int argc,char** argv){
             if((now-flight_ready_since_ns)*1e-9>=kReadyStableSec){
               flight_ready=true;
               std::cerr<<"\n======================================================================\n"
-                       <<"FLIGHT READY\n"
+                       <<"СИСТЕМА ГОТОВА\n"
                        <<"range="<<((bench_height_override>0.0)?bench_height_override:lm)
                        <<" m, flow valid, EKF velH/posRel valid, |vH|="
                        <<speed_h<<" m/s\n"
@@ -971,7 +997,7 @@ int main(int argc,char** argv){
           }else{
             flight_ready_since_ns=0;
             if(last_not_ready_print_ns==0 || now-last_not_ready_print_ns>1000000000LL){
-              std::cerr<<"\nNOT READY:"
+              std::cerr<<"\nНЕ ГОТОВО:"
                        <<" luna="<<(luna_ok?"OK":"NO")
                        <<" flow="<<(flow_ok?"OK":"NO")
                        <<" ekf="<<(ekf_ok?"OK":"NO")
@@ -982,7 +1008,7 @@ int main(int argc,char** argv){
             }
           }
           if((now-flight_gate_begin_ns)*1e-9>kReadyTimeoutSec && !flight_ready){
-            std::cerr<<"\nПРЕДУПРЕЖДЕНИЕ: FLIGHT READY не достигнут за "
+            std::cerr<<"\nПРЕДУПРЕЖДЕНИЕ: СИСТЕМА ГОТОВА не достигнут за "
                      <<kReadyTimeoutSec<<" с. Publisher продолжает работать; взлёт не выполнять.\n";
             flight_gate_begin_ns=now;
           }
@@ -1284,6 +1310,9 @@ int main(int argc,char** argv){
                    <<" rateFRD=("<<s.flow_body_x<<","<<s.flow_body_y<<") rad/s"
                    <<" inliers="<<s.inliers<<"/"<<s.tracked
                    <<" sent="<<flow_sent_total<<" invalid="<<flow_invalid_total
+                   <<" stale_reject="<<stale_flow_rejected_total
+                   <<" cam_drop="<<camera_queue_dropped_total
+                   <<" latency="<<frame_pipeline_latency_ms<<"ms"
                    <<" range="<<range_sent_total
                    <<" luna="<<(hl?lm:-1.0)<<"m age="<<(hl?lage:-1.0)<<"ms";
           if(esfresh){
@@ -1318,6 +1347,8 @@ int main(int argc,char** argv){
     std::cerr<<"\nОстановлено. CSV: "<<csvpath
              <<" flow_sent="<<flow_sent_total
              <<" invalid="<<flow_invalid_total
+             <<" stale_reject="<<stale_flow_rejected_total
+             <<" camera_queue_dropped="<<camera_queue_dropped_total
              <<" range_sent="<<range_sent_total<<"\n";
     return 0;
   } catch(const std::exception& e){

@@ -623,7 +623,7 @@ int main(int argc,char** argv){
     int pending_return_event=0; // 1=A/target, 2=B/turn, 3=H/physical-home mark
     if(return_gui){
       cv::namedWindow("JT-Zero Return-to-Target",cv::WINDOW_NORMAL);
-      cv::resizeWindow("JT-Zero Return-to-Target",900,900);
+      cv::resizeWindow("JT-Zero Return-to-Target",1500,900);
       std::cerr<<"RETURN GUI: target will be captured automatically after FLIGHT READY.\n"
                <<"Keys: SPACE=set A/target, B=mark turn point, H=mark physical HOME, C=clear trail, Q/ESC=quit.\n";
     }

@@ -613,7 +613,7 @@ int main(int argc,char** argv){
            <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance<<'\n';
 
         // В guided-режиме подробная телеметрия остаётся в CSV, но не засоряет терминал.
-        if(!guided175 && frame%100==0){
+        if(!guided && frame%100==0){
           std::cerr<<"OF frame="<<frame
                    <<" valid="<<(s.valid?1:0)
                    <<" rateFRD=("<<s.flow_body_x<<","<<s.flow_body_y<<") rad/s"

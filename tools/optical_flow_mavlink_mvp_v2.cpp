@@ -405,6 +405,8 @@ int main(int argc,char** argv){
   bool require_armed=false;
   bool nominal_target_only=false;
   double bench_height_override=0.0;
+  double pre_static_sec=5.0;
+  double post_static_sec=5.0;
   std::string remote_log_path;
   for(int i=7;i<argc;i++){
     const std::string a=argv[i];
@@ -417,6 +419,8 @@ int main(int argc,char** argv){
     else if(a=="--nominal-target") nominal_target_only=true;
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
+    else if(a=="--pre-static-sec" && i+1<argc) pre_static_sec=std::stod(argv[++i]);
+    else if(a=="--post-static-sec" && i+1<argc) post_static_sec=std::stod(argv[++i]);
   }
   if(continuous_guided && (continuous_legs<2 || continuous_legs>30)){
     std::cerr<<"ОШИБКА: --continuous-legs разрешён только 2..30\n";
@@ -428,6 +432,10 @@ int main(int argc,char** argv){
   }
   if(bench_height_override!=0.0 && !(bench_height_override>=0.55 && bench_height_override<=2.0)){
     std::cerr<<"ОШИБКА: --bench-height разрешён только 0.55..2.0 м для bench-диагностики\n";
+    return 2;
+  }
+  if(!(pre_static_sec>=1.0&&pre_static_sec<=30.0) || !(post_static_sec>=1.0&&post_static_sec<=30.0)){
+    std::cerr<<"ОШИБКА: --pre-static-sec/--post-static-sec разрешены 1..30 с\n";
     return 2;
   }
   if(!(focal_scale>0.5&&focal_scale<2.0)){
@@ -536,8 +544,8 @@ int main(int argc,char** argv){
           std::cerr<<"\n======================================================================\n"
                    <<"LEG "<<leg<<" / "<<legs<<"\n"
                    <<"======================================================================\n"
-                   <<"СТАТИКА 5 секунд. НЕ ДВИГАТЬ.\n";
-          std::this_thread::sleep_for(std::chrono::seconds(5));
+                   <<"СТАТИКА "<<pre_static_sec<<" секунд. НЕ ДВИГАТЬ.\n";
+          std::this_thread::sleep_for(std::chrono::milliseconds((int)std::llround(pre_static_sec*1000.0)));
 
           double age=0; uint64_t count=0;
           if(!fc.latestLocal(&guide_start,&age,&count) || age>500){
@@ -551,8 +559,8 @@ int main(int argc,char** argv){
           std::string line; std::getline(std::cin,line);
 
           guide_stage=2;
-          std::cerr<<"\n>>> LEG "<<leg<<" СТОП. НЕ ТРОГАТЬ аппарат 5 секунд.\n";
-          std::this_thread::sleep_for(std::chrono::seconds(5));
+          std::cerr<<"\n>>> LEG "<<leg<<" СТОП. НЕ ТРОГАТЬ аппарат "<<post_static_sec<<" секунд.\n";
+          std::this_thread::sleep_for(std::chrono::milliseconds((int)std::llround(post_static_sec*1000.0)));
 
           if(!fc.latestLocal(&guide_end,&age,&count) || age>500){
             std::cerr<<"ОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED после движения.\n";

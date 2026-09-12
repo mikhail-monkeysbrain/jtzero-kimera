@@ -78,7 +78,6 @@ struct FlowFcLocal {
   float x=0,y=0,z=0,vx=0,vy=0,vz=0;
   int64_t recv_ns=0;
   bool valid=false;
-  int invalid_reason=0; // 0=OK,1=DT,2=FEATURES,3=TRACKED,4=HOMOGRAPHY,5=INLIERS,6=MAGNITUDE
 };
 
 struct FlowEkfStatus {
@@ -897,7 +896,7 @@ int main(int argc,char** argv){
         std::cerr<<"FIXED TRUE CAMERA HEIGHT: "<<bench_true_camera_height
                  <<" м; TF-Luna НЕ используется для метрического масштаба flow.\n";
       } else {
-        std::cerr<<"Flow-rate масштабируется real/fake по TF-Luna.\n";
+        std::cerr<<"Для synthetic range масштабируется ТОЛЬКО translational flow; rotational flow остаётся неизменным.\n";
       }
       std::cerr<<"ЭТО ТОЛЬКО СТЕНДОВАЯ ДИАГНОСТИКА, НЕ FLIGHT-РЕЖИМ.\n";
     }
@@ -957,39 +956,47 @@ int main(int argc,char** argv){
         FlowStep s;
         if(!prev.empty())s=estimateRawFlow(prev,gray,dt,calib);
 
+        // Consume the FC gyro for THIS processed camera interval before any
+        // bench-only range remapping.  Pure rotational optical flow must remain
+        // unscaled so ArduPilot can cancel it with bodyRate X/Y.
+        FlowFcGyro fg{}; double fg_age=1e9; uint64_t fg_samples=0;
+        const bool fg_ok=fc.consumeGyroAverage(&fg,&fg_age,&fg_samples);
+
         bool flow_sent=false; uint8_t quality=0;
         double flow_send_x=s.flow_body_x, flow_send_y=s.flow_body_y;
         if(s.valid && bench_height_override>0.0){
+          double real_camera_height=0.0;
+          double fake_camera_height=bench_height_override;
+          if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+            fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
+          }
+
           if(bench_true_camera_height>0.0){
-            // Bench-only fixed-height mode. Do not trust TF-Luna when it is below
-            // its reliable minimum range. ArduPilot receives a synthetic range,
-            // while angular flow is scaled so metric horizontal velocity remains
-            // equal to raw_flow * measured true camera height.
-            double fake_camera_height=bench_height_override;
-            if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
-              fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
-            }
-            if(fake_camera_height>0.02){
-              const double k=bench_true_camera_height/fake_camera_height;
-              flow_send_x*=k;
-              flow_send_y*=k;
-            }
+            real_camera_height=bench_true_camera_height;
           } else if(hl && lm>0.05){
-            // Hand-carry/bench diagnostic: ArduPilot receives a synthetic
-            // range above its <0.5 m pre-takeoff optical-flow clamp, while
-            // angular flow is rescaled so the metric velocity still follows
-            // the REAL camera focal-point height.
-            double real_camera_height=lm;
-            double fake_camera_height=bench_height_override;
+            real_camera_height=lm;
             if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
               real_camera_height=lm-(diag_camera_z_m-diag_range_z_m);
-              fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
             }
-            if(real_camera_height>0.02 && fake_camera_height>0.02){
-              const double k=real_camera_height/fake_camera_height;
-              flow_send_x*=k;
-              flow_send_y*=k;
-            }
+          }
+
+          if(real_camera_height>0.02 && fake_camera_height>0.02 && fg_ok){
+            const double k=real_camera_height/fake_camera_height;
+
+            // IMPORTANT: raw optical flow contains BOTH body rotation and
+            // translation.  ArduPilot later computes roughly:
+            //   flow_comp = -flow_raw + body_rate
+            // Therefore scaling the whole raw flow by k corrupts rotation
+            // cancellation during roll/pitch.  Scale only the translational
+            // residual and keep the rotational component at full magnitude:
+            //
+            //   flow_raw = gyro + translation
+            //   flow_send = gyro + k * translation
+            //
+            // This makes AP's post-compensation residual k*translation, which
+            // paired with the synthetic range preserves the real metric speed.
+            flow_send_x = fg.x + k*(s.flow_body_x - fg.x);
+            flow_send_y = fg.y + k*(s.flow_body_y - fg.y);
           }
         }
         int64_t flow_send_ns=monoNs();
@@ -1015,9 +1022,6 @@ int main(int argc,char** argv){
         FlowEkfStatus es{}; double esage=1e9; uint64_t esc=0;
         const bool esok=fc.latestEkf(&es,&esage,&esc);
         const bool esfresh=esok&&esage<1000.0;
-
-        FlowFcGyro fg{}; double fg_age=1e9; uint64_t fg_samples=0;
-        const bool fg_ok=fc.consumeGyroAverage(&fg,&fg_age,&fg_samples);
 
         bool arm_now=false; double arm_age_now=1e9;
         const bool arm_ok=fc.latestArm(&arm_now,&arm_age_now) && arm_age_now<2500.0;
@@ -1107,15 +1111,9 @@ int main(int argc,char** argv){
             }
           }
           if(hcam>0.02){
-            double native_fx=flow_send_x, native_fy=flow_send_y;
-            if(bench_true_camera_height>0.0 && bench_height_override>0.0){
-              double fake_camera_height=bench_height_override;
-              if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
-                fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
-              }
-              const double undo=(bench_true_camera_height>0.0)?fake_camera_height/bench_true_camera_height:1.0;
-              native_fx*=undo; native_fy*=undo;
-            }
+            // RAW forensic integrates the physical camera measurement,
+            // before any synthetic-range remapping used only for ArduPilot.
+            double native_fx=s.flow_body_x, native_fy=s.flow_body_y;
 
             // Legacy/native LOS integral.
             return_raw_x += native_fx*hcam*dt;

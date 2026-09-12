@@ -481,6 +481,51 @@ int main(int argc,char** argv){
                    <<"уберите пропеллеры/исключите тягу, армируйте штатным способом и запустите тест снова.\n";
           g_running=false; return;
         }
+
+        // В armed-gate-open каждый отдельный GUI-run заново начинает публиковать
+        // synthetic 0.60 m. Между run-ами MAVLink RangeFinder пропадает и EKF может
+        // временно перейти на baro, поэтому нельзя начинать измерение до сходимости Z.
+        if(bench_height_override>0.0){
+          constexpr double kHgtTolM=0.035;
+          constexpr double kStableSec=2.0;
+          constexpr double kTimeoutSec=20.0;
+          std::cerr<<"\n>>> СИНХРОНИЗАЦИЯ ВЫСОТЫ. НЕ ДВИГАТЬ.\n"
+                   <<">>> FC уже получает synthetic range "<<bench_height_override<<" м.\n"
+                   <<">>> Ждём LOCAL Z около -"<<bench_height_override
+                   <<" м (±"<<kHgtTolM<<" м) непрерывно "<<kStableSec<<" с.\n";
+          const int64_t sync_begin=monoNs();
+          int64_t stable_begin=0;
+          double last_z=0.0,last_age=1e9;
+          while(g_running){
+            FlowFcLocal q{}; double qage=1e9; uint64_t qcount=0;
+            const bool qok=fc.latestLocal(&q,&qage,&qcount) && qage<500.0;
+            if(qok){
+              last_z=q.z; last_age=qage;
+              const bool in_band=std::abs((-double(q.z))-bench_height_override)<=kHgtTolM;
+              if(in_band){
+                if(stable_begin==0) stable_begin=monoNs();
+                const double stable_s=(monoNs()-stable_begin)*1e-9;
+                if(stable_s>=kStableSec){
+                  std::cerr<<">>> ВЫСОТА СТАБИЛЬНА: LOCAL Z="<<q.z
+                           <<" м, inferred HAGL="<<(-q.z)<<" м. Начинаем тест.\n";
+                  break;
+                }
+              } else {
+                stable_begin=0;
+              }
+            }
+            if((monoNs()-sync_begin)*1e-9>=kTimeoutSec){
+              std::cerr<<"\nОШИБКА: EKF height не сошёлся к synthetic range за "
+                       <<kTimeoutSec<<" с. Последний LOCAL Z="<<last_z
+                       <<" м age="<<last_age<<" ms.\n"
+                       <<"Тест НЕ начинается: иначе scale OpticalFlow будет искажён HAGL.\n";
+              g_running=false; return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          }
+          if(!g_running) return;
+        }
+
         std::cerr<<"СТАТИКА 5 секунд. НЕ ДВИГАТЬ.\n";
         std::this_thread::sleep_for(std::chrono::seconds(5));
         double age=0; uint64_t count=0;

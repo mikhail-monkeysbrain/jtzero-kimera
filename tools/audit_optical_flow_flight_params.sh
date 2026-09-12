@@ -4,8 +4,38 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PY="${PYTHON:-python3}"
 PARAM_TOOL="$ROOT/tools/set_fc_param_checked.py"
+
+pick_python() {
+  local p
+  if [[ -n "${PYTHON:-}" ]]; then
+    if "$PYTHON" -c 'import pymavlink' >/dev/null 2>&1; then
+      echo "$PYTHON"
+      return 0
+    fi
+  fi
+
+  for p in \
+    "$HOME/venv-jtzero-mav/bin/python" \
+    "$HOME/.venv-jtzero-mav/bin/python" \
+    "$HOME/venv/bin/python" \
+    "$HOME/.venv/bin/python" \
+    python3
+  do
+    command -v "$p" >/dev/null 2>&1 || [[ -x "$p" ]] || continue
+    if "$p" -c 'import pymavlink' >/dev/null 2>&1; then
+      echo "$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! PY="$(pick_python)"; then
+  echo "ОШИБКА: не найден Python с модулем pymavlink." >&2
+  echo "Укажите интерпретатор через PYTHON=/path/to/python или активируйте существующий MAVLink venv." >&2
+  exit 2
+fi
 
 if [[ ! -f "$PARAM_TOOL" ]]; then
   echo "ОШИБКА: не найден $PARAM_TOOL" >&2
@@ -47,6 +77,7 @@ echo "======================================================================"
 echo "JT-ZERO — OPTICAL FLOW FLIGHT PREFLIGHT"
 echo "======================================================================"
 echo "FC: $DEVICE @ $BAUD"
+echo "Python: $PY"
 echo "Параметры только ЧИТАЮТСЯ. Ничего не изменяется."
 echo
 

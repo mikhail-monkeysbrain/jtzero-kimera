@@ -399,6 +399,7 @@ FeatureRoi g_feature_roi{};
 
 struct FlowStep {
   bool valid=false;
+  int invalid_reason=0; // 0=OK,1=DT,2=FEATURES,3=TRACKED,4=HOMOGRAPHY,5=INLIERS,6=MAGNITUDE
   int features=0,tracked=0,inliers=0;
   double inlier_ratio=0;
   double du_norm=0,dv_norm=0;

@@ -490,6 +490,7 @@ int main(int argc,char** argv){
   bool require_armed=false;
   bool nominal_target_only=false;
   bool return_gui=false;
+  bool return_manual_target=false;
   double diag_camera_z_m=std::numeric_limits<double>::quiet_NaN();
   double diag_range_z_m=std::numeric_limits<double>::quiet_NaN();
   double bench_height_override=0.0;
@@ -507,6 +508,7 @@ int main(int argc,char** argv){
     else if(a=="--require-armed") require_armed=true;
     else if(a=="--nominal-target") nominal_target_only=true;
     else if(a=="--return-gui") return_gui=true;
+    else if(a=="--return-manual-target") return_manual_target=true;
     else if(a=="--diag-camera-z-m" && i+1<argc) diag_camera_z_m=std::stod(argv[++i]);
     else if(a=="--diag-range-z-m" && i+1<argc) diag_range_z_m=std::stod(argv[++i]);
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
@@ -616,6 +618,7 @@ int main(int argc,char** argv){
     double return_yaw0=0.0;
     bool return_yaw0_set=false;
     bool return_b_marked=false;
+    bool return_home_marked=false;
     double return_b_n=0.0,return_b_e=0.0;
     double return_b_raw_x=0.0,return_b_raw_y=0.0,return_b_yaw=0.0;
     double return_b_body_dx=0.0,return_b_body_dy=0.0;
@@ -624,7 +627,7 @@ int main(int argc,char** argv){
     if(return_gui){
       cv::namedWindow("JT-Zero Return-to-Target",cv::WINDOW_NORMAL);
       cv::resizeWindow("JT-Zero Return-to-Target",1500,900);
-      std::cerr<<"RETURN GUI: target will be captured automatically after FLIGHT READY.\n"
+      std::cerr<<"RETURN GUI: "<<(return_manual_target?"MANUAL A after lift":"auto A after FLIGHT READY")<<".\n"
                <<"Keys: SPACE=set A/target, B=mark turn point, H=mark physical HOME, C=clear trail, Q/ESC=quit.\n";
     }
 
@@ -991,7 +994,7 @@ int main(int argc,char** argv){
         }
 
         if(return_gui){
-          if(flight_ready && efresh && !return_target_set){
+          if(flight_ready && efresh && !return_target_set && !return_manual_target){
             return_target_n=ep.x;
             return_target_e=ep.y;
             return_target_set=true;
@@ -1000,6 +1003,7 @@ int main(int argc,char** argv){
             return_body_dx=return_body_dy=0.0;
             return_ned_n=return_ned_e=0.0;
             return_b_marked=false;
+            return_home_marked=false;
             if(fg_ok){ return_yaw0=fg.yaw; return_yaw0_set=true; }
             pending_return_event=1;
             std::cerr<<"RETURN GUI TARGET SET: N="<<return_target_n<<" E="<<return_target_e
@@ -1010,6 +1014,41 @@ int main(int argc,char** argv){
           // image is shown on the right with the exact feature ROI used by KLT.
           cv::Mat hud(900,1500,CV_8UC3,cv::Scalar(20,20,20));
           const cv::Point center(450,450);
+
+          // Large operator protocol banner for screen recording.
+          std::string step_title, step_line1, step_line2;
+          cv::Scalar step_color(220,220,220);
+          if(!flight_ready){
+            step_title="STEP 1 / 5  WAIT FOR FLIGHT READY";
+            step_line1="Keep the vehicle still. Do not start the test yet.";
+            step_line2="When FLIGHT READY appears, lift to a comfortable working height.";
+            step_color=cv::Scalar(0,200,255);
+          } else if(!return_target_set){
+            step_title="STEP 2 / 5  SET PHYSICAL A";
+            step_line1="Lift and hold steady at a comfortable height.";
+            step_line2="When stable, press SPACE. This exact pose becomes A/HOME.";
+            step_color=cv::Scalar(0,255,255);
+          } else if(!return_b_marked){
+            step_title="STEP 3 / 5  MOVE A -> B";
+            step_line1="Carry the vehicle naturally 300-500 mm. Height/attitude may vary.";
+            step_line2="Stop completely at B, wait 2-3 s, then press B.";
+            step_color=cv::Scalar(0,255,0);
+          } else if(!return_home_marked){
+            step_title="STEP 4 / 5  RETURN PHYSICALLY TO A";
+            step_line1="Return to the same PHYSICAL A position, not the GUI target.";
+            step_line2="Stop completely, wait 2-3 s, then press H.";
+            step_color=cv::Scalar(0,180,255);
+          } else {
+            step_title="STEP 5 / 5  COMPLETE";
+            step_line1="Keep still for 2-3 s. Results are printed in the terminal.";
+            step_line2="Press Q or ESC to finish.";
+            step_color=cv::Scalar(255,255,0);
+          }
+          cv::rectangle(hud,cv::Rect(25,255,840,105),cv::Scalar(30,30,30),cv::FILLED);
+          cv::rectangle(hud,cv::Rect(25,255,840,105),step_color,2);
+          cv::putText(hud,step_title,{45,285},cv::FONT_HERSHEY_SIMPLEX,0.72,step_color,2,cv::LINE_AA);
+          cv::putText(hud,step_line1,{45,318},cv::FONT_HERSHEY_SIMPLEX,0.48,cv::Scalar(230,230,230),1,cv::LINE_AA);
+          cv::putText(hud,step_line2,{45,345},cv::FONT_HERSHEY_SIMPLEX,0.48,cv::Scalar(230,230,230),1,cv::LINE_AA);
           cv::line(hud,{450,45},{450,855},cv::Scalar(70,70,70),1);
           cv::line(hud,{45,450},{855,450},cv::Scalar(70,70,70),1);
           cv::circle(hud,center,16,cv::Scalar(0,220,0),2);
@@ -1060,9 +1099,11 @@ int main(int argc,char** argv){
           const double raw_closure_mm=1000.0*std::hypot(return_raw_x,return_raw_y);
           const double raw_ned_closure_mm=1000.0*std::hypot(return_ned_n,return_ned_e);
           const double raw_body_closure_mm=1000.0*std::hypot(return_body_dx,return_body_dy);
+          const double roll_deg=fg_ok?fg.roll*180.0/M_PI:0.0;
+          const double pitch_deg=fg_ok?fg.pitch*180.0/M_PI:0.0;
           const double yaw_deg=fg_ok?fg.yaw*180.0/M_PI:0.0;
           const double dyaw_deg=(fg_ok&&return_yaw0_set)?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0;
-          std::ostringstream l1,l2,l3,l4,l5,l6,l7,l8,l9;
+          std::ostringstream l1,l2,l3,l4,l5,l6,l7,l8,l9,l10;
           l1<<std::fixed<<std::setprecision(0)<<"DIST TO TARGET: "<<dist*1000.0<<" mm";
           l2<<std::fixed<<std::setprecision(1)<<"N error: "<<dn*1000.0<<" mm";
           l3<<std::fixed<<std::setprecision(1)<<"E error: "<<de*1000.0<<" mm";
@@ -1074,6 +1115,8 @@ int main(int argc,char** argv){
             <<" mm  dN/E "<<return_ned_n*1000.0<<"/"<<return_ned_e*1000.0;
           l9<<std::fixed<<std::setprecision(1)<<"RAW BODY metric: "<<raw_body_closure_mm
             <<" mm  dX/Y "<<return_body_dx*1000.0<<"/"<<return_body_dy*1000.0;
+          l10<<std::fixed<<std::setprecision(1)<<"att R/P/Y: "<<roll_deg<<"/"<<pitch_deg<<"/"<<yaw_deg
+             <<" deg   TF-Luna: "<<(hl?lm:-1.0)<<" m";
           cv::putText(hud,return_target_set?l1.str():"WAITING FOR FLIGHT READY / TARGET...",{35,40},
                       cv::FONT_HERSHEY_SIMPLEX,0.85,cv::Scalar(240,240,240),2,cv::LINE_AA);
           cv::putText(hud,l2.str(),{35,75},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
@@ -1082,6 +1125,12 @@ int main(int argc,char** argv){
           cv::putText(hud,l8.str(),{35,172},cv::FONT_HERSHEY_SIMPLEX,0.62,cv::Scalar(0,220,255),2,cv::LINE_AA);
           cv::putText(hud,l9.str(),{35,204},cv::FONT_HERSHEY_SIMPLEX,0.55,cv::Scalar(190,190,190),1,cv::LINE_AA);
           cv::putText(hud,l7.str(),{35,236},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(190,190,190),1,cv::LINE_AA);
+          cv::putText(hud,l10.str(),{35,382},cv::FONT_HERSHEY_SIMPLEX,0.52,
+                      (hl&&lm<0.20)?cv::Scalar(0,80,255):cv::Scalar(190,190,190),1,cv::LINE_AA);
+          if(hl&&lm<0.20){
+            cv::putText(hud,"TF-LUNA RANGE < 0.20 m: bench health may be poor",{35,410},
+                        cv::FONT_HERSHEY_SIMPLEX,0.50,cv::Scalar(0,80,255),1,cv::LINE_AA);
+          }
           cv::putText(hud,l4.str(),{35,850},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(200,200,200),1,cv::LINE_AA);
           cv::putText(hud,l5.str(),{650,850},cv::FONT_HERSHEY_SIMPLEX,0.52,cv::Scalar(180,180,180),1,cv::LINE_AA);
           cv::putText(hud,"N",{458,65},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
@@ -1127,6 +1176,7 @@ int main(int argc,char** argv){
             return_body_dx=return_body_dy=0.0;
             return_ned_n=return_ned_e=0.0;
             return_b_marked=false;
+            return_home_marked=false;
             if(fg_ok){ return_yaw0=fg.yaw; return_yaw0_set=true; }
             pending_return_event=1;
             std::cerr<<"RETURN GUI TARGET RESET: N="<<return_target_n<<" E="<<return_target_e
@@ -1146,6 +1196,7 @@ int main(int argc,char** argv){
                      <<" mm dYaw="<<(fg_ok&&return_yaw0_set?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0)<<" deg\n";
           } else if((key=='h'||key=='H') && efresh){
             pending_return_event=3;
+            return_home_marked=true;
             const double ekf_close=1000.0*std::hypot(ep.x-return_target_n,ep.y-return_target_e);
             const double raw_close=1000.0*std::hypot(return_raw_x,return_raw_y);
             const double raw_body_close=1000.0*std::hypot(return_body_dx,return_body_dy);

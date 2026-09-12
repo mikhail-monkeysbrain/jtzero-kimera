@@ -539,6 +539,7 @@ int main(int argc,char** argv){
   bool require_armed=false;
   bool nominal_target_only=false;
   bool return_gui=false;
+  bool rotation_gui=false;
   bool return_manual_target=false;
   double diag_camera_z_m=std::numeric_limits<double>::quiet_NaN();
   double diag_range_z_m=std::numeric_limits<double>::quiet_NaN();
@@ -557,6 +558,7 @@ int main(int argc,char** argv){
     else if(a=="--require-armed") require_armed=true;
     else if(a=="--nominal-target") nominal_target_only=true;
     else if(a=="--return-gui") return_gui=true;
+    else if(a=="--rotation-gui") rotation_gui=true;
     else if(a=="--return-manual-target") return_manual_target=true;
     else if(a=="--diag-camera-z-m" && i+1<argc) diag_camera_z_m=std::stod(argv[++i]);
     else if(a=="--diag-range-z-m" && i+1<argc) diag_range_z_m=std::stod(argv[++i]);
@@ -676,12 +678,19 @@ int main(int argc,char** argv){
     double return_b_ned_n=0.0,return_b_ned_e=0.0;
     int pending_return_event=0; // 1=A/target, 2=B/turn, 3=H/physical-home mark
     const std::string return_window_name="JT-Zero — Возврат в исходную точку";
+    const std::string rotation_window_name="JT-Zero — Диагностика вращения";
+    if(return_gui || rotation_gui) initGuiFont();
     if(return_gui){
-      initGuiFont();
       cv::namedWindow(return_window_name,cv::WINDOW_NORMAL);
       cv::resizeWindow(return_window_name,1500,900);
       std::cerr<<"GUI ВОЗВРАТА: "<<(return_manual_target?"точка A задаётся вручную после подъёма":"точка A задаётся автоматически после готовности")<<".\n"
                <<"Клавиши: SPACE=A/домой, B=дальняя точка, H=физический возврат, C=очистить хвост, Q/ESC=выход.\n";
+    }
+    if(rotation_gui){
+      cv::namedWindow(rotation_window_name,cv::WINDOW_NORMAL);
+      cv::resizeWindow(rotation_window_name,1500,900);
+      std::cerr<<"GUI ВРАЩЕНИЯ: отдельная диагностика roll/pitch/yaw без A/B/H.\n"
+               <<"Клавиши: Q/ESC=выход.\n";
     }
 
     std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=wait-next, 4=done
@@ -1068,6 +1077,88 @@ int main(int argc,char** argv){
               return_ned_e += r10*dbx + r11*dby;
             }
           }
+        }
+
+        if(rotation_gui){
+          cv::Mat hud(900,1500,CV_8UC3,cv::Scalar(18,18,18));
+
+          const double roll_deg=fg_ok?fg.roll*180.0/M_PI:0.0;
+          const double pitch_deg=fg_ok?fg.pitch*180.0/M_PI:0.0;
+          const double yaw_deg=fg_ok?fg.yaw*180.0/M_PI:0.0;
+          const double gx=fg_ok?fg.x:0.0, gy=fg_ok?fg.y:0.0;
+          const double flowx=s.valid?s.flow_body_x:0.0, flowy=s.valid?s.flow_body_y:0.0;
+          // ArduPilot MAV optical-flow backend subtracts body rotation internally.
+          // For a rotation-only diagnostic, this is the instantaneous uncompensated residual.
+          const double rx=flowx-gx;
+          const double ry=flowy-gy;
+          const double rmag=std::hypot(rx,ry);
+          double hcam=hl?lm:0.0;
+          if(hl && std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+            hcam=lm-(diag_camera_z_m-diag_range_z_m);
+          }
+          const double false_speed=(hcam>0.02)?rmag*hcam:0.0;
+          const double vh=efresh?std::hypot((double)ep.vx,(double)ep.vy):0.0;
+
+          putGuiText(hud,"JT-ZERO — ДИАГНОСТИКА ВРАЩЕНИЯ",{35,45},0.95,cv::Scalar(240,240,240),2);
+          std::string status = flight_ready ? "СИСТЕМА ГОТОВА" : "ЖДИТЕ ГОТОВНОСТИ";
+          putGuiText(hud,status,{35,85},0.72,flight_ready?cv::Scalar(0,220,0):cv::Scalar(0,200,255),2);
+
+          cv::rectangle(hud,cv::Rect(30,110,820,160),cv::Scalar(30,30,30),cv::FILLED);
+          cv::rectangle(hud,cv::Rect(30,110,820,160),cv::Scalar(100,100,100),1);
+          putGuiText(hud,"ПРОТОКОЛ",{50,140},0.68,cv::Scalar(0,255,255),2);
+          putGuiText(hud,"1. Дождитесь «СИСТЕМА ГОТОВА».",{50,172},0.52,cv::Scalar(230,230,230),1);
+          putGuiText(hud,"2. Коротко наклоните аппарат по КРЕНУ примерно на ±5° и верните.",{50,202},0.52,cv::Scalar(230,230,230),1);
+          putGuiText(hud,"3. Затем по ТАНГАЖУ примерно на ±5° и верните.",{50,232},0.52,cv::Scalar(230,230,230),1);
+          putGuiText(hud,"4. Не переносите аппарат по XY. После теста нажмите Q.",{50,262},0.52,cv::Scalar(230,230,230),1);
+
+          std::ostringstream a1,a2,a3,a4,a5,a6;
+          a1<<std::fixed<<std::setprecision(1)<<"КРЕН / ТАНГАЖ / КУРС: "<<roll_deg<<" / "<<pitch_deg<<" / "<<yaw_deg<<" °";
+          a2<<std::fixed<<std::setprecision(3)<<"GYRO X/Y: "<<gx<<" / "<<gy<<" рад/с";
+          a3<<std::fixed<<std::setprecision(3)<<"FLOW X/Y: "<<flowx<<" / "<<flowy<<" рад/с";
+          a4<<std::fixed<<std::setprecision(3)<<"ОСТАТОК FLOW-GYRO: "<<rx<<" / "<<ry<<" рад/с   |.|="<<rmag;
+          a5<<std::fixed<<std::setprecision(3)<<"ЭКВИВАЛЕНТНАЯ ЛОЖНАЯ СКОРОСТЬ: "<<false_speed<<" м/с";
+          a6<<std::fixed<<std::setprecision(3)<<"EKF |Vxy|: "<<vh<<" м/с   TF-Luna: "<<(hl?lm:-1.0)<<" м   задержка кадра: "<<frame_pipeline_latency_ms<<" мс";
+
+          putGuiText(hud,a1.str(),{45,330},0.66,cv::Scalar(230,230,230),2);
+          putGuiText(hud,a2.str(),{45,375},0.66,cv::Scalar(230,230,230),2);
+          putGuiText(hud,a3.str(),{45,420},0.66,cv::Scalar(230,230,230),2);
+          putGuiText(hud,a4.str(),{45,465},0.66,rmag<0.08?cv::Scalar(0,220,0):cv::Scalar(0,120,255),2);
+          putGuiText(hud,a5.str(),{45,510},0.66,false_speed<0.03?cv::Scalar(0,220,0):cv::Scalar(0,120,255),2);
+          putGuiText(hud,a6.str(),{45,555},0.56,cv::Scalar(190,190,190),1);
+
+          // Visual bars for gyro, flow and residual magnitude.
+          const double bar_scale=350.0;
+          auto draw_bar=[&](int y,double v,cv::Scalar col,const std::string& name){
+            putGuiText(hud,name,{45,y-8},0.50,cv::Scalar(190,190,190),1);
+            cv::line(hud,{300,y},{760,y},cv::Scalar(80,80,80),2);
+            const int x2=std::clamp(530+(int)std::lround(v*bar_scale),300,760);
+            cv::line(hud,{530,y},{x2,y},col,8,cv::LINE_AA);
+          };
+          draw_bar(620,std::hypot(gx,gy),cv::Scalar(255,180,0),"|GYRO XY|");
+          draw_bar(675,std::hypot(flowx,flowy),cv::Scalar(0,255,255),"|FLOW|");
+          draw_bar(730,rmag,cv::Scalar(0,100,255),"|ОСТАТОК|");
+
+          // Live camera panel.
+          cv::Mat cam_bgr,cam_view;
+          cv::cvtColor(gray,cam_bgr,cv::COLOR_GRAY2BGR);
+          const int cam_w=560;
+          const int cam_h=(int)std::lround((double)cam_bgr.rows*cam_w/cam_bgr.cols);
+          cv::resize(cam_bgr,cam_view,cv::Size(cam_w,cam_h),0,0,cv::INTER_AREA);
+          const int cam_x=910, cam_y=120;
+          if(cam_y+cam_h<=hud.rows && cam_x+cam_w<=hud.cols){
+            cam_view.copyTo(hud(cv::Rect(cam_x,cam_y,cam_w,cam_h)));
+            const int rx0=cam_x+(int)std::lround(g_feature_roi.x0*cam_w);
+            const int ry0=cam_y+(int)std::lround(g_feature_roi.y0*cam_h);
+            const int rx1=cam_x+(int)std::lround(g_feature_roi.x1*cam_w);
+            const int ry1=cam_y+(int)std::lround(g_feature_roi.y1*cam_h);
+            cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),cv::Scalar(0,255,255),2,cv::LINE_AA);
+            putGuiText(hud,"OV9281 — ЖИВОЕ ВИДЕО",{cam_x,85},0.76,cv::Scalar(240,240,240),2);
+          }
+          putGuiText(hud,"Q / ESC — ЗАВЕРШИТЬ ТЕСТ",{45,855},0.58,cv::Scalar(180,180,180),1);
+
+          cv::imshow(rotation_window_name,hud);
+          const int rkey=cv::waitKey(1)&0xff;
+          if(rkey=='q'||rkey=='Q'||rkey==27) g_running=false;
         }
 
         if(return_gui){

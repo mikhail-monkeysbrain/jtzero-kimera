@@ -34,6 +34,7 @@ COUNT = int(os.environ.get("JTZERO_GUI_RUNS", "5"))
 FOCAL_SCALE = os.environ.get("JTZERO_FLOW_FOCAL_SCALE", "1.0000")
 NOMINAL_MM = os.environ.get("JTZERO_FLOW_TARGET_MM", "300")
 FLOW_THRESHOLD = 0.03
+RECIPROCAL = os.environ.get("JTZERO_GUI_RECIPROCAL", "0").lower() in ("1","true","yes","on")
 
 
 def fv(row, key, default=0.0):
@@ -112,8 +113,10 @@ class BenchGui:
         self.current_ekf_console_mm = None
         self.sent_start_enter = False
         self.sent_move_enter = False
+        self.current_direction = None
 
-        self.title = tk.Label(root, text="JT-ZERO — СТЕНДОВЫЙ ТЕСТ OPTICAL FLOW",
+        gui_title = "JT-ZERO — RECIPROCAL OPTICAL FLOW" if RECIPROCAL else "JT-ZERO — СТЕНДОВЫЙ ТЕСТ OPTICAL FLOW"
+        self.title = tk.Label(root, text=gui_title,
                               font=("DejaVu Sans", 22, "bold"))
         self.title.pack(pady=(18, 8))
 
@@ -126,7 +129,7 @@ class BenchGui:
             text=(
                 "Пропеллеры сняты. FC должен быть ARMED.\n"
                 "Точность попадания в заданное расстояние НЕ нужна.\n"
-                "После каждого прохода измерьте фактический сдвиг линейкой."
+                ("После каждого прохода измерьте фактический сдвиг линейкой.\nНаправления будут чередоваться A→B / B→A." if RECIPROCAL else "После каждого прохода измерьте фактический сдвиг линейкой.")
             ),
             font=("DejaVu Sans", 16),
             justify="center",
@@ -191,7 +194,9 @@ class BenchGui:
             return
 
         self.run_index += 1
-        self.progress.config(text=f"Прогон {self.run_index} / {COUNT}")
+        self.current_direction = "A->B" if (self.run_index % 2 == 1) else "B->A"
+        dir_text = f"  {self.current_direction}" if RECIPROCAL else ""
+        self.progress.config(text=f"Прогон {self.run_index} / {COUNT}{dir_text}")
         self.current_csv = None
         self.current_ekf_console_mm = None
         self.sent_start_enter = False
@@ -202,10 +207,10 @@ class BenchGui:
         self.start_btn.config(state="disabled")
         self.move_done_btn.config(state="disabled")
         self.result_label.config(text="")
-        self.set_stage(
-            "ЗАПУСК",
-            "Аппарат НЕ ДВИГАТЬ.\nПрограмма запускает камеру, TF-Luna, MAVLink и EKF logging.",
-        )
+        launch_text = "Аппарат НЕ ДВИГАТЬ.\nПрограмма запускает камеру, TF-Luna, MAVLink и EKF logging."
+        if RECIPROCAL:
+            launch_text += f"\nТекущий измеряемый проход: {self.current_direction}."
+        self.set_stage("ЗАПУСК", launch_text)
 
         env = os.environ.copy()
         env["JTZERO_FLOW_FOCAL_SCALE"] = FOCAL_SCALE
@@ -308,9 +313,10 @@ class BenchGui:
             elif kind == "stage_static":
                 self.set_stage("НЕ ДВИГАТЬ", "Стартовая статика 5 секунд.\nВообще не трогайте аппарат.", "#9a5a00")
             elif kind == "stage_move":
+                move_prefix = f"Направление {self.current_direction}.\n" if RECIPROCAL else ""
                 self.set_stage(
                     "ДВИГАЙТЕ",
-                    "Сдвиньте ВЕСЬ аппарат строго по столу.\n"
+                    move_prefix + "Сдвиньте ВЕСЬ аппарат строго по столу.\n"
                     "Точное расстояние сейчас НЕ важно. Не вращать, не наклонять, не приподнимать.\n"
                     "После полной остановки нажмите «СДВИГ ЗАВЕРШЁН».",
                     "#0b7a28",
@@ -363,6 +369,7 @@ class BenchGui:
 
         rec = {
             "run": self.run_index,
+            "direction": self.current_direction if RECIPROCAL else None,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "csv": str(self.current_csv),
             "focal_scale": float(FOCAL_SCALE),

@@ -398,16 +398,22 @@ int main(int argc,char** argv){
   const std::string camdev=argv[1], lunadev=argv[2], fcdev=argv[3];
   const std::string csvpath=argv[4], yaml=argv[5];
   const double focal_scale=std::stod(argv[6]);
-  bool guided175=false;
+  bool guided=false;
+  double guided_target_mm=175.0;
   bool require_armed=false;
   double bench_height_override=0.0;
   std::string remote_log_path;
   for(int i=7;i<argc;i++){
     const std::string a=argv[i];
-    if(a=="--guided-175") guided175=true;
+    if(a=="--guided-175"){ guided=true; guided_target_mm=175.0; }
+    else if(a=="--guided-mm" && i+1<argc){ guided=true; guided_target_mm=std::stod(argv[++i]); }
     else if(a=="--require-armed") require_armed=true;
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
+  }
+  if(guided && !(guided_target_mm>=50.0 && guided_target_mm<=1000.0)){
+    std::cerr<<"ОШИБКА: --guided-mm разрешён только 50..1000 мм для стенда\n";
+    return 2;
   }
   if(bench_height_override!=0.0 && !(bench_height_override>=0.55 && bench_height_override<=2.0)){
     std::cerr<<"ОШИБКА: --bench-height разрешён только 0.55..2.0 м для bench-диагностики\n";
@@ -452,17 +458,17 @@ int main(int argc,char** argv){
     std::atomic<bool> arm_lost{false};
     FlowFcLocal guide_start{}, guide_end{};
     std::thread guide_thread;
-    if(guided175){
+    if(guided){
       guide_thread=std::thread([&]{
         // Даём стартовым строкам camera/FC напечататься до пошаговой инструкции.
         std::this_thread::sleep_for(std::chrono::milliseconds(750));
         bool arm=false; double arm_age=1e9;
         const bool have_arm=fc.latestArm(&arm,&arm_age) && arm_age<2500.0;
         std::cerr<<"\n======================================================================\n"
-                 <<"GUIDED TEST — ФИЗИЧЕСКИЙ СДВИГ 175 мм\n"
+                 <<"GUIDED TEST — ФИЗИЧЕСКИЙ СДВИГ "<<guided_target_mm<<" мм\n"
                  <<"======================================================================\n"
                  <<"1. НЕ ДВИГАЙТЕ аппарат. Сейчас автоматически собирается 5 с статики.\n"
-                 <<"2. После команды ДВИГАЙТЕ сдвиньте ВЕСЬ аппарат строго по столу на 175 мм.\n"
+                 <<"2. После команды ДВИГАЙТЕ сдвиньте ВЕСЬ аппарат строго по столу на "<<guided_target_mm<<" мм.\n"
                  <<"3. НЕ вращайте, не наклоняйте и не приподнимайте аппарат.\n"
                  <<"4. После сдвига полностью остановите аппарат.\n"
                  <<"5. Только после полной остановки нажмите Enter.\n"
@@ -483,7 +489,7 @@ int main(int argc,char** argv){
           g_running=false; return;
         }
         guide_stage=1;
-        std::cerr<<"\n>>> ДВИГАЙТЕ: сдвиньте аппарат на 175 мм строго по столу.\n"
+        std::cerr<<"\n>>> ДВИГАЙТЕ: сдвиньте аппарат на "<<guided_target_mm<<" мм строго по столу.\n"
                  <<">>> После полной остановки нажмите Enter.\n";
         std::string line; std::getline(std::cin,line);
         guide_stage=2;
@@ -494,21 +500,21 @@ int main(int argc,char** argv){
           g_running=false; return;
         }
         if(require_armed && arm_lost.load()){
-          std::cerr<<"\nARMed-test прерван из-за DISARM. Итог 175 мм не вычисляется.\n";
+          std::cerr<<"\nARMed-test прерван из-за DISARM. Итог "<<guided_target_mm<<" мм не вычисляется.\n";
           g_running=false; return;
         }
         guide_stage=3;
         const double dn=guide_end.x-guide_start.x, de=guide_end.y-guide_start.y;
         const double dist=std::hypot(dn,de);
         std::cerr<<"\n======================================================================\n"
-                 <<"GUIDED 175 мм — РЕЗУЛЬТАТ\n"
+                 <<"GUIDED "<<guided_target_mm<<" мм — РЕЗУЛЬТАТ\n"
                  <<"======================================================================\n"
                  <<"START N/E = ("<<guide_start.x<<", "<<guide_start.y<<") m\n"
                  <<"END   N/E = ("<<guide_end.x<<", "<<guide_end.y<<") m\n"
                  <<"DELTA N/E = ("<<dn<<", "<<de<<") m\n"
                  <<"EKF horizontal displacement = "<<dist*1000.0<<" mm\n"
-                 <<"Target = 175.0 mm\n"
-                 <<"Error  = "<<(dist*1000.0-175.0)<<" mm ("<<((dist/0.175)-1.0)*100.0<<" %)\n"
+                 <<"Target = "<<guided_target_mm<<" mm\n"
+                 <<"Error  = "<<(dist*1000.0-guided_target_mm)<<" mm ("<<((dist/(guided_target_mm*0.001))-1.0)*100.0<<" %)\n"
                  <<"======================================================================\n";
         g_running=false;
       });

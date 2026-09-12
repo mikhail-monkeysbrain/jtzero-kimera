@@ -1330,7 +1330,6 @@ int main(int argc,char** argv){
 
         // Как в BlueOS: любой успешно декодированный кадр становится новым prev.
         prev=gray.clone(); prev_ts=ts;
-      }
     }
 
     g_running=false;

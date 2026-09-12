@@ -12,6 +12,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <deque>
 
 static void die(const std::string& s){ std::cerr<<"ОШИБКА: "<<s<<"\n"; std::exit(2); }
 
@@ -46,8 +47,17 @@ static void write_all(int fd,const uint8_t* p,size_t n){
 }
 
 static mavlink_status_t g_mav_status{};
+static std::deque<mavlink_message_t> g_pending_msgs;
 
 static bool recv_msg(int fd,mavlink_message_t* out,double timeout_s){
+  // Do not discard additional MAVLink packets that arrive in the same serial read.
+  // Parameter responses are often adjacent to ATTITUDE/other telemetry packets.
+  if(!g_pending_msgs.empty()){
+    *out=g_pending_msgs.front();
+    g_pending_msgs.pop_front();
+    return true;
+  }
+
   uint8_t buf[4096];
   const int loops=std::max(1,(int)std::ceil(timeout_s*20.0));
   for(int k=0;k<loops;k++){
@@ -58,7 +68,15 @@ static bool recv_msg(int fd,mavlink_message_t* out,double timeout_s){
       if(n<0&&(errno==EAGAIN||errno==EWOULDBLOCK))break;
       if(n<=0)break;
       for(ssize_t i=0;i<n;i++){
-        if(mavlink_parse_char(MAVLINK_COMM_0,buf[i],out,&g_mav_status)) return true;
+        mavlink_message_t m{};
+        if(mavlink_parse_char(MAVLINK_COMM_0,buf[i],&m,&g_mav_status)){
+          g_pending_msgs.push_back(m);
+        }
+      }
+      if(!g_pending_msgs.empty()){
+        *out=g_pending_msgs.front();
+        g_pending_msgs.pop_front();
+        return true;
       }
     }
   }

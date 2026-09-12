@@ -11,7 +11,7 @@ def i(r,k,d=0):
     try:return int(float(r[k]))
     except:return d
 
-def integrate(rows, physical_mm):
+def integrate(rows, physical_mm, camera_z_m, luna_z_m):
     rawx=rawy=compx=compy=0.0
     gx=[];gy=[];gz=[];ages=[];samples=[]
     used=0
@@ -25,15 +25,17 @@ def integrate(rows, physical_mm):
         vals=[dt,rng,fx,fy,gxx,gyy,gzz]
         if not all(map(math.isfinite,vals)) or not (0<dt<0.2) or rng<=0:
             continue
-        rawx += fx*rng*dt
-        rawy += fy*rng*dt
+        hcam = rng - (camera_z_m-luna_z_m)
+        if hcam <= 0: continue
+        rawx += fx*hcam*dt
+        rawy += fy*hcam*dt
         # Mirror ArduPilot EKF convention:
         # ofDataNew.flowRadXY = -rawFlowRates
         # flowRadXYcomp = flowRadXY + bodyRadXYZ
         cx = -fx + gxx
         cy = -fy + gyy
-        compx += cx*rng*dt
-        compy += cy*rng*dt
+        compx += cx*hcam*dt
+        compy += cy*hcam*dt
         gx.append(gxx);gy.append(gyy);gz.append(gzz);ages.append(age);samples.append(ns)
         used+=1
     raw=1000*math.hypot(rawx,rawy)
@@ -44,17 +46,20 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("csv",type=Path)
     ap.add_argument("--physical-mm",type=float,required=True)
+    ap.add_argument("--camera-z-m",type=float,default=0.0500)
+    ap.add_argument("--luna-z-m",type=float,default=0.0260)
     args=ap.parse_args()
     rows=list(csv.DictReader(args.csv.open(newline="")))
     if not rows:raise SystemExit("empty CSV")
     if "fc_gyro_x" not in rows[0]:
         raise SystemExit("Этот run записан до добавления FC gyro columns. Нужен один новый прогон.")
 
-    raw,comp,used,gx,gy,gz,ages,samples,rv,cv=integrate(rows,args.physical_mm)
+    raw,comp,used,gx,gy,gz,ages,samples,rv,cv=integrate(rows,args.physical_mm,args.camera_z_m,args.luna_z_m)
 
     print("===== ROTATION-COMPENSATED FLOW FORENSIC =====")
     print(f"move samples used = {used}")
-    print(f"RAW uncorrected displacement = {raw:.1f} mm  ratio={raw/args.physical_mm:.4f}")
+    print(f"sensor Z geometry: camera={args.camera_z_m:.3f} m luna={args.luna_z_m:.3f} m")
+    print(f"RAW camera-height displacement = {raw:.1f} mm  ratio={raw/args.physical_mm:.4f}")
     print(f"AP-style gyro-comp displacement = {comp:.1f} mm  ratio={comp/args.physical_mm:.4f}")
     print(f"RAW components = {rv[0]*1000:+.1f}/{rv[1]*1000:+.1f} mm")
     print(f"COMP components = {cv[0]*1000:+.1f}/{cv[1]*1000:+.1f} mm")

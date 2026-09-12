@@ -4,18 +4,27 @@ import argparse,csv,math,statistics
 from pathlib import Path
 import cv2, numpy as np
 
+def _read_seq_node(fs, name):
+    n=fs.getNode(name)
+    if n.empty():
+        raise RuntimeError(f"YAML node not found: {name}")
+    if not n.isSeq():
+        # Some OpenCV YAML writers may store a numeric vector as a matrix.
+        m=n.mat()
+        if m is None:
+            raise RuntimeError(f"YAML node {name} is neither sequence nor matrix")
+        return np.asarray(m,dtype=float).reshape(-1)
+    return np.array([n.at(i).real() for i in range(n.size())],dtype=float)
+
 def load_k(path:Path, scale:float):
     fs=cv2.FileStorage(str(path),cv2.FILE_STORAGE_READ)
-    intr=fs.getNode("intrinsics").mat()
-    if intr is None:
-        # OpenCV FileStorage returns seq differently on some builds
-        n=fs.getNode("intrinsics"); vals=[n.at(i).real() for i in range(n.size())]
-    else:
-        vals=np.asarray(intr).reshape(-1).tolist()
-    d=fs.getNode("distortion_coefficients")
-    try: dv=np.asarray(d.mat()).reshape(-1)
-    except Exception: dv=np.array([d.at(i).real() for i in range(d.size())],dtype=float)
+    if not fs.isOpened():
+        raise RuntimeError(f"cannot open camera YAML: {path}")
+    vals=_read_seq_node(fs,"intrinsics")
+    dv=_read_seq_node(fs,"distortion_coefficients")
     fs.release()
+    if vals.size < 4:
+        raise RuntimeError(f"intrinsics must contain at least 4 values, got {vals.size}")
     fx,fy,cx,cy=map(float,vals[:4])
     K=np.array([[fx*scale,0,cx],[0,fy*scale,cy],[0,0,1]],dtype=float)
     return K,dv.astype(float)

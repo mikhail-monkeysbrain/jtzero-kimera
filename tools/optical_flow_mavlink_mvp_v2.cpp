@@ -78,6 +78,7 @@ struct FlowFcLocal {
   float x=0,y=0,z=0,vx=0,vy=0,vz=0;
   int64_t recv_ns=0;
   bool valid=false;
+  int invalid_reason=0; // 0=OK,1=DT,2=FEATURES,3=TRACKED,4=HOMOGRAPHY,5=INLIERS,6=MAGNITUDE
 };
 
 struct FlowEkfStatus {
@@ -415,7 +416,7 @@ struct FlowStep {
 
 FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const CameraCalib& calib){
   FlowStep o;
-  if(prev.empty()||curr.empty()||!(dt>0&&dt<0.2))return o;
+  if(prev.empty()||curr.empty()||!(dt>0&&dt<0.2)){ o.invalid_reason=1; return o; }
 
   cv::Mat feature_mask(prev.size(),CV_8UC1,cv::Scalar(0));
   const int x0=std::clamp((int)std::lround(g_feature_roi.x0*prev.cols),0,prev.cols-1);
@@ -427,24 +428,24 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   std::vector<cv::Point2f> p0,p1;
   cv::goodFeaturesToTrack(prev,p0,500,0.01,7,feature_mask);
   o.features=(int)p0.size();
-  if(p0.size()<30)return o;
+  if(p0.size()<30){ o.invalid_reason=2; return o; }
 
   std::vector<uchar> st; std::vector<float> err;
   cv::calcOpticalFlowPyrLK(prev,curr,p0,p1,st,err,{21,21},3);
   std::vector<cv::Point2f> a,b;
   for(size_t i=0;i<p0.size();++i){if(st[i]){a.push_back(p0[i]);b.push_back(p1[i]);}}
   o.tracked=(int)a.size();
-  if(a.size()<20)return o;
+  if(a.size()<20){ o.invalid_reason=3; return o; }
 
   cv::Mat mask;
   cv::findHomography(a,b,cv::RANSAC,2.0,mask);
-  if(mask.empty())return o;
+  if(mask.empty()){ o.invalid_reason=4; return o; }
 
   std::vector<cv::Point2f> ai,bi;
   for(size_t i=0;i<a.size();++i){if(mask.at<uchar>((int)i)){ai.push_back(a[i]);bi.push_back(b[i]);}}
   o.inliers=(int)ai.size();
   o.inlier_ratio=a.empty()?0.0:(double)ai.size()/a.size();
-  if(ai.size()<20)return o;
+  if(ai.size()<20){ o.invalid_reason=5; return o; }
 
   std::vector<cv::Point2f> au,bu;
   cv::undistortPoints(ai,au,calib.K,calib.D);
@@ -558,6 +559,7 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
 
   const double mag=std::hypot(o.flow_body_x,o.flow_body_y);
   o.valid=std::isfinite(mag) && mag<4.0;
+  o.invalid_reason=o.valid?0:6;
   return o;
 }
 
@@ -689,7 +691,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,invalid_reason,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);

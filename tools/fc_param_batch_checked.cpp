@@ -8,6 +8,7 @@
 #include <poll.h>
 #include <termios.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 #include <cstring>
@@ -68,16 +69,16 @@ static bool wait_param_value(
     int fd,uint8_t target_sys,const std::string& wanted,
     mavlink_param_value_t* out,int timeout_ms)
 {
-  const int64_t end_us =
-      (int64_t)([](){ timespec ts{}; clock_gettime(CLOCK_MONOTONIC,&ts);
-                      return ts.tv_sec*1000000LL+ts.tv_nsec/1000; })()
-      + (int64_t)timeout_ms*1000LL);
+  const auto mono_us=[]() -> int64_t {
+    timespec ts{};
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    return (int64_t)ts.tv_sec*1000000LL + ts.tv_nsec/1000;
+  };
+  const int64_t end_us = mono_us() + (int64_t)timeout_ms*1000LL;
 
   uint8_t buf[2048];
   while(true){
-    timespec ts{};
-    clock_gettime(CLOCK_MONOTONIC,&ts);
-    int64_t now_us=ts.tv_sec*1000000LL+ts.tv_nsec/1000;
+    const int64_t now_us=mono_us();
     if(now_us>=end_us) return false;
 
     int remain_ms=(int)std::max<int64_t>(1,(end_us-now_us)/1000);

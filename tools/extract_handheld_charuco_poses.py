@@ -29,11 +29,50 @@ def load_k(path:Path, scale:float):
     K=np.array([[fx*scale,0,cx],[0,fy*scale,cy],[0,0,1]],dtype=float)
     return K,dv.astype(float)
 
-def board_make():
+def make_board(nx,ny,legacy=False):
     dic=cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-    try: board=cv2.aruco.CharucoBoard((5,7),0.027324,0.020043,dic)
-    except Exception: board=cv2.aruco.CharucoBoard_create(5,7,0.027324,0.020043,dic)
+    try:
+        board=cv2.aruco.CharucoBoard((nx,ny),0.027324,0.020043,dic)
+    except Exception:
+        board=cv2.aruco.CharucoBoard_create(nx,ny,0.027324,0.020043,dic)
+    if legacy and hasattr(board,"setLegacyPattern"):
+        board.setLegacyPattern(True)
     return dic,board
+
+def choose_board(rows, bin_path, K, D, sample_n=80):
+    candidates=[]
+    for nx,ny in [(5,7),(7,5)]:
+        for legacy in [False,True]:
+            dic,board=make_board(nx,ny,legacy)
+            candidates.append([nx,ny,legacy,dic,board,0,0])
+
+    step=max(1,len(rows)//sample_n)
+    picks=rows[::step][:sample_n]
+    with bin_path.open("rb") as fh:
+        for r in picks:
+            off=int(float(r["jpeg_offset"])); sz=int(float(r["jpeg_size"]))
+            fh.seek(off); data=fh.read(sz)
+            img=cv2.imdecode(np.frombuffer(data,np.uint8),cv2.IMREAD_GRAYSCALE)
+            if img is None: continue
+            # dictionary is same for all candidates, detect once
+            dic=candidates[0][3]
+            try:
+                det=cv2.aruco.ArucoDetector(dic)
+                corners,ids,_=det.detectMarkers(img)
+            except Exception:
+                corners,ids,_=cv2.aruco.detectMarkers(img,dic)
+            if ids is None or len(ids)<4: continue
+            for q in candidates:
+                board=q[4]
+                try:
+                    n,cc,ci=cv2.aruco.interpolateCornersCharuco(corners,ids,img,board,K,D)
+                except cv2.error:
+                    continue
+                if ci is not None and cc is not None and int(n)>0:
+                    q[5]+=1
+                    q[6]+=int(n)
+    candidates.sort(key=lambda q:(q[5],q[6]),reverse=True)
+    return candidates
 
 def detect(img,dic,board,K,D):
     try:
@@ -64,7 +103,15 @@ def main():
     args=ap.parse_args()
     with (args.run_dir/"frames.csv").open(newline="") as f: rows=list(csv.DictReader(f))
     K,D=load_k(args.yaml,args.focal_scale)
-    dic,board=board_make()
+    candidates=choose_board(rows,args.run_dir/"frames.mjpgbin",K,D)
+    print("===== CHARUCO BOARD PROBE =====")
+    for nx,ny,legacy,_,_,frames_ok,corners_ok in candidates:
+        print(f"{nx}x{ny} legacy={int(legacy)}: frames={frames_ok} interpolated_corners={corners_ok}")
+    if not candidates or candidates[0][5]==0:
+        raise SystemExit("Ни одна 5x7/7x5 ChArUco layout-гипотеза не дала интерполированных углов")
+    nx,ny,legacy,dic,board,_,_=candidates[0]
+    print(f"selected board: {nx}x{ny} legacy={int(legacy)}")
+    print()
     out=[]; detected=0
     with (args.run_dir/"frames.mjpgbin").open("rb") as fh:
         for r in rows:
@@ -92,7 +139,7 @@ def main():
         w=csv.writer(f);w.writerow(hdr);w.writerows(out)
     rms=[float(x[14]) for x in out]; nc=[int(x[13]) for x in out]; z=[float(x[17]) for x in out]
     print("===== CHARUCO POSE EXTRACTION =====")
-    print("board hypothesis: 5x7, DICT_4X4_50, square=27.324 mm, marker=20.043 mm")
+    print(f"board selected: {nx}x{ny}, legacy={int(legacy)}, DICT_4X4_50, square=27.324 mm, marker=20.043 mm")
     print(f"effective focal scale={args.focal_scale:.4f}")
     print(f"frames={len(rows)} poses={len(out)} detection={100*len(out)/max(1,len(rows)):.1f}%")
     if out:

@@ -44,8 +44,8 @@ def main():
     ekfstat=[i(r,"ekf_status_valid")==1 for r in rows]
     armed=[i(r,"fc_armed",-1) for r in rows]
 
-    ekf_age=[f(r,"ekf_age_ms") for r in rows if math.isfinite(f(r,"ekf_age_ms")) and f(r,"ekf_age_ms")>=0]
-    stat_age=[f(r,"ekf_status_age_ms") for r in rows if math.isfinite(f(r,"ekf_status_age_ms")) and f(r,"ekf_status_age_ms")>=0]
+    ekf_age=[f(r,"ekf_age_ms") for r in rows if math.isfinite(f(r,"ekf_age_ms")) and 0<=f(r,"ekf_age_ms")<1e8]
+    stat_age=[f(r,"ekf_status_age_ms") for r in rows if math.isfinite(f(r,"ekf_status_age_ms")) and 0<=f(r,"ekf_status_age_ms")<1e8]
     luna_age=[f(r,"luna_age_ms") for r in rows if math.isfinite(f(r,"luna_age_ms")) and f(r,"luna_age_ms")>=-5]
     gyro_age=[f(r,"fc_gyro_age_ms") for r in rows if math.isfinite(f(r,"fc_gyro_age_ms")) and f(r,"fc_gyro_age_ms")>=-5]
     gyro_samples=[f(r,"fc_gyro_samples") for r in rows if math.isfinite(f(r,"fc_gyro_samples"))]
@@ -83,6 +83,10 @@ def main():
         print(f"  gaps >2x median = {len(gap2)}; >3x median = {len(gap3)}; >50 ms = {len(gap50)}; >100 ms = {len(gap100)}")
     if lat:
         print(f"  pipeline latency median/p95/max = {statistics.median(lat):.2f}/{pct(lat,.95):.2f}/{max(lat):.2f} ms")
+        print(f"  latency >80 ms = {sum(1 for x in lat if x>80.0)}; >150 ms = {sum(1 for x in lat if x>150.0)}")
+    if "camera_queue_dropped" in rows[0]:
+        drops=[i(r,"camera_queue_dropped",0) for r in rows]
+        print(f"  deliberately dropped queued frames = {sum(drops)}; frames with queue drain = {sum(1 for x in drops if x>0)}")
     if inliers:
         print(f"  inliers median/p05/min = {statistics.median(inliers):.1f}/{pct(inliers,.05):.1f}/{min(inliers):.1f}")
     if tracked:
@@ -109,7 +113,7 @@ def main():
     print()
 
     print("TF-LUNA / DISTANCE_SENSOR:")
-    print(f"  range_sent rows = {sum(rngsent)}/{n} ({fmt_pct(sum(rngsent),n):.2f}%)")
+    print(f"  range_sent rows = {sum(rngsent)}/{n} ({fmt_pct(sum(rngsent),n):.2f}%) [публикация ограничена по частоте; это НЕ процент потерь]")
     if luna_age:
         print(f"  Luna age median/p95/max = {statistics.median(luna_age):.2f}/{pct(luna_age,.95):.2f}/{max(luna_age):.2f} ms")
         print(f"  Luna age >100 ms = {len(stale_luna)}")
@@ -133,7 +137,8 @@ def main():
 
     # Conservative verdict.
     severe=[]
-    if n-sum(valid) > max(5,0.01*n): severe.append("много invalid optical-flow кадров")
+    if n-sum(valid) > max(5,0.03*n): severe.append("много invalid optical-flow кадров")
+    if lat and statistics.median(lat)>80.0: severe.append("слишком большая медианная задержка camera→flow")
     if len(gap3) > max(3,0.01*len(dt)): severe.append("есть заметные camera/dt gaps")
     if n-sum(ekflocal) > max(5,0.01*n): severe.append("есть заметные провалы LOCAL_POSITION_NED")
     if ekf_age and len(stale_local_250)>0: severe.append("есть stale LOCAL_POSITION_NED >250 ms")

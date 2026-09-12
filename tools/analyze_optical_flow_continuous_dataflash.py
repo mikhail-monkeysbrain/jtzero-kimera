@@ -144,7 +144,7 @@ def main():
 
     print("===== LEG FORENSIC =====")
     hdr = (
-        "LEG DIR  PHYS   RAW/P  EKF/P EKF/RAW  DURs "
+        "LEG DIR CORE PHYS   RAW/P  EKF/P EKF/RAW  DURs "
         "HAGL50 HAGLmean  RFND50   NImean NImax  |FIX|max |FIY|max"
     )
     print(hdr)
@@ -160,7 +160,29 @@ def main():
         rpi0 = f(win[0], "mono_ns") / 1000.0
         rpi1 = f(win[-1], "mono_ns") / 1000.0
         fc0, fc1 = a*rpi0+b, a*rpi1+b
-        x5 = [r for r in log["XKF5"] if fc0 <= float(r["TimeUS"]) <= fc1]
+        # Select the EKF3 core whose XKF1 horizontal displacement best matches
+        # the LOCAL_POSITION_NED displacement stored by the bench for this leg.
+        # This avoids mixing simultaneous EKF3 cores in XKF1/XKF5.
+        x1_all = [r for r in log["XKF1"] if fc0 <= float(r["TimeUS"]) <= fc1]
+        cores = sorted({int(round(float(r.get("C", 0)))) for r in x1_all})
+        target_mm = float(rec["ekf_mm"])
+        best_core, best_err = None, float("inf")
+        for core in cores:
+            rr = [r for r in x1_all if int(round(float(r.get("C", 0)))) == core]
+            if len(rr) < 2:
+                continue
+            a0, a1 = rr[0], rr[-1]
+            move_mm = 1000.0 * math.hypot(float(a1["PN"])-float(a0["PN"]),
+                                          float(a1["PE"])-float(a0["PE"]))
+            err = abs(move_mm-target_mm)
+            if err < best_err:
+                best_err, best_core = err, core
+        if best_core is None:
+            best_core = 0
+
+        x5 = [r for r in log["XKF5"]
+              if fc0 <= float(r["TimeUS"]) <= fc1
+              and int(round(float(r.get("C", 0)))) == best_core]
         rf = [r for r in log["RFND"] if fc0 <= float(r["TimeUS"]) <= fc1]
 
         h = [float(r["HAGL"]) for r in x5]
@@ -176,7 +198,7 @@ def main():
         dur = (f(win[-1], "mono_ns") - f(win[0], "mono_ns")) / 1e9
 
         print(
-            f"{leg:>3} {rec['direction']:<4} {phys:>5.0f} "
+            f"{leg:>3} {rec['direction']:<4} {best_core:>4} {phys:>5.0f} "
             f"{raw_ratio:>7.4f} {ekf_ratio:>6.4f} {ekf_raw:>7.4f} "
             f"{dur:>5.2f} {median(h):>6.3f} {mean(h):>8.3f} "
             f"{median(rfd):>7.3f} {mean(ni):>8.3f} {max(ni, default=float('nan')):>5.1f} "
@@ -185,7 +207,8 @@ def main():
 
     print()
     print("Примечание: XKF5.HAGL — настоящий EKF3 HAGL из DataFlash.")
-    print("RFND50 — DataFlash RFND.Dist. NI/FIX/FIY взяты из XKF5.")
+    print("CORE выбирается по совпадению XKF1 displacement с LOCAL_POSITION_NED bench-результатом.")
+    print("RFND50 — DataFlash RFND.Dist. NI/FIX/FIY взяты только из выбранного XKF5 core.")
 
 if __name__ == "__main__":
     main()

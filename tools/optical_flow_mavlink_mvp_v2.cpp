@@ -445,7 +445,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,frame,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -576,14 +576,18 @@ int main(int argc,char** argv){
           flow_send_x*=k;
           flow_send_y*=k;
         }
+        int64_t flow_send_ns=0;
         if(s.valid){
           quality=255;
-          flow_sent=sendOpticalFlow(fc.fd,(uint64_t)(now/1000),
+          flow_send_ns=monoNs();
+          flow_sent=sendOpticalFlow(fc.fd,(uint64_t)(flow_send_ns/1000),
             (float)flow_send_x,(float)flow_send_y,quality);
           if(flow_sent)++flow_sent_total;
         } else if(!prev.empty()){
           ++flow_invalid_total;
         }
+        const double frame_pipeline_latency_ms =
+          (ts>0 && flow_send_ns>0) ? (flow_send_ns-ts)*1e-6 : -1.0;
 
         FlowFcLocal ep{}; double eage=1e9; uint64_t ec=0;
         const bool eok=fc.latestLocal(&ep,&eage,&ec);
@@ -602,7 +606,8 @@ int main(int argc,char** argv){
           g_running=false;
         }
 
-        csv<<now<<','<<frame<<','<<(s.valid?1:0)<<','<<dt<<','
+        csv<<now<<','<<ts<<','<<flow_send_ns<<','<<frame_pipeline_latency_ms<<','
+           <<frame<<','<<(s.valid?1:0)<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','
            <<s.flow_cam_x<<','<<s.flow_cam_y<<','<<s.flow_body_x<<','<<s.flow_body_y<<','

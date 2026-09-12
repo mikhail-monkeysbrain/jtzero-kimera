@@ -63,43 +63,81 @@ def main():
 
     dz=args.camera_z_m-args.range_z_m
     rawx=rawy=0.0
+    bodyx=bodyy=0.0
+    nedn=nede=0.0
     raw_at={ia:(0.0,0.0)}
+    body_at={ia:(0.0,0.0)}
+    ned_at={ia:(0.0,0.0)}
     valid_used=0
     invalid=0
-    for idx in range(ia,ih+1):
-        r=rows[idx]
+
+    def accum_row(r):
+        nonlocal rawx,rawy,bodyx,bodyy,nedn,nede,valid_used
         if i(r,"valid",0)!=1 or i(r,"flow_sent",0)!=1:
-            invalid+=1
-            if idx in (ib,ih): raw_at[idx]=(rawx,rawy)
-            continue
+            return False
         dt=f(r,"dt_s"); rng=f(r,"range_to_fc_m")
         fx=f(r,"flow_send_x"); fy=f(r,"flow_send_y")
+        gx=f(r,"fc_gyro_x"); gy=f(r,"fc_gyro_y")
+        roll=f(r,"fc_roll"); pitch=f(r,"fc_pitch"); yaw=f(r,"fc_yaw")
         hcam=rng-dz
-        if not all(map(math.isfinite,[dt,hcam,fx,fy])) or not (0<dt<0.2) or hcam<=0:
-            if idx in (ib,ih): raw_at[idx]=(rawx,rawy)
-            continue
+        vals=[dt,hcam,fx,fy,gx,gy,roll,pitch,yaw]
+        if not all(map(math.isfinite,vals)) or not (0<dt<0.2) or hcam<=0:
+            return False
+
+        # Legacy LOS integral.
         rawx += fx*hcam*dt
         rawy += fy*hcam*dt
+
+        # Mirror ArduPilot EKF3 conventions:
+        # internal flow = -rawFlowRates; compensated = internal + body rates.
+        comp_x=-fx+gx
+        comp_y=-fy+gy
+        dbx=(-comp_y)*hcam*dt
+        dby=( comp_x)*hcam*dt
+        bodyx += dbx
+        bodyy += dby
+
+        # Full body-FRD -> NED 3-2-1 rotation for planar body displacement.
+        cr,sr=math.cos(roll),math.sin(roll)
+        cp,sp=math.cos(pitch),math.sin(pitch)
+        cy,sy=math.cos(yaw),math.sin(yaw)
+        r00=cy*cp
+        r01=cy*sp*sr-sy*cr
+        r10=sy*cp
+        r11=sy*sp*sr+cy*cr
+        nedn += r00*dbx+r01*dby
+        nede += r10*dbx+r11*dby
         valid_used+=1
-        if idx in (ib,ih): raw_at[idx]=(rawx,rawy)
-    # If the event row itself was invalid, use current cumulative value.
-    raw_at.setdefault(ib,(rawx,rawy) if ib==ih else (float("nan"),float("nan")))
-    if not all(math.isfinite(v) for v in raw_at[ib]):
-        # recompute exactly to B
-        x=y=0.0
-        for idx in range(ia,ib+1):
-            r=rows[idx]
-            if i(r,"valid",0)!=1 or i(r,"flow_sent",0)!=1: continue
-            dt=f(r,"dt_s"); rng=f(r,"range_to_fc_m")
-            fx=f(r,"flow_send_x"); fy=f(r,"flow_send_y"); hcam=rng-dz
-            if all(map(math.isfinite,[dt,hcam,fx,fy])) and 0<dt<0.2 and hcam>0:
-                x+=fx*hcam*dt; y+=fy*hcam*dt
-        raw_at[ib]=(x,y)
+        return True
+
+    for idx in range(ia,ih+1):
+        r=rows[idx]
+        ok=accum_row(r)
+        if not ok:
+            invalid+=1
+        if idx in (ib,ih):
+            raw_at[idx]=(rawx,rawy)
+            body_at[idx]=(bodyx,bodyy)
+            ned_at[idx]=(nedn,nede)
+
+    raw_at.setdefault(ib,(rawx,rawy))
+    body_at.setdefault(ib,(bodyx,bodyy))
+    ned_at.setdefault(ib,(nedn,nede))
     raw_at[ih]=(rawx,rawy)
+    body_at[ih]=(bodyx,bodyy)
+    ned_at[ih]=(nedn,nede)
 
     ab_raw=raw_at[ib]
     ah_raw=raw_at[ih]
     bh_raw=(ah_raw[0]-ab_raw[0],ah_raw[1]-ab_raw[1])
+
+    ab_body=body_at[ib]
+    ah_body=body_at[ih]
+    bh_body=(ah_body[0]-ab_body[0],ah_body[1]-ab_body[1])
+
+    ab_ned=ned_at[ib]
+    ah_ned=ned_at[ih]
+    bh_ned=(ah_ned[0]-ab_ned[0],ah_ned[1]-ab_ned[1])
 
     yaw_a=math.degrees(f(ra,"fc_yaw",0.0))
     yaw_b=math.degrees(f(rb,"fc_yaw",0.0))
@@ -115,7 +153,17 @@ def main():
     print(f"  B->H vector N/E = {bh_ekf[0]*1000:+.1f}/{bh_ekf[1]*1000:+.1f} mm  |.|={mm(bh_ekf):.1f} mm")
     print(f"  closure A->H     = {ah_ekf[0]*1000:+.1f}/{ah_ekf[1]*1000:+.1f} mm  |.|={mm(ah_ekf):.1f} mm")
     print()
-    print("RAW native flow metric (camera-height corrected; native flow axes):")
+    print("RAW AP-model NED metric (gyro compensated + ATTITUDE body->NED):")
+    print(f"  A->B N/E = {ab_ned[0]*1000:+.1f}/{ab_ned[1]*1000:+.1f} mm  |.|={mm(ab_ned):.1f} mm")
+    print(f"  B->H N/E = {bh_ned[0]*1000:+.1f}/{bh_ned[1]*1000:+.1f} mm  |.|={mm(bh_ned):.1f} mm")
+    print(f"  closure  = {ah_ned[0]*1000:+.1f}/{ah_ned[1]*1000:+.1f} mm  |.|={mm(ah_ned):.1f} mm")
+    print()
+    print("RAW AP-model BODY metric:")
+    print(f"  A->B X/Y = {ab_body[0]*1000:+.1f}/{ab_body[1]*1000:+.1f} mm  |.|={mm(ab_body):.1f} mm")
+    print(f"  B->H X/Y = {bh_body[0]*1000:+.1f}/{bh_body[1]*1000:+.1f} mm  |.|={mm(bh_body):.1f} mm")
+    print(f"  closure  = {ah_body[0]*1000:+.1f}/{ah_body[1]*1000:+.1f} mm  |.|={mm(ah_body):.1f} mm")
+    print()
+    print("RAW legacy LOS integral (for comparison only; rotating axes):")
     print(f"  A->B = {ab_raw[0]*1000:+.1f}/{ab_raw[1]*1000:+.1f} mm  |.|={mm(ab_raw):.1f} mm")
     print(f"  B->H = {bh_raw[0]*1000:+.1f}/{bh_raw[1]*1000:+.1f} mm  |.|={mm(bh_raw):.1f} mm")
     print(f"  closure = {ah_raw[0]*1000:+.1f}/{ah_raw[1]*1000:+.1f} mm  |.|={mm(ah_raw):.1f} mm")
@@ -127,16 +175,17 @@ def main():
     print(f"  dYaw A->H={wrap_deg(yaw_h-yaw_a):+.2f} deg")
     print()
 
-    raw_close=mm(ah_raw)
+    raw_close=mm(ah_ned)
     ekf_close=mm(ah_ekf)
+    print(f"EKF vs RAW-NED closure delta = {ekf_close-raw_close:+.1f} mm")
     if raw_close<=25 and ekf_close>50:
-        print("INTERPRETATION: RAW flow approximately closes but EKF does not; investigate yaw/rotation compensation/fusion after the frontend.")
+        print("INTERPRETATION: attitude-corrected RAW NED approximately closes but EKF does not; investigate EKF fusion after the frontend.")
     elif raw_close>50 and abs(raw_close-ekf_close)<40:
-        print("INTERPRETATION: large non-closure is already present in RAW flow; frontend/height/occlusion/directional asymmetry is the primary suspect.")
+        print("INTERPRETATION: EKF follows the attitude-corrected RAW NED non-closure; investigate flow/gyro/height modelling rather than yaw-frame accumulation.")
     elif raw_close>50 and ekf_close>50:
-        print("INTERPRETATION: both RAW and EKF fail to close, but by different amounts; compare A->B/B->H vectors and yaw before changing scale.")
+        print("INTERPRETATION: both RAW NED and EKF fail to close, but by different amounts; compare A->B/B->H vectors and attitude/height.")
     else:
-        print("INTERPRETATION: both RAW and EKF closure are small in this run.")
+        print("INTERPRETATION: both attitude-corrected RAW NED and EKF closure are small in this run.")
 
 if __name__=="__main__":
     main()

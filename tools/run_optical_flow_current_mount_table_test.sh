@@ -9,6 +9,7 @@ export JTZERO_FLOW_TARGET_MM="${JTZERO_FLOW_TARGET_MM:-300}"
 export JTZERO_FLOW_GUIDED_MODE="guided"
 export JTZERO_FLOW_PRE_STATIC_SEC="${JTZERO_FLOW_PRE_STATIC_SEC:-5}"
 export JTZERO_FLOW_POST_STATIC_SEC="${JTZERO_FLOW_POST_STATIC_SEC:-8}"
+export JTZERO_FLOW_FEATURE_ROI="${JTZERO_FLOW_FEATURE_ROI:-0.20 0.32 0.80 0.90}"
 
 cat <<EOF
 ======================================================================
@@ -26,6 +27,10 @@ Current-mount camera YAML:
 Nominal movement instruction: $JTZERO_FLOW_TARGET_MM mm.
 Measure the ACTUAL movement with a ruler and report it together with terminal output.
 
+Temporary stand-occlusion feature ROI:
+  $JTZERO_FLOW_FEATURE_ROI
+  (excludes the visible upper stand/arch and left edge; final housing should not need this)
+
 Keep vehicle level:
   - translate only;
   - no yaw;
@@ -34,4 +39,6 @@ Keep vehicle level:
 ======================================================================
 EOF
 
+read -r RX0 RY0 RX1 RY1 <<< "$JTZERO_FLOW_FEATURE_ROI"
+export JTZERO_FLOW_EXTRA_ARGS="--feature-roi $RX0 $RY0 $RX1 $RY1"
 exec bash tools/run_optical_flow_mavlink_bench.sh

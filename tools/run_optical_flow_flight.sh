@@ -16,6 +16,7 @@ ROTATION_GUI="${JTZERO_FLOW_ROTATION_GUI:-0}"
 RETURN_MANUAL_TARGET="${JTZERO_FLOW_RETURN_MANUAL_TARGET:-0}"
 DIAG_CAMERA_Z_M="${JTZERO_FLOW_DIAG_CAMERA_Z_M:-}"
 DIAG_RANGE_Z_M="${JTZERO_FLOW_DIAG_RANGE_Z_M:-}"
+BENCH_HEIGHT="${JTZERO_FLOW_BENCH_HEIGHT:-}"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="${JTZERO_FLOW_RUN_DIR:-/home/vio/jtzero_runs/${STAMP}_OPTICAL_FLOW_FLIGHT}"
@@ -66,9 +67,9 @@ JT-ZERO — OPTICAL FLOW FLIGHT
   ArduPilot EKF3 -> horizontal velocity/relative position
 
 КРИТИЧЕСКИ:
-  - synthetic bench height НЕ используется;
-  - flow НЕ масштабируется lm/0.60;
-  - в FC уходит настоящий TF-Luna range;
+  - synthetic bench height: ${BENCH_HEIGHT:-НЕТ};
+  - если bench height задан, это ТОЛЬКО диагностика без взлёта;
+  - без bench height в FC уходит настоящий TF-Luna range;
   - focal_scale = $FOCAL_SCALE;
   - feature ROI = $FEATURE_ROI;
   - return GUI = $RETURN_GUI;
@@ -100,6 +101,9 @@ if [[ "$RETURN_MANUAL_TARGET" == "1" ]]; then
 fi
 if [[ -n "$DIAG_CAMERA_Z_M" && -n "$DIAG_RANGE_Z_M" ]]; then
   EXTRA+=(--diag-camera-z-m "$DIAG_CAMERA_Z_M" --diag-range-z-m "$DIAG_RANGE_Z_M")
+fi
+if [[ -n "$BENCH_HEIGHT" ]]; then
+  EXTRA+=(--bench-height "$BENCH_HEIGHT")
 fi
 
 exec "$BIN" "$CAMERA" "$LUNA" "$FC" "$CSV" "$CAMERA_YAML" "$FOCAL_SCALE" "${EXTRA[@]}"

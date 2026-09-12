@@ -399,6 +399,8 @@ int main(int argc,char** argv){
   const std::string csvpath=argv[4], yaml=argv[5];
   const double focal_scale=std::stod(argv[6]);
   bool guided=false;
+  bool continuous_guided=false;
+  int continuous_legs=1;
   double guided_target_mm=175.0;
   bool require_armed=false;
   bool nominal_target_only=false;
@@ -408,10 +410,17 @@ int main(int argc,char** argv){
     const std::string a=argv[i];
     if(a=="--guided-175"){ guided=true; guided_target_mm=175.0; }
     else if(a=="--guided-mm" && i+1<argc){ guided=true; guided_target_mm=std::stod(argv[++i]); }
+    else if(a=="--continuous-legs" && i+1<argc){
+      guided=true; continuous_guided=true; continuous_legs=std::stoi(argv[++i]);
+    }
     else if(a=="--require-armed") require_armed=true;
     else if(a=="--nominal-target") nominal_target_only=true;
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
+  }
+  if(continuous_guided && (continuous_legs<2 || continuous_legs>30)){
+    std::cerr<<"ОШИБКА: --continuous-legs разрешён только 2..30\n";
+    return 2;
   }
   if(guided && !(guided_target_mm>=50.0 && guided_target_mm<=1000.0)){
     std::cerr<<"ОШИБКА: --guided-mm разрешён только 50..1000 мм для стенда\n";
@@ -447,7 +456,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -456,45 +465,38 @@ int main(int argc,char** argv){
     uint64_t flow_sent_total=0,flow_invalid_total=0,range_sent_total=0;
     int64_t last_range_send_ns=0;
 
-    std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=done
+    std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=wait-next, 4=done
+    std::atomic<int> guide_leg{0};
     std::atomic<bool> arm_lost{false};
     FlowFcLocal guide_start{}, guide_end{};
     std::thread guide_thread;
     if(guided){
       guide_thread=std::thread([&]{
-        // Даём стартовым строкам camera/FC напечататься до пошаговой инструкции.
         std::this_thread::sleep_for(std::chrono::milliseconds(750));
         bool arm=false; double arm_age=1e9;
         const bool have_arm=fc.latestArm(&arm,&arm_age) && arm_age<2500.0;
+
         std::cerr<<"\n======================================================================\n"
-                 <<"GUIDED TEST — ФИЗИЧЕСКИЙ СДВИГ "<<guided_target_mm<<" мм\n"
+                 <<(continuous_guided?"CONTINUOUS RECIPROCAL TEST":"GUIDED TEST")
+                 <<" — НОМИНАЛЬНЫЙ СДВИГ "<<guided_target_mm<<" мм\n"
                  <<"======================================================================\n"
-                 <<"1. НЕ ДВИГАЙТЕ аппарат. Сейчас автоматически собирается 5 с статики.\n"
-                 <<"2. После команды ДВИГАЙТЕ сдвиньте ВЕСЬ аппарат строго по столу на "<<guided_target_mm<<" мм.\n"
-                 <<"3. НЕ вращайте, не наклоняйте и не приподнимайте аппарат.\n"
-                 <<"4. После сдвига полностью остановите аппарат.\n"
-                 <<"5. Только после полной остановки нажмите Enter.\n"
-                 <<"6. Затем аппарат снова НЕ ТРОГАТЬ 5 секунд — тест завершится сам.\n"
+                 <<"Проходов: "<<(continuous_guided?continuous_legs:1)<<"\n"
+                 <<"Один процесс камеры/MAVLink/DataFlash на всю серию.\n"
+                 <<"Фактическое расстояние измеряется после каждого прохода.\n"
                  <<"======================================================================\n"
                  <<"ARM STATE: "<<(have_arm?(arm?"ARMED":"DISARMED"):"NO_DATA")<<"\n";
         if(require_armed && (!have_arm || !arm)){
-          std::cerr<<"ОШИБКА: этот A/B-прогон требует ARMED.\n"
-                   <<"Программа сама НЕ армит FC. Сначала безопасно подготовьте аппарат,\n"
-                   <<"уберите пропеллеры/исключите тягу, армируйте штатным способом и запустите тест снова.\n";
+          std::cerr<<"ОШИБКА: этот тест требует ARMED.\n";
           g_running=false; return;
         }
 
-        // В armed-gate-open каждый отдельный GUI-run заново начинает публиковать
-        // synthetic 0.60 m. Между run-ами MAVLink RangeFinder пропадает и EKF может
-        // временно перейти на baro, поэтому нельзя начинать измерение до сходимости Z.
-        if(bench_height_override>0.0){
+        auto wait_height=[&](double stable_sec)->bool{
+          if(bench_height_override<=0.0) return true;
           constexpr double kHgtTolM=0.035;
-          constexpr double kStableSec=2.0;
           constexpr double kTimeoutSec=20.0;
           std::cerr<<"\n>>> СИНХРОНИЗАЦИЯ ВЫСОТЫ. НЕ ДВИГАТЬ.\n"
-                   <<">>> FC уже получает synthetic range "<<bench_height_override<<" м.\n"
                    <<">>> Ждём LOCAL Z около -"<<bench_height_override
-                   <<" м (±"<<kHgtTolM<<" м) непрерывно "<<kStableSec<<" с.\n";
+                   <<" м (±"<<kHgtTolM<<" м) непрерывно "<<stable_sec<<" с.\n";
           const int64_t sync_begin=monoNs();
           int64_t stable_begin=0;
           double last_z=0.0,last_age=1e9;
@@ -506,69 +508,84 @@ int main(int argc,char** argv){
               const bool in_band=std::abs((-double(q.z))-bench_height_override)<=kHgtTolM;
               if(in_band){
                 if(stable_begin==0) stable_begin=monoNs();
-                const double stable_s=(monoNs()-stable_begin)*1e-9;
-                if(stable_s>=kStableSec){
+                if((monoNs()-stable_begin)*1e-9>=stable_sec){
                   std::cerr<<">>> ВЫСОТА СТАБИЛЬНА: LOCAL Z="<<q.z
-                           <<" м, inferred HAGL="<<(-q.z)<<" м. Начинаем тест.\n";
-                  break;
+                           <<" м, inferred HAGL="<<(-q.z)<<" м.\n";
+                  return true;
                 }
               } else {
                 stable_begin=0;
               }
             }
             if((monoNs()-sync_begin)*1e-9>=kTimeoutSec){
-              std::cerr<<"\nОШИБКА: EKF height не сошёлся к synthetic range за "
-                       <<kTimeoutSec<<" с. Последний LOCAL Z="<<last_z
-                       <<" м age="<<last_age<<" ms.\n"
-                       <<"Тест НЕ начинается: иначе scale OpticalFlow будет искажён HAGL.\n";
-              g_running=false; return;
+              std::cerr<<"\nОШИБКА: EKF height не сошёлся за "<<kTimeoutSec
+                       <<" с. Последний LOCAL Z="<<last_z<<" м age="<<last_age<<" ms.\n";
+              return false;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
           }
-          if(!g_running) return;
+          return false;
+        };
+
+        const int legs=continuous_guided?continuous_legs:1;
+        for(int leg=1; leg<=legs && g_running; ++leg){
+          guide_leg=leg;
+          guide_stage=0;
+          if(!wait_height(leg==1?2.0:1.0)){ g_running=false; return; }
+
+          std::cerr<<"\n======================================================================\n"
+                   <<"LEG "<<leg<<" / "<<legs<<"\n"
+                   <<"======================================================================\n"
+                   <<"СТАТИКА 5 секунд. НЕ ДВИГАТЬ.\n";
+          std::this_thread::sleep_for(std::chrono::seconds(5));
+
+          double age=0; uint64_t count=0;
+          if(!fc.latestLocal(&guide_start,&age,&count) || age>500){
+            std::cerr<<"ОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED перед движением.\n";
+            g_running=false; return;
+          }
+
+          guide_stage=1;
+          std::cerr<<"\n>>> LEG "<<leg<<" ДВИГАЙТЕ\n"
+                   <<">>> Сдвиньте аппарат строго по столу. После полной остановки нажмите Enter.\n";
+          std::string line; std::getline(std::cin,line);
+
+          guide_stage=2;
+          std::cerr<<"\n>>> LEG "<<leg<<" СТОП. НЕ ТРОГАТЬ аппарат 5 секунд.\n";
+          std::this_thread::sleep_for(std::chrono::seconds(5));
+
+          if(!fc.latestLocal(&guide_end,&age,&count) || age>500){
+            std::cerr<<"ОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED после движения.\n";
+            g_running=false; return;
+          }
+          if(require_armed && arm_lost.load()){
+            std::cerr<<"ARMed-test прерван из-за DISARM.\n";
+            g_running=false; return;
+          }
+
+          const double dn=guide_end.x-guide_start.x, de=guide_end.y-guide_start.y;
+          const double dist=std::hypot(dn,de);
+          std::cerr<<"\n======================================================================\n"
+                   <<"CONTINUOUS LEG "<<leg<<" RESULT\n"
+                   <<"START N/E = ("<<guide_start.x<<", "<<guide_start.y<<") m\n"
+                   <<"END   N/E = ("<<guide_end.x<<", "<<guide_end.y<<") m\n"
+                   <<"DELTA N/E = ("<<dn<<", "<<de<<") m\n"
+                   <<"EKF horizontal displacement = "<<dist*1000.0<<" mm\n"
+                   <<"Nominal guided target = "<<guided_target_mm
+                   <<" mm (ТОЛЬКО ИНСТРУКЦИЯ; физический эталон вводится в GUI)\n"
+                   <<"======================================================================\n";
+
+          if(leg<legs){
+            guide_stage=3;
+            std::cerr<<"\n>>> LEG "<<leg<<" COMPLETE. Введите физическое расстояние в GUI.\n"
+                     <<">>> После сохранения GUI продолжит следующий проход.\n";
+            std::getline(std::cin,line);
+          }
         }
 
-        std::cerr<<"СТАТИКА 5 секунд. НЕ ДВИГАТЬ.\n";
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-        double age=0; uint64_t count=0;
-        if(!fc.latestLocal(&guide_start,&age,&count) || age>500){
-          std::cerr<<"\nОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED перед движением.\n";
-          g_running=false; return;
-        }
-        guide_stage=1;
-        std::cerr<<"\n>>> ДВИГАЙТЕ: сдвиньте аппарат на "<<guided_target_mm<<" мм строго по столу.\n"
-                 <<">>> После полной остановки нажмите Enter.\n";
-        std::string line; std::getline(std::cin,line);
-        guide_stage=2;
-        std::cerr<<"\n>>> СТОП. НЕ ТРОГАТЬ аппарат 5 секунд. Идёт финальная статика...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-        if(!fc.latestLocal(&guide_end,&age,&count) || age>500){
-          std::cerr<<"\nОШИБКА GUIDE: нет свежего LOCAL_POSITION_NED после движения.\n";
-          g_running=false; return;
-        }
-        if(require_armed && arm_lost.load()){
-          std::cerr<<"\nARMed-test прерван из-за DISARM. Итог "<<guided_target_mm<<" мм не вычисляется.\n";
-          g_running=false; return;
-        }
-        guide_stage=3;
-        const double dn=guide_end.x-guide_start.x, de=guide_end.y-guide_start.y;
-        const double dist=std::hypot(dn,de);
-        std::cerr<<"\n======================================================================\n"
-                 <<"GUIDED "<<guided_target_mm<<" мм — РЕЗУЛЬТАТ\n"
-                 <<"======================================================================\n"
-                 <<"START N/E = ("<<guide_start.x<<", "<<guide_start.y<<") m\n"
-                 <<"END   N/E = ("<<guide_end.x<<", "<<guide_end.y<<") m\n"
-                 <<"DELTA N/E = ("<<dn<<", "<<de<<") m\n"
-                 <<"EKF horizontal displacement = "<<dist*1000.0<<" mm\n";
-        if(nominal_target_only){
-          std::cerr<<"Nominal guided target = "<<guided_target_mm
-                   <<" mm (ТОЛЬКО ИНСТРУКЦИЯ; фактическое расстояние вводится в GUI)\n"
-                   <<"Error vs nominal target = НЕ СЧИТАЕТСЯ\n";
-        } else {
-          std::cerr<<"Target = "<<guided_target_mm<<" mm\n"
-                   <<"Error  = "<<(dist*1000.0-guided_target_mm)<<" mm ("<<((dist/(guided_target_mm*0.001))-1.0)*100.0<<" %)\n";
-        }
-        std::cerr<<"======================================================================\n";
+        guide_stage=4;
+        guide_leg=legs;
+        std::cerr<<"\n>>> CONTINUOUS SERIES COMPLETE\n";
         g_running=false;
       });
     }
@@ -660,7 +677,7 @@ int main(int argc,char** argv){
         }
 
         csv<<now<<','<<ts<<','<<flow_send_ns<<','<<frame_pipeline_latency_ms<<','
-           <<frame<<','<<(s.valid?1:0)<<','<<dt<<','
+           <<frame<<','<<guide_leg.load()<<','<<guide_stage.load()<<','<<(s.valid?1:0)<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','
            <<s.flow_cam_x<<','<<s.flow_cam_y<<','<<s.flow_body_x<<','<<s.flow_body_y<<','

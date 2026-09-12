@@ -46,13 +46,13 @@ def main():
     a,b,matches,p95=mod.fit_clock(crows,log["OF"])
 
     wanted={int(x) for x in args.legs.split(",")}
-    x1=sorted(log.get("XKF1",[]),key=lambda r:float(r["TimeUS"]))
-    x5=sorted(log.get("XKF5",[]),key=lambda r:float(r["TimeUS"]))
+    x1_all=sorted(log.get("XKF1",[]),key=lambda r:float(r["TimeUS"]))
+    x5_all=sorted(log.get("XKF5",[]),key=lambda r:float(r["TimeUS"]))
     of=sorted(log.get("OF",[]),key=lambda r:float(r["TimeUS"]))
 
     print("===== LEG 5/6 TEMPORAL FORENSIC =====")
     print(f"clock matches={matches} p95={p95/1000:.3f} ms")
-    print(f"XKF1 rows={len(x1)} XKF5 rows={len(x5)} OF rows={len(of)}")
+    print(f"XKF1 rows={len(x1_all)} XKF5 rows={len(x5_all)} OF rows={len(of)}")
     print()
 
     for rec in session:
@@ -72,6 +72,23 @@ def main():
         dur=(t1-t0)/1e6
 
         keys=["PN","PE","VN","VE","PD","VD"]
+
+        # Determine which EKF3 core is actually represented by the bench
+        # LOCAL_POSITION_NED result for this leg. Never mix XKF cores.
+        candidates={}
+        for core in sorted({int(round(num(r,"C",0))) for r in x1_all}):
+            rr=[r for r in x1_all if int(round(num(r,"C",0)))==core]
+            a0=interp_state(rr,t0,keys)
+            a1=interp_state(rr,t1,keys)
+            if a0 is None or a1 is None:
+                continue
+            move=1000.0*vecnorm(a1["PN"]-a0["PN"],a1["PE"]-a0["PE"])
+            candidates[core]=move
+        target=float(rec["ekf_mm"])
+        core=min(candidates,key=lambda k:abs(candidates[k]-target))
+        x1=[r for r in x1_all if int(round(num(r,"C",0)))==core]
+        x5=[r for r in x5_all if int(round(num(r,"C",0)))==core]
+
         s0=interp_state(x1,t0,keys)
         s1=interp_state(x1,t1,keys)
         sp=interp_state(x1,t1+args.post*1e6,keys)
@@ -90,7 +107,8 @@ def main():
         vpost_mean=statistics.mean([vecnorm(num(r,"VN",0),num(r,"VE",0)) for r in post_x1]) if post_x1 else float("nan")
         post_drift=dxy(s1,sp)
 
-        print(f"LEG {leg} {rec['direction']} phys={rec['physical_measured_mm']:.0f} mm")
+        print(f"LEG {leg} {rec['direction']} phys={rec['physical_measured_mm']:.0f} mm CORE={core}")
+        print("  per-core XKF1 move: " + ", ".join(f"C{k}={v:.1f}mm" for k,v in sorted(candidates.items())))
         print(f"  RAW/P={rec['raw_ratio']:.4f} EKF/P={rec['ekf_ratio']:.4f} EKF/RAW={rec['ekf_ratio']/rec['raw_ratio']:.4f}")
         print(f"  duration={dur:.3f}s XKF1_move={dxy(s0,s1):.1f}mm")
         print(f"  XKF speed: vmax={vmax:.3f}m/s vend={vend:.3f}m/s post_mean={vpost_mean:.3f}m/s post_drift_{args.post:.1f}s={post_drift:.1f}mm")

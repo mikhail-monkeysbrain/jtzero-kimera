@@ -402,6 +402,7 @@ struct FlowStep {
   double inlier_ratio=0;
   double du_norm=0,dv_norm=0;
   double du_px=0,dv_px=0;
+  double yaw_rate_cam_z=0; // fitted optical-axis rotation, rad/s, removed before MAVLink
   double flow_cam_x=0,flow_cam_y=0;
   double flow_body_x=0,flow_body_y=0;
 
@@ -472,7 +473,46 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
     cell_du[ci].push_back(du);
     cell_dv[ci].push_back(dv);
   }
-  o.du_norm=median(dun); o.dv_norm=median(dvn);
+  // Separate optical-axis rotation (camera yaw) from image translation.
+  //
+  // ArduPilot's MAV OpticalFlow backend compensates bodyRate X/Y internally,
+  // but bodyRate Z is not part of OpticalFlow_state. Therefore a plain median
+  // of du/dv leaks yaw image rotation into horizontal velocity whenever the
+  // feature distribution / ROI is not perfectly centro-symmetric.
+  //
+  // On undistorted normalized coordinates fit:
+  //   du = tx - wz*y
+  //   dv = ty + wz*x
+  // Unknowns: tx, ty, wz*dt.  tx/ty preserve the constant image motion used
+  // for roll/pitch + translation; only the optical-axis rotational component
+  // is removed before publishing to ArduPilot.
+  cv::Mat A((int)ai.size()*2,3,CV_64F);
+  cv::Mat bb((int)ai.size()*2,1,CV_64F);
+  for(size_t k=0;k<ai.size();++k){
+    const double x=(double)au[k].x;
+    const double y=(double)au[k].y;
+    const double du=(double)bu[k].x-au[k].x;
+    const double dv=(double)bu[k].y-au[k].y;
+    A.at<double>((int)(2*k),0)=1.0;
+    A.at<double>((int)(2*k),1)=0.0;
+    A.at<double>((int)(2*k),2)=-y;
+    bb.at<double>((int)(2*k),0)=du;
+    A.at<double>((int)(2*k+1),0)=0.0;
+    A.at<double>((int)(2*k+1),1)=1.0;
+    A.at<double>((int)(2*k+1),2)=x;
+    bb.at<double>((int)(2*k+1),0)=dv;
+  }
+  cv::Mat sol;
+  const bool fit_ok=cv::solve(A,bb,sol,cv::DECOMP_SVD);
+  if(fit_ok && sol.rows==3){
+    o.du_norm=sol.at<double>(0,0);
+    o.dv_norm=sol.at<double>(1,0);
+    o.yaw_rate_cam_z=sol.at<double>(2,0)/dt;
+  } else {
+    o.du_norm=median(dun);
+    o.dv_norm=median(dvn);
+    o.yaw_rate_cam_z=0.0;
+  }
   o.du_px=median(dup); o.dv_px=median(dvp);
 
   // OpenCV camera: +X image-right, +Y image-down, +Z optical-forward.
@@ -489,8 +529,25 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   for(int ci=0;ci<9;ci++){
     o.cell_n[ci]=(int)cell_du[ci].size();
     if(o.cell_n[ci]>=3){
-      const double cdu=median(cell_du[ci]);
-      const double cdv=median(cell_dv[ci]);
+      // Cell diagnostic uses the same globally fitted yaw removal.
+      std::vector<double> cdu_clean,cdv_clean;
+      cdu_clean.reserve(cell_du[ci].size());
+      cdv_clean.reserve(cell_dv[ci].size());
+      for(size_t k=0;k<ai.size();++k){
+        const double nx=(ai[k].x/(double)prev.cols-g_feature_roi.x0)/
+                        (g_feature_roi.x1-g_feature_roi.x0);
+        const double ny=(ai[k].y/(double)prev.rows-g_feature_roi.y0)/
+                        (g_feature_roi.y1-g_feature_roi.y0);
+        const int cx=std::clamp((int)std::floor(nx*3.0),0,2);
+        const int cy=std::clamp((int)std::floor(ny*3.0),0,2);
+        if(cy*3+cx!=ci) continue;
+        const double x=(double)au[k].x, y=(double)au[k].y;
+        const double wzdt=o.yaw_rate_cam_z*dt;
+        cdu_clean.push_back(((double)bu[k].x-au[k].x) + wzdt*y);
+        cdv_clean.push_back(((double)bu[k].y-au[k].y) - wzdt*x);
+      }
+      const double cdu=cdu_clean.empty()?median(cell_du[ci]):median(cdu_clean);
+      const double cdv=cdv_clean.empty()?median(cell_dv[ci]):median(cdv_clean);
       const double cfx=cdv/dt;
       const double cfy=-cdu/dt;
       const cv::Vec3d cfb=FRD_R_C*cv::Vec3d(cfx,cfy,0.0);
@@ -632,7 +689,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -961,7 +1018,7 @@ int main(int argc,char** argv){
            <<camera_queue_dropped<<','<<camera_queue_dropped_total<<','
            <<frame<<','<<guide_leg.load()<<','<<guide_stage.load()<<','<<(s.valid?1:0)<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
-           <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','
+           <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','<<s.yaw_rate_cam_z<<','
            <<s.flow_cam_x<<','<<s.flow_cam_y<<','<<s.flow_body_x<<','<<s.flow_body_y<<','
            <<(int)quality<<','<<lm<<','<<lage<<','<<range_to_fc<<','<<flow_send_x<<','<<flow_send_y<<','<<(flow_sent?1:0)<<','<<(range_sent?1:0)<<','
            <<(arm_ok?(arm_now?1:0):-1)<<','

@@ -18,7 +18,7 @@ CSV="$RUN_DIR/optical_flow_mavlink.csv"
 BUILD_LOG="$RUN_DIR/build.log"
 mkdir -p "$RUN_DIR"
 
-"$ROOT/tools/audit_optical_flow_flight_params.sh"
+bash "$ROOT/tools/audit_optical_flow_flight_params.sh"
 
 MAVLINK_INC=""
 for d in "$KIMERA_ROOT/third_party/mavlink" "$KIMERA_ROOT/third_party/mavlink/include/mavlink/v2.0" "/usr/local/include/mavlink/v2.0"; do

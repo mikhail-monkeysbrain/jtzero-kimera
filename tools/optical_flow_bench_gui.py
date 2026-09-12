@@ -395,12 +395,21 @@ class BenchGui:
         self.save_btn.config(state="disabled")
 
         if self.run_index < COUNT:
-            self.set_stage(
-                "ВОЗВРАТ В ИСХОДНУЮ ТОЧКУ",
-                "Верните аппарат назад. Этот возврат НЕ измеряется.\n"
-                "Полностью остановите аппарат и нажмите «НАЧАТЬ ПРОГОН».",
-                "#174a7e",
-            )
+            if RECIPROCAL:
+                next_dir = "A->B" if ((self.run_index + 1) % 2 == 1) else "B->A"
+                self.set_stage(
+                    "СЛЕДУЮЩИЙ ПРОГОН",
+                    f"НЕ возвращайте аппарат отдельно. Следующий ход {next_dir} сам является измеряемым возвратом.\n"
+                    "Аппарат полностью остановить и нажать «НАЧАТЬ СЛЕДУЮЩИЙ ПРОГОН».",
+                    "#174a7e",
+                )
+            else:
+                self.set_stage(
+                    "ВОЗВРАТ В ИСХОДНУЮ ТОЧКУ",
+                    "Верните аппарат назад. Этот возврат НЕ измеряется.\n"
+                    "Полностью остановите аппарат и нажмите «НАЧАТЬ ПРОГОН».",
+                    "#174a7e",
+                )
             self.start_btn.config(text="НАЧАТЬ СЛЕДУЮЩИЙ ПРОГОН", state="normal")
         else:
             self.finish_session()
@@ -419,14 +428,31 @@ class BenchGui:
         ekf_mean = statistics.mean(ekf_ratios) if ekf_ratios else float("nan")
         ekf_sd = statistics.pstdev(ekf_ratios) if len(ekf_ratios) > 1 else 0.0
 
-        self.result_label.config(
-            text=(
-                f"RAW/physical: mean={raw_mean:.4f}, SD={raw_sd:.4f}  "
-                f"({(raw_mean-1)*100:+.2f}%)\n"
-                f"EKF/physical: mean={ekf_mean:.4f}, SD={ekf_sd:.4f}  "
-                f"({(ekf_mean-1)*100:+.2f}%)"
-            )
+        summary_text = (
+            f"RAW/physical: mean={raw_mean:.4f}, SD={raw_sd:.4f}  "
+            f"({(raw_mean-1)*100:+.2f}%)\n"
+            f"EKF/physical: mean={ekf_mean:.4f}, SD={ekf_sd:.4f}  "
+            f"({(ekf_mean-1)*100:+.2f}%)"
         )
+
+        if RECIPROCAL:
+            ab = [r for r in self.results if r.get("direction") == "A->B"]
+            ba = [r for r in self.results if r.get("direction") == "B->A"]
+            def ratio_mean(group, key):
+                vals = [r[key] / r["physical_measured_mm"] for r in group if math.isfinite(r[key])]
+                return statistics.mean(vals) if vals else float("nan")
+            raw_ab = ratio_mean(ab, "raw_mm")
+            raw_ba = ratio_mean(ba, "raw_mm")
+            ekf_ab = ratio_mean(ab, "ekf_mm")
+            ekf_ba = ratio_mean(ba, "ekf_mm")
+            raw_bias = (raw_ab / raw_ba - 1.0) * 100.0 if raw_ba else float("nan")
+            ekf_bias = (ekf_ab / ekf_ba - 1.0) * 100.0 if ekf_ba else float("nan")
+            summary_text += (
+                f"\nA→B RAW={raw_ab:.4f}  B→A RAW={raw_ba:.4f}  bias={raw_bias:+.2f}%"
+                f"\nA→B EKF={ekf_ab:.4f}  B→A EKF={ekf_ba:.4f}  bias={ekf_bias:+.2f}%"
+            )
+
+        self.result_label.config(text=summary_text)
 
         RUNS_ROOT.mkdir(parents=True, exist_ok=True)
         out = RUNS_ROOT / f"{datetime.now():%Y%m%d_%H%M%S}_OPTICAL_FLOW_GUI_SERIES.json"

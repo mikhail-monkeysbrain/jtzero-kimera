@@ -23,11 +23,30 @@ def closest_rotation(M):
 
 def yaml_R_BC(path):
     fs=cv2.FileStorage(str(path),cv2.FILE_STORAGE_READ)
+    if not fs.isOpened():
+        raise RuntimeError(f"cannot open camera YAML: {path}")
     n=fs.getNode("T_BS")
-    M=n.mat()
+    if n.empty():
+        fs.release()
+        raise RuntimeError("T_BS not found")
+
+    # LeftCameraParams.yaml stores T_BS as a plain YAML map:
+    #   rows: 4
+    #   cols: 4
+    #   data: [ ... ]
+    # not as an !!opencv-matrix, so node.mat() is invalid on OpenCV 4.10.
+    data=n.getNode("data")
+    if data.empty() or not data.isSeq():
+        fs.release()
+        raise RuntimeError("T_BS.data is not a YAML sequence")
+    vals=np.array([data.at(i).real() for i in range(data.size())],dtype=float)
+    rows=int(round(n.getNode("rows").real()))
+    cols=int(round(n.getNode("cols").real()))
     fs.release()
-    if M is None: raise RuntimeError("T_BS not found")
-    return np.asarray(M,float)[:3,:3]
+    if rows*cols != vals.size or rows < 3 or cols < 3:
+        raise RuntimeError(f"invalid T_BS shape {rows}x{cols} with {vals.size} values")
+    M=vals.reshape(rows,cols)
+    return M[:3,:3]
 
 def local_poly_second(t,p,halfwin=0.28,minn=7):
     n=len(t); out=np.full_like(p,np.nan,dtype=float)

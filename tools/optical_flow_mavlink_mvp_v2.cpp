@@ -918,7 +918,9 @@ int main(int argc,char** argv){
                      <<" yaw_deg="<<(return_yaw0_set?return_yaw0*180.0/M_PI:0.0)<<"\n";
           }
 
-          cv::Mat hud(900,900,CV_8UC3,cv::Scalar(20,20,20));
+          // Screen-recording HUD: trajectory stays on the left; the live OV9281
+          // image is shown on the right with the exact feature ROI used by KLT.
+          cv::Mat hud(900,1500,CV_8UC3,cv::Scalar(20,20,20));
           const cv::Point center(450,450);
           cv::line(hud,{450,45},{450,855},cv::Scalar(70,70,70),1);
           cv::line(hud,{45,450},{855,450},cv::Scalar(70,70,70),1);
@@ -984,6 +986,34 @@ int main(int argc,char** argv){
           cv::putText(hud,"E",{825,440},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
           cv::putText(hud,"SPACE:A target   B:turn mark   H:physical home   C:clear   Q/ESC:quit",{35,885},
                       cv::FONT_HERSHEY_SIMPLEX,0.50,cv::Scalar(160,160,160),1,cv::LINE_AA);
+
+          // Live camera panel. Use the already decoded frame so this does not
+          // open a second V4L2 stream or alter the optical-flow pipeline.
+          cv::Mat cam_bgr,cam_view;
+          cv::cvtColor(gray,cam_bgr,cv::COLOR_GRAY2BGR);
+          const int cam_w=560;
+          const int cam_h=(int)std::lround((double)cam_bgr.rows*cam_w/cam_bgr.cols);
+          cv::resize(cam_bgr,cam_view,cv::Size(cam_w,cam_h),0,0,cv::INTER_AREA);
+          const int cam_x=920;
+          const int cam_y=105;
+          if(cam_y+cam_h<=hud.rows && cam_x+cam_w<=hud.cols){
+            cam_view.copyTo(hud(cv::Rect(cam_x,cam_y,cam_w,cam_h)));
+            const int rx0=cam_x+(int)std::lround(g_feature_roi.x0*cam_w);
+            const int ry0=cam_y+(int)std::lround(g_feature_roi.y0*cam_h);
+            const int rx1=cam_x+(int)std::lround(g_feature_roi.x1*cam_w);
+            const int ry1=cam_y+(int)std::lround(g_feature_roi.y1*cam_h);
+            cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),
+                          cv::Scalar(0,255,255),2,cv::LINE_AA);
+            cv::putText(hud,"OV9281 LIVE",{cam_x,70},cv::FONT_HERSHEY_SIMPLEX,0.80,
+                        cv::Scalar(240,240,240),2,cv::LINE_AA);
+            cv::putText(hud,"yellow = KLT feature ROI",{cam_x,cam_y+cam_h+32},
+                        cv::FONT_HERSHEY_SIMPLEX,0.55,cv::Scalar(0,255,255),1,cv::LINE_AA);
+            std::ostringstream cam_diag;
+            cam_diag<<"frame "<<frame<<"  valid "<<(s.valid?1:0)
+                    <<"  inliers "<<s.inliers<<"/"<<s.tracked;
+            cv::putText(hud,cam_diag.str(),{cam_x,cam_y+cam_h+62},
+                        cv::FONT_HERSHEY_SIMPLEX,0.52,cv::Scalar(210,210,210),1,cv::LINE_AA);
+          }
 
           cv::imshow("JT-Zero Return-to-Target",hud);
           const int key=cv::waitKey(1)&0xff;

@@ -12,7 +12,7 @@ def main():
     ap.add_argument("csv",type=Path)
     ap.add_argument("--physical-mm",type=float,default=None)
     ap.add_argument("--camera-z-m",type=float,default=0.0500)
-    ap.add_argument("--luna-z-m",type=float,default=0.0260)
+    ap.add_argument("--luna-z-m",type=float,default=0.0710)
     args=ap.parse_args()
 
     with args.csv.open(newline="") as fh:
@@ -125,7 +125,8 @@ def main():
     print(f"off-table/floor observations = {off_table}/{len(ranges)} ({100*off_table/max(1,len(ranges)):.1f}%)")
     print(f"RAW using TF-Luna range directly = {raw_mm:.1f} mm")
     print(f"  components (body-rate proxy) = X {dx*1000:+.1f} mm, Y {dy*1000:+.1f} mm")
-    print(f"sensor Z geometry: camera={args.camera_z_m:.3f} m, luna={args.luna_z_m:.3f} m, camera lower by {dz_cam_luna*1000:.1f} mm")
+    relation = "below" if dz_cam_luna>0 else "above"
+    print(f"sensor Z geometry: camera={args.camera_z_m:.3f} m, luna={args.luna_z_m:.3f} m, camera is {abs(dz_cam_luna)*1000:.1f} mm {relation} TF-Luna")
     print(f"camera height median/min/max = {statistics.median(cam_heights):.3f}/{min(cam_heights):.3f}/{max(cam_heights):.3f} m")
     print(f"RAW geometry-corrected camera-height integral = {raw_cam_mm:.1f} mm")
     print(f"RAW with fixed table-range counterfactual = {raw_ref_mm:.1f} mm")

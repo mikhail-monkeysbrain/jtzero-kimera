@@ -45,5 +45,10 @@ EOF
 
 read -r -p "Проверить INS_POS1_* и записать offsets? [Enter=yes, Ctrl+C=no] " _
 
-exec "$TMP_BIN" "$DEVICE" "$BAUD" apply-current-mount \
+# FC identity is already established repeatedly by the production/flight tools.
+# Do not depend on HEARTBEAT discovery here; address the known ArduPilot target directly.
+SYSID="${JTZERO_FC_SYSID:-1}"
+COMPID="${JTZERO_FC_COMPID:-1}"
+
+exec "$TMP_BIN" "$DEVICE" "$BAUD" "$SYSID" "$COMPID" apply-current-mount \
   "$CAM_X" "$CAM_Y" "$CAM_Z" "$LUNA_X" "$LUNA_Y" "$LUNA_Z"

@@ -42,7 +42,8 @@ struct FlowEkfStatus {
 };
 
 struct FlowFcGyro {
-  double x=0,y=0,z=0;          // body FRD rad/s from ATTITUDE roll/pitch/yaw rates
+  double roll=0,pitch=0,yaw=0; // ATTITUDE angles, rad
+  double x=0,y=0,z=0;          // body FRD roll/pitch/yaw rates, rad/s
   int64_t recv_ns=0;
   bool valid=false;
 };
@@ -196,6 +197,7 @@ struct FlowFc {
             } else if(m.msgid==MAVLINK_MSG_ID_ATTITUDE){
               mavlink_attitude_t q{}; mavlink_msg_attitude_decode(&m,&q);
               std::lock_guard<std::mutex> l(mu);
+              gyro.roll=q.roll; gyro.pitch=q.pitch; gyro.yaw=q.yaw;
               gyro.x=q.rollspeed; gyro.y=q.pitchspeed; gyro.z=q.yawspeed;
               gyro.recv_ns=monoNs(); gyro.valid=true; ++gyro_count;
               gyro_sum_x+=q.rollspeed; gyro_sum_y+=q.pitchspeed; gyro_sum_z+=q.yawspeed;
@@ -487,6 +489,8 @@ int main(int argc,char** argv){
   bool require_armed=false;
   bool nominal_target_only=false;
   bool return_gui=false;
+  double diag_camera_z_m=std::numeric_limits<double>::quiet_NaN();
+  double diag_range_z_m=std::numeric_limits<double>::quiet_NaN();
   double bench_height_override=0.0;
   double pre_static_sec=5.0;
   double post_static_sec=5.0;
@@ -501,6 +505,8 @@ int main(int argc,char** argv){
     else if(a=="--require-armed") require_armed=true;
     else if(a=="--nominal-target") nominal_target_only=true;
     else if(a=="--return-gui") return_gui=true;
+    else if(a=="--diag-camera-z-m" && i+1<argc) diag_camera_z_m=std::stod(argv[++i]);
+    else if(a=="--diag-range-z-m" && i+1<argc) diag_range_z_m=std::stod(argv[++i]);
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
     else if(a=="--pre-static-sec" && i+1<argc) pre_static_sec=std::stod(argv[++i]);
@@ -561,7 +567,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -587,11 +593,22 @@ int main(int argc,char** argv){
     double return_target_n=0.0,return_target_e=0.0;
     double return_view_halfspan_m=0.50;
     std::deque<cv::Point2d> return_trail;
+
+    // Return-to-target forensic state. RAW is accumulated in native body-flow
+    // measurement coordinates using the camera height above the observed plane.
+    // It is intentionally kept independent from EKF position.
+    double return_raw_x=0.0,return_raw_y=0.0;
+    double return_yaw0=0.0;
+    bool return_yaw0_set=false;
+    bool return_b_marked=false;
+    double return_b_n=0.0,return_b_e=0.0;
+    double return_b_raw_x=0.0,return_b_raw_y=0.0,return_b_yaw=0.0;
+    int pending_return_event=0; // 1=A/target, 2=B/turn, 3=H/physical-home mark
     if(return_gui){
       cv::namedWindow("JT-Zero Return-to-Target",cv::WINDOW_NORMAL);
       cv::resizeWindow("JT-Zero Return-to-Target",900,900);
       std::cerr<<"RETURN GUI: target will be captured automatically after FLIGHT READY.\n"
-               <<"Keys: SPACE=set current position as target, C=clear trail, Q/ESC=quit.\n";
+               <<"Keys: SPACE=set A/target, B=mark turn point, H=mark physical HOME, C=clear trail, Q/ESC=quit.\n";
     }
 
     std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=wait-next, 4=done
@@ -724,7 +741,12 @@ int main(int argc,char** argv){
              <<"fx/fy effective="<<calib.fx<<" / "<<calib.fy
              <<" (focal_scale="<<focal_scale<<")\n"
              <<"ВАЖНО: publisher выдаёт body-FRD flow; ожидается FLOW_ORIENT_YAW=0, FLOW_OPTIONS=0\n"
-             <<"DIAG: запрошен EKF_STATUS_REPORT 5 Hz; LOCAL_POSITION_NED 20 Hz\n";
+             <<"DIAG: запрошен EKF_STATUS_REPORT 5 Hz; LOCAL_POSITION_NED 20 Hz; ATTITUDE 100 Hz\n";
+    if(return_gui && std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+      std::cerr<<"RETURN GUI geometry: camera_z="<<diag_camera_z_m
+               <<" m range_z="<<diag_range_z_m
+               <<" m, camera-range dz="<<(diag_camera_z_m-diag_range_z_m)<<" m\n";
+    }
     if(bench_height_override>0.0){
       std::cerr<<"BENCH HEIGHT OVERRIDE: FC получает "<<bench_height_override
                <<" м вместо реального TF-Luna. Flow-rate масштабируется real/fake,\n"
@@ -818,11 +840,14 @@ int main(int argc,char** argv){
            <<(efresh?1:0)<<','<<ep.x<<','<<ep.y<<','<<ep.z<<','<<ep.vx<<','<<ep.vy<<','<<ep.vz<<','<<eage<<','<<ec<<','
            <<(esfresh?1:0)<<','<<es.flags<<','<<esage<<','<<esc<<','
            <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance<<','
+           <<pending_return_event<<','
+           <<(fg_ok?fg.roll:0.0)<<','<<(fg_ok?fg.pitch:0.0)<<','<<(fg_ok?fg.yaw:0.0)<<','
            <<(fg_ok?fg.x:0.0)<<','<<(fg_ok?fg.y:0.0)<<','<<(fg_ok?fg.z:0.0)<<','<<(fg_ok?fg_age:-1.0)<<','<<fg_samples;
         for(int ci=0;ci<9;ci++){
           csv<<','<<s.cell_n[ci]<<','<<s.cell_body_x[ci]<<','<<s.cell_body_y[ci];
         }
         csv<<'\n';
+        pending_return_event=0;
 
         if(flight_ready_gate && !flight_ready){
           const double speed_h=efresh?std::hypot((double)ep.vx,(double)ep.vy):1e9;
@@ -867,13 +892,29 @@ int main(int argc,char** argv){
           }
         }
 
+        if(return_gui && return_target_set && s.valid && flow_sent && hl && dt>0.0 && dt<0.2){
+          double hcam=lm;
+          if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+            hcam=lm-(diag_camera_z_m-diag_range_z_m);
+          }
+          if(hcam>0.02){
+            return_raw_x += flow_send_x*hcam*dt;
+            return_raw_y += flow_send_y*hcam*dt;
+          }
+        }
+
         if(return_gui){
           if(flight_ready && efresh && !return_target_set){
             return_target_n=ep.x;
             return_target_e=ep.y;
             return_target_set=true;
             return_trail.clear();
-            std::cerr<<"RETURN GUI TARGET SET: N="<<return_target_n<<" E="<<return_target_e<<"\n";
+            return_raw_x=return_raw_y=0.0;
+            return_b_marked=false;
+            if(fg_ok){ return_yaw0=fg.yaw; return_yaw0_set=true; }
+            pending_return_event=1;
+            std::cerr<<"RETURN GUI TARGET SET: N="<<return_target_n<<" E="<<return_target_e
+                     <<" yaw_deg="<<(return_yaw0_set?return_yaw0*180.0/M_PI:0.0)<<"\n";
           }
 
           cv::Mat hud(900,900,CV_8UC3,cv::Scalar(20,20,20));
@@ -919,21 +960,28 @@ int main(int argc,char** argv){
             }
           }
 
-          std::ostringstream l1,l2,l3,l4,l5;
+          const double raw_closure_mm=1000.0*std::hypot(return_raw_x,return_raw_y);
+          const double yaw_deg=fg_ok?fg.yaw*180.0/M_PI:0.0;
+          const double dyaw_deg=(fg_ok&&return_yaw0_set)?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0;
+          std::ostringstream l1,l2,l3,l4,l5,l6,l7;
           l1<<std::fixed<<std::setprecision(0)<<"DIST TO TARGET: "<<dist*1000.0<<" mm";
           l2<<std::fixed<<std::setprecision(1)<<"N error: "<<dn*1000.0<<" mm";
           l3<<std::fixed<<std::setprecision(1)<<"E error: "<<de*1000.0<<" mm";
           l4<<std::fixed<<std::setprecision(3)<<"vH: "<<vh<<" m/s   range: "<<(hl?lm:-1.0)<<" m";
           l5<<std::fixed<<std::setprecision(2)<<"view: +/-"<<return_view_halfspan_m<<" m";
+          l6<<std::fixed<<std::setprecision(1)<<"RAW closure proxy: "<<raw_closure_mm<<" mm";
+          l7<<std::fixed<<std::setprecision(1)<<"yaw: "<<yaw_deg<<" deg   dYaw(A): "<<dyaw_deg<<" deg";
           cv::putText(hud,return_target_set?l1.str():"WAITING FOR FLIGHT READY / TARGET...",{35,40},
                       cv::FONT_HERSHEY_SIMPLEX,0.85,cv::Scalar(240,240,240),2,cv::LINE_AA);
           cv::putText(hud,l2.str(),{35,75},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
           cv::putText(hud,l3.str(),{35,105},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(220,220,220),2,cv::LINE_AA);
+          cv::putText(hud,l6.str(),{35,140},cv::FONT_HERSHEY_SIMPLEX,0.62,cv::Scalar(210,210,210),2,cv::LINE_AA);
+          cv::putText(hud,l7.str(),{35,172},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(190,190,190),1,cv::LINE_AA);
           cv::putText(hud,l4.str(),{35,850},cv::FONT_HERSHEY_SIMPLEX,0.58,cv::Scalar(200,200,200),1,cv::LINE_AA);
           cv::putText(hud,l5.str(),{650,850},cv::FONT_HERSHEY_SIMPLEX,0.52,cv::Scalar(180,180,180),1,cv::LINE_AA);
           cv::putText(hud,"N",{458,65},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
           cv::putText(hud,"E",{825,440},cv::FONT_HERSHEY_SIMPLEX,0.65,cv::Scalar(160,160,160),2,cv::LINE_AA);
-          cv::putText(hud,"SPACE: set target   C: clear trail   Q/ESC: quit",{35,885},
+          cv::putText(hud,"SPACE:A target   B:turn mark   H:physical home   C:clear   Q/ESC:quit",{35,885},
                       cv::FONT_HERSHEY_SIMPLEX,0.50,cv::Scalar(160,160,160),1,cv::LINE_AA);
 
           cv::imshow("JT-Zero Return-to-Target",hud);
@@ -942,7 +990,37 @@ int main(int argc,char** argv){
             return_target_n=ep.x; return_target_e=ep.y;
             return_target_set=true; return_trail.clear();
             return_view_halfspan_m=0.50;
-            std::cerr<<"RETURN GUI TARGET RESET: N="<<return_target_n<<" E="<<return_target_e<<"\n";
+            return_raw_x=return_raw_y=0.0;
+            return_b_marked=false;
+            if(fg_ok){ return_yaw0=fg.yaw; return_yaw0_set=true; }
+            pending_return_event=1;
+            std::cerr<<"RETURN GUI TARGET RESET: N="<<return_target_n<<" E="<<return_target_e
+                     <<" yaw_deg="<<(return_yaw0_set?return_yaw0*180.0/M_PI:0.0)<<"\n";
+          } else if((key=='b'||key=='B') && efresh){
+            return_b_marked=true;
+            return_b_n=ep.x; return_b_e=ep.y;
+            return_b_raw_x=return_raw_x; return_b_raw_y=return_raw_y;
+            return_b_yaw=fg_ok?fg.yaw:0.0;
+            pending_return_event=2;
+            std::cerr<<"RETURN GUI B MARK: EKF_from_A="<<1000.0*std::hypot(ep.x-return_target_n,ep.y-return_target_e)
+                     <<" mm RAW_from_A="<<1000.0*std::hypot(return_raw_x,return_raw_y)
+                     <<" mm dYaw="<<(fg_ok&&return_yaw0_set?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0)<<" deg\n";
+          } else if((key=='h'||key=='H') && efresh){
+            pending_return_event=3;
+            const double ekf_close=1000.0*std::hypot(ep.x-return_target_n,ep.y-return_target_e);
+            const double raw_close=1000.0*std::hypot(return_raw_x,return_raw_y);
+            std::cerr<<"\n======================================================================\n"
+                     <<"RETURN CLOSURE MARK (PHYSICAL HOME)\n"
+                     <<"EKF closure = "<<ekf_close<<" mm\n"
+                     <<"RAW native closure proxy = "<<raw_close<<" mm\n";
+            if(return_b_marked){
+              std::cerr<<"A->B EKF = "<<1000.0*std::hypot(return_b_n-return_target_n,return_b_e-return_target_e)<<" mm\n"
+                       <<"B->H EKF = "<<1000.0*std::hypot(ep.x-return_b_n,ep.y-return_b_e)<<" mm\n"
+                       <<"A->B RAW = "<<1000.0*std::hypot(return_b_raw_x,return_b_raw_y)<<" mm\n"
+                       <<"B->H RAW = "<<1000.0*std::hypot(return_raw_x-return_b_raw_x,return_raw_y-return_b_raw_y)<<" mm\n";
+            }
+            std::cerr<<"dYaw(A->H) = "<<(fg_ok&&return_yaw0_set?std::remainder(fg.yaw-return_yaw0,2.0*M_PI)*180.0/M_PI:0.0)<<" deg\n"
+                     <<"======================================================================\n";
           } else if(key=='c'||key=='C'){
             return_trail.clear();
           } else if(key=='q'||key=='Q'||key==27){

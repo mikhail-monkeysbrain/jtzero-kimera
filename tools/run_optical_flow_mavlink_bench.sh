@@ -22,6 +22,8 @@ mkdir -p "$RUN_DIR"
 GUIDED_MODE="${JTZERO_FLOW_GUIDED_MODE:-guided-175}"
 CONTINUOUS_LEGS="${JTZERO_FLOW_CONTINUOUS_LEGS:-0}"
 EXTRA_ARGS=(--guided-mm "$TARGET_MM")
+EXTRA_ARGS+=(--pre-static-sec "${JTZERO_FLOW_PRE_STATIC_SEC:-5}")
+EXTRA_ARGS+=(--post-static-sec "${JTZERO_FLOW_POST_STATIC_SEC:-5}")
 if [[ "$CONTINUOUS_LEGS" =~ ^[2-9][0-9]*$ ]]; then
   EXTRA_ARGS+=(--continuous-legs "$CONTINUOUS_LEGS")
 fi

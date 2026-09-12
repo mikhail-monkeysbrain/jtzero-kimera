@@ -21,6 +21,9 @@ mkdir -p "$RUN_DIR"
 
 GUIDED_MODE="${JTZERO_FLOW_GUIDED_MODE:-guided-175}"
 EXTRA_ARGS=(--guided-mm "$TARGET_MM")
+if [[ "${JTZERO_FLOW_TARGET_IS_NOMINAL:-0}" == "1" ]]; then
+  EXTRA_ARGS+=(--nominal-target)
+fi
 if [[ "$GUIDED_MODE" == "armed" ]]; then
   EXTRA_ARGS+=(--require-armed)
 elif [[ "$GUIDED_MODE" == "armed-gate-open" ]]; then
@@ -89,6 +92,7 @@ CSV:         $CSV
   LOCAL      — LOCAL_POSITION_NED, если ArduPilot считает position/velocity валидными.
 
 РЕЖИМ: guided $TARGET_MM мм.
+$([[ "${JTZERO_FLOW_TARGET_IS_NOMINAL:-0}" == "1" ]] && echo "ВАЖНО: $TARGET_MM мм — только номинальная инструкция GUI; эталон вводится после прохода по фактическому измерению.")
 Если JTZERO_FLOW_GUIDED_MODE=armed-gate-open:
   - FC получает bench-высоту 0.60 м;
   - raw flow перед отправкой масштабируется real_height/0.60;

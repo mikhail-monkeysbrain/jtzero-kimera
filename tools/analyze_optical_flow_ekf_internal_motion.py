@@ -158,7 +158,6 @@ def analyze_bin(path:Path):
             "XKF4":window_stats("XKF4",x4,post0,post1),
         }
     }
-    }
 
 def main():
     ap=argparse.ArgumentParser()

@@ -47,7 +47,7 @@ for line in text.splitlines():
 exp={
  "INS_POS1_X":0.0, "INS_POS1_Y":0.0, "INS_POS1_Z":0.0,
  "FLOW_POS_X":0.0625, "FLOW_POS_Y":0.0, "FLOW_POS_Z":0.0500,
- "RNGFND1_POS_X":-0.1300, "RNGFND1_POS_Y":0.0, "RNGFND1_POS_Z":0.0260,
+ "RNGFND1_POS_X":-0.0150, "RNGFND1_POS_Y":0.0, "RNGFND1_POS_Z":0.0710,
 }
 failed=[]
 for k,e in exp.items():

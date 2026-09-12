@@ -44,21 +44,15 @@ def main():
     t0=fv(rows[0],"mono_ns")*1e-9
     data=[]
     rawx=rawy=0.0
-    prev_t=None
     for r in rows:
         t=fv(r,"mono_ns")*1e-9-t0
         valid=iv(r,"valid")==1 and iv(r,"flow_sent")==1
         rng=fv(r,"range_to_fc_m")
         fx=fv(r,"flow_send_x"); fy=fv(r,"flow_send_y")
-        if valid and all(map(math.isfinite,[t,rng,fx,fy])) and rng>0:
-            if prev_t is not None:
-                dt=t-prev_t
-                if 0<dt<0.2:
-                    rawx+=fx*rng*dt
-                    rawy+=fy*rng*dt
-            prev_t=t
-        else:
-            prev_t=None
+        dt=fv(r,"dt_s")
+        if valid and all(map(math.isfinite,[dt,rng,fx,fy])) and rng>0 and 0<dt<0.2:
+            rawx+=fx*rng*dt
+            rawy+=fy*rng*dt
         ekf_ok=iv(r,"ekf_local_valid")==1
         en=fv(r,"ekf_x_ned"); ee=fv(r,"ekf_y_ned")
         vn=fv(r,"ekf_vx_ned"); ve=fv(r,"ekf_vy_ned")

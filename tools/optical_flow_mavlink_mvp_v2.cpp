@@ -315,6 +315,12 @@ struct FlowStep {
   double du_px=0,dv_px=0;
   double flow_cam_x=0,flow_cam_y=0;
   double flow_body_x=0,flow_body_y=0;
+
+  // 3x3 spatial diagnostics inside the configured feature ROI.
+  // Each cell stores median inlier flow transformed to body FRD.
+  std::array<int,9> cell_n{};
+  std::array<double,9> cell_body_x{};
+  std::array<double,9> cell_body_y{};
 };
 
 FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const CameraCalib& calib){
@@ -356,11 +362,26 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
 
   std::vector<double> dun,dvn,dup,dvp;
   dun.reserve(ai.size()); dvn.reserve(ai.size()); dup.reserve(ai.size()); dvp.reserve(ai.size());
+
+  std::array<std::vector<double>,9> cell_du,cell_dv;
+
   for(size_t i=0;i<ai.size();++i){
-    dun.push_back((double)bu[i].x-au[i].x);
-    dvn.push_back((double)bu[i].y-au[i].y);
+    const double du=(double)bu[i].x-au[i].x;
+    const double dv=(double)bu[i].y-au[i].y;
+    dun.push_back(du);
+    dvn.push_back(dv);
     dup.push_back((double)bi[i].x-ai[i].x);
     dvp.push_back((double)bi[i].y-ai[i].y);
+
+    const double nx=(ai[i].x/(double)prev.cols-g_feature_roi.x0)/
+                    (g_feature_roi.x1-g_feature_roi.x0);
+    const double ny=(ai[i].y/(double)prev.rows-g_feature_roi.y0)/
+                    (g_feature_roi.y1-g_feature_roi.y0);
+    const int cx=std::clamp((int)std::floor(nx*3.0),0,2);
+    const int cy=std::clamp((int)std::floor(ny*3.0),0,2);
+    const int ci=cy*3+cx;
+    cell_du[ci].push_back(du);
+    cell_dv[ci].push_back(dv);
   }
   o.du_norm=median(dun); o.dv_norm=median(dvn);
   o.du_px=median(dup); o.dv_px=median(dvp);
@@ -375,6 +396,19 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   const cv::Matx33d FRD_R_C=FLU_TO_FRD*calib.B_R_C;
   const cv::Vec3d fb=FRD_R_C*cv::Vec3d(o.flow_cam_x,o.flow_cam_y,0.0);
   o.flow_body_x=fb[0]; o.flow_body_y=fb[1];
+
+  for(int ci=0;ci<9;ci++){
+    o.cell_n[ci]=(int)cell_du[ci].size();
+    if(o.cell_n[ci]>=3){
+      const double cdu=median(cell_du[ci]);
+      const double cdv=median(cell_dv[ci]);
+      const double cfx=cdv/dt;
+      const double cfy=-cdu/dt;
+      const cv::Vec3d cfb=FRD_R_C*cv::Vec3d(cfx,cfy,0.0);
+      o.cell_body_x[ci]=cfb[0];
+      o.cell_body_y[ci]=cfb[1];
+    }
+  }
 
   const double mag=std::hypot(o.flow_body_x,o.flow_body_y);
   o.valid=std::isfinite(mag) && mag<4.0;
@@ -488,7 +522,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,frame,guide_leg,guide_stage,valid,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -730,7 +764,11 @@ int main(int argc,char** argv){
            <<(arm_ok?(arm_now?1:0):-1)<<','
            <<(efresh?1:0)<<','<<ep.x<<','<<ep.y<<','<<ep.z<<','<<ep.vx<<','<<ep.vy<<','<<ep.vz<<','<<eage<<','<<ec<<','
            <<(esfresh?1:0)<<','<<es.flags<<','<<esage<<','<<esc<<','
-           <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance<<'\n';
+           <<es.velocity_variance<<','<<es.pos_horiz_variance<<','<<es.pos_vert_variance<<','<<es.compass_variance<<','<<es.terrain_alt_variance;
+        for(int ci=0;ci<9;ci++){
+          csv<<','<<s.cell_n[ci]<<','<<s.cell_body_x[ci]<<','<<s.cell_body_y[ci];
+        }
+        csv<<'\n';
 
         if(flight_ready_gate && !flight_ready){
           const double speed_h=efresh?std::hypot((double)ep.vx,(double)ep.vy):1e9;

@@ -10,6 +10,7 @@ CAMERA_YAML="${JTZERO_FLOW_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraPar
 # Независимая ChArUco physical-height оценка текущей OV9281 дала k=1.0925.
 # Можно переопределить JTZERO_FLOW_FOCAL_SCALE=1.0 для raw saved-K сравнения.
 FOCAL_SCALE="${JTZERO_FLOW_FOCAL_SCALE:-1.0925}"
+TARGET_MM="${JTZERO_FLOW_TARGET_MM:-175}"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="${JTZERO_FLOW_RUN_DIR:-/home/vio/jtzero_runs/${STAMP}_OPTICAL_FLOW_MAVLINK_BENCH}"
@@ -19,7 +20,7 @@ BUILD_LOG="$RUN_DIR/build.log"
 mkdir -p "$RUN_DIR"
 
 GUIDED_MODE="${JTZERO_FLOW_GUIDED_MODE:-guided-175}"
-EXTRA_ARGS=(--guided-175)
+EXTRA_ARGS=(--guided-mm "$TARGET_MM")
 if [[ "$GUIDED_MODE" == "armed" ]]; then
   EXTRA_ARGS+=(--require-armed)
 elif [[ "$GUIDED_MODE" == "armed-gate-open" ]]; then
@@ -87,7 +88,7 @@ CSV:         $CSV
   EKFSTAT    — EKF_STATUS_REPORT flags;
   LOCAL      — LOCAL_POSITION_NED, если ArduPilot считает position/velocity валидными.
 
-РЕЖИМ: guided 175 мм.
+РЕЖИМ: guided $TARGET_MM мм.
 Если JTZERO_FLOW_GUIDED_MODE=armed-gate-open:
   - FC получает bench-высоту 0.60 м;
   - raw flow перед отправкой масштабируется real_height/0.60;
@@ -100,7 +101,7 @@ CSV:         $CSV
 ИНСТРУКЦИЯ БУДЕТ ПОВТОРЕНА САМОЙ ПРОГРАММОЙ:
   1) сначала 5 секунд вообще не двигать аппарат;
   2) дождаться строки "ДВИГАЙТЕ";
-  3) сдвинуть ВЕСЬ аппарат строго по столу на 175 мм;
+  3) сдвинуть ВЕСЬ аппарат строго по столу на $TARGET_MM мм;
   4) не вращать, не наклонять и не приподнимать;
   5) полностью остановить аппарат и только тогда нажать Enter;
   6) после Enter ещё 5 секунд ничего не трогать;

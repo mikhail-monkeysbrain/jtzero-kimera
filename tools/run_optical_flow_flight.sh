@@ -12,6 +12,7 @@ CAMERA_YAML="${JTZERO_FLOW_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraPar
 FOCAL_SCALE="${JTZERO_FLOW_FOCAL_SCALE:-1.1060}"
 FEATURE_ROI="${JTZERO_FLOW_FEATURE_ROI:-0.20 0.20 0.80 0.80}"
 RETURN_GUI="${JTZERO_FLOW_RETURN_GUI:-0}"
+RETURN_MANUAL_TARGET="${JTZERO_FLOW_RETURN_MANUAL_TARGET:-0}"
 DIAG_CAMERA_Z_M="${JTZERO_FLOW_DIAG_CAMERA_Z_M:-}"
 DIAG_RANGE_Z_M="${JTZERO_FLOW_DIAG_RANGE_Z_M:-}"
 
@@ -88,6 +89,9 @@ read -r RX0 RY0 RX1 RY1 <<< "$FEATURE_ROI"
 EXTRA=(--feature-roi "$RX0" "$RY0" "$RX1" "$RY1")
 if [[ "$RETURN_GUI" == "1" ]]; then
   EXTRA+=(--return-gui)
+fi
+if [[ "$RETURN_MANUAL_TARGET" == "1" ]]; then
+  EXTRA+=(--return-manual-target)
 fi
 if [[ -n "$DIAG_CAMERA_Z_M" && -n "$DIAG_RANGE_Z_M" ]]; then
   EXTRA+=(--diag-camera-z-m "$DIAG_CAMERA_Z_M" --diag-range-z-m "$DIAG_RANGE_Z_M")

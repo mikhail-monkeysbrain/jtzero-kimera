@@ -1,8 +1,12 @@
 // JT-Zero — handheld geometry identification recorder.
 // Записывает OV9281 MJPG + FC ATTITUDE/HIGHRES_IMU/RAW_IMU + TF-Luna
 // в одном monotonic clock domain. Ничего не публикует в FC и не меняет параметры.
+// Reuse the already-tested V4L2 and TF-Luna implementation from the Ground Motion tool.
+// Rename symbols that this recorder intentionally replaces before textual inclusion.
 #define main jtzero_handheld_geometry_base_unused_main
+#define FcReader GroundMotionBaseFcReader
 #include "ground_motion_live_v2_v3_ab.cpp"
+#undef FcReader
 #undef main
 
 #include "ardupilotmega/mavlink.h"
@@ -162,7 +166,6 @@ int main(int argc,char** argv){
     LunaReader luna; luna.start(lunadev);
     FcReader fc; fc.start(fcdev);
 
-    std::filesystem::create_directories(run_dir);
     std::ofstream frames(run_dir+"/frames.csv",std::ios::trunc);
     std::ofstream bin(run_dir+"/frames.mjpgbin",std::ios::binary|std::ios::trunc);
     if(!frames||!bin)fail("open output");

@@ -47,7 +47,7 @@ def main():
     ap.add_argument("csv",type=Path)
     ap.add_argument("--physical-mm",type=float,required=True)
     ap.add_argument("--camera-z-m",type=float,default=0.0500)
-    ap.add_argument("--luna-z-m",type=float,default=0.0260)
+    ap.add_argument("--luna-z-m",type=float,default=0.0710)
     args=ap.parse_args()
     rows=list(csv.DictReader(args.csv.open(newline="")))
     if not rows:raise SystemExit("empty CSV")

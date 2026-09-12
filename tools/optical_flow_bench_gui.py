@@ -87,12 +87,33 @@ def analyze_csv(path: Path):
         de = fv(b, "ekf_y_ned") - fv(a, "ekf_y_ned")
         ekf_mm = math.hypot(dn, de) * 1000.0
 
+    dt_vals = [fv(rows[i], "dt_s") for i in range(i0, i1 + 1)]
+    mono_gaps_ms = []
+    for i in range(i0 + 1, i1 + 1):
+        a_ns = fv(rows[i-1], "mono_ns")
+        b_ns = fv(rows[i], "mono_ns")
+        if b_ns > a_ns:
+            mono_gaps_ms.append((b_ns - a_ns) * 1e-6)
+
+    max_dt_ms = max(dt_vals) * 1000.0 if dt_vals else float("nan")
+    max_mono_gap_ms = max(mono_gaps_ms) if mono_gaps_ms else float("nan")
+    invalid_rows = sum(1 for i in range(i0, i1 + 1) if int(fv(rows[i], "valid")) == 0)
+    long_dt_rows = sum(1 for x in dt_vals if x > 0.2)
+    long_mono_gaps = sum(1 for x in mono_gaps_ms if x > 200.0)
+    measurement_valid = (long_dt_rows == 0 and long_mono_gaps == 0)
+
     return {
         "raw_mm": raw_mm,
         "fc_presented_mm": fc_mm,
         "ekf_mm": ekf_mm,
         "movement_row_start": i0,
         "movement_row_end": i1,
+        "max_dt_ms": max_dt_ms,
+        "max_mono_gap_ms": max_mono_gap_ms,
+        "invalid_rows": invalid_rows,
+        "long_dt_rows": long_dt_rows,
+        "long_mono_gaps": long_mono_gaps,
+        "measurement_valid": measurement_valid,
     }
 
 
@@ -388,10 +409,16 @@ class BenchGui:
         sidecar.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         self.results.append(rec)
 
+        quality_line = (
+            "КАЧЕСТВО: PASS"
+            if a["measurement_valid"]
+            else f"КАЧЕСТВО: INVALID — CAMERA/PIPELINE GAP  max_dt={a['max_dt_ms']:.0f} ms, wall_gap={a['max_mono_gap_ms']:.0f} ms"
+        )
         self.result_label.config(
             text=(
                 f"Физически: {actual:.1f} мм    RAW: {a['raw_mm']:.1f} мм ({rec['raw_error_pct']:+.2f}%)\n"
-                f"EKF: {a['ekf_mm']:.1f} мм ({rec['ekf_error_pct']:+.2f}%)"
+                f"EKF: {a['ekf_mm']:.1f} мм ({rec['ekf_error_pct']:+.2f}%)\n"
+                f"{quality_line}"
             )
         )
         self.actual_entry.config(state="disabled")
@@ -424,14 +451,23 @@ class BenchGui:
         if not self.results:
             return
 
-        raw_ratios = [r["raw_mm"] / r["physical_measured_mm"] for r in self.results]
-        ekf_ratios = [r["ekf_mm"] / r["physical_measured_mm"] for r in self.results if math.isfinite(r["ekf_mm"])]
+        valid_results = [r for r in self.results if r.get("measurement_valid", True)]
+        invalid_count = len(self.results) - len(valid_results)
+        if not valid_results:
+            self.result_label.config(text="Нет валидных прогонов: все исключены из-за camera/pipeline gap.")
+            return
+
+        raw_ratios = [r["raw_mm"] / r["physical_measured_mm"] for r in valid_results]
+        ekf_ratios = [r["ekf_mm"] / r["physical_measured_mm"] for r in valid_results if math.isfinite(r["ekf_mm"])]
         raw_mean = statistics.mean(raw_ratios)
         raw_sd = statistics.pstdev(raw_ratios) if len(raw_ratios) > 1 else 0.0
         ekf_mean = statistics.mean(ekf_ratios) if ekf_ratios else float("nan")
         ekf_sd = statistics.pstdev(ekf_ratios) if len(ekf_ratios) > 1 else 0.0
 
         summary_text = (
+            f"Валидных прогонов: {len(valid_results)}/{len(self.results)}"
+            + (f"  исключено gap: {invalid_count}" if invalid_count else "")
+            + "\n"
             f"RAW/physical: mean={raw_mean:.4f}, SD={raw_sd:.4f}  "
             f"({(raw_mean-1)*100:+.2f}%)\n"
             f"EKF/physical: mean={ekf_mean:.4f}, SD={ekf_sd:.4f}  "
@@ -439,8 +475,8 @@ class BenchGui:
         )
 
         if RECIPROCAL:
-            ab = [r for r in self.results if r.get("direction") == "A->B"]
-            ba = [r for r in self.results if r.get("direction") == "B->A"]
+            ab = [r for r in valid_results if r.get("direction") == "A->B"]
+            ba = [r for r in valid_results if r.get("direction") == "B->A"]
             def ratio_mean(group, key):
                 vals = [r[key] / r["physical_measured_mm"] for r in group if math.isfinite(r[key])]
                 return statistics.mean(vals) if vals else float("nan")

@@ -522,6 +522,7 @@ std::string ekfFlagsText(uint16_t f){
 
 } // namespace
 
+#ifndef JTZERO_OPTFLOW_LIBRARY
 int main(int argc,char** argv){
   if(argc<7){
     std::cerr<<"Использование: "<<argv[0]
@@ -1447,3 +1448,4 @@ int main(int argc,char** argv){
     return 1;
   }
 }
+#endif // JTZERO_OPTFLOW_LIBRARY

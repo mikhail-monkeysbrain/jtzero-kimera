@@ -30,6 +30,11 @@ fi
 if [[ "${JTZERO_FLOW_TARGET_IS_NOMINAL:-0}" == "1" ]]; then
   EXTRA_ARGS+=(--nominal-target)
 fi
+if [[ -n "${JTZERO_FLOW_EXTRA_ARGS:-}" ]]; then
+  read -r -a USER_EXTRA <<< "$JTZERO_FLOW_EXTRA_ARGS"
+  EXTRA_ARGS+=("${USER_EXTRA[@]}")
+fi
+
 if [[ "$GUIDED_MODE" == "armed" ]]; then
   EXTRA_ARGS+=(--require-armed)
 elif [[ "$GUIDED_MODE" == "armed-gate-open" ]]; then

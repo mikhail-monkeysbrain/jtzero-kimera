@@ -10,7 +10,9 @@ if [[ ! -d "$RUNS_ROOT" ]]; then
 fi
 
 mapfile -t runs < <(
-  find "$RUNS_ROOT" -maxdepth 1 -mindepth 1 -type d     \( -name '*OPTICAL_FLOW_FLIGHT' -o -name '*OPTICAL_FLOW_MAVLINK_BENCH' \)     -printf '%T@ %p\n' 2>/dev/null   | sort -nr   | awk '{ $1=""; sub(/^ /,""); print }'   | head -n 3
+  find "$RUNS_ROOT" -maxdepth 1 -mindepth 1 -type d     \( -name '*OPTICAL_FLOW_FLIGHT' -o -name '*OPTICAL_FLOW_MAVLINK_BENCH' \)     -printf '%T@ %p\n' 2>/dev/null   | sort -nr   | awk '{ $1=""; sub(/^ /,""); print }'   | while IFS= read -r run; do
+      [[ -s "$run/optical_flow_mavlink.csv" ]] && printf '%s\n' "$run"
+    done   | head -n 3
 )
 
 if (( ${#runs[@]} == 0 )); then
@@ -74,5 +76,5 @@ echo "OUTPUT: $out"
 echo "SIZE:   $(du -h "$out" | awk '{print $1}')"
 echo
 echo "Скопировать на ПК можно, например:"
-echo "  scp vio@<RPI_IP>:$out ."
+echo "  scp vio@$(hostname):$out ."
 echo "======================================================================"

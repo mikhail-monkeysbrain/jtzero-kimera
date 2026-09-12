@@ -493,6 +493,7 @@ int main(int argc,char** argv){
   double diag_camera_z_m=std::numeric_limits<double>::quiet_NaN();
   double diag_range_z_m=std::numeric_limits<double>::quiet_NaN();
   double bench_height_override=0.0;
+  double bench_true_camera_height=0.0;
   double pre_static_sec=5.0;
   double post_static_sec=5.0;
   std::string remote_log_path;
@@ -509,6 +510,7 @@ int main(int argc,char** argv){
     else if(a=="--diag-camera-z-m" && i+1<argc) diag_camera_z_m=std::stod(argv[++i]);
     else if(a=="--diag-range-z-m" && i+1<argc) diag_range_z_m=std::stod(argv[++i]);
     else if(a=="--bench-height" && i+1<argc) bench_height_override=std::stod(argv[++i]);
+    else if(a=="--bench-true-camera-height" && i+1<argc) bench_true_camera_height=std::stod(argv[++i]);
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
     else if(a=="--pre-static-sec" && i+1<argc) pre_static_sec=std::stod(argv[++i]);
     else if(a=="--post-static-sec" && i+1<argc) post_static_sec=std::stod(argv[++i]);
@@ -527,8 +529,16 @@ int main(int argc,char** argv){
     std::cerr<<"ОШИБКА: --guided-mm разрешён только 50..1000 мм для стенда\n";
     return 2;
   }
-  if(bench_height_override!=0.0 && !(bench_height_override>=0.55 && bench_height_override<=2.0)){
-    std::cerr<<"ОШИБКА: --bench-height разрешён только 0.55..2.0 м для bench-диагностики\n";
+  if(bench_height_override!=0.0 && !(bench_height_override>=0.20 && bench_height_override<=2.0)){
+    std::cerr<<"ОШИБКА: --bench-height разрешён только 0.20..2.0 м для bench-диагностики\n";
+    return 2;
+  }
+  if(bench_true_camera_height!=0.0 && !(bench_true_camera_height>=0.05 && bench_true_camera_height<=2.0)){
+    std::cerr<<"ОШИБКА: --bench-true-camera-height разрешён только 0.05..2.0 м\n";
+    return 2;
+  }
+  if(bench_true_camera_height>0.0 && bench_height_override<=0.0){
+    std::cerr<<"ОШИБКА: --bench-true-camera-height требует --bench-height\n";
     return 2;
   }
   if(!(pre_static_sec>=1.0&&pre_static_sec<=30.0) || !(post_static_sec>=1.0&&post_static_sec<=30.0)){
@@ -750,9 +760,14 @@ int main(int argc,char** argv){
     }
     if(bench_height_override>0.0){
       std::cerr<<"BENCH HEIGHT OVERRIDE: FC получает "<<bench_height_override
-               <<" м вместо реального TF-Luna. Flow-rate масштабируется real/fake,\n"
-               <<"чтобы метрическая скорость оставалась соответствующей реальной высоте.\n"
-               <<"ЭТО ТОЛЬКО СТЕНДОВАЯ ДИАГНОСТИКА, НЕ FLIGHT-РЕЖИМ.\n";
+               <<" м вместо реального TF-Luna.\n";
+      if(bench_true_camera_height>0.0){
+        std::cerr<<"FIXED TRUE CAMERA HEIGHT: "<<bench_true_camera_height
+                 <<" м; TF-Luna НЕ используется для метрического масштаба flow.\n";
+      } else {
+        std::cerr<<"Flow-rate масштабируется real/fake по TF-Luna.\n";
+      }
+      std::cerr<<"ЭТО ТОЛЬКО СТЕНДОВАЯ ДИАГНОСТИКА, НЕ FLIGHT-РЕЖИМ.\n";
     }
 
     // Переводим AP_OpticalFlow_MAV в high-precision flow_rate mode.
@@ -793,10 +808,26 @@ int main(int argc,char** argv){
 
         bool flow_sent=false; uint8_t quality=0;
         double flow_send_x=s.flow_body_x, flow_send_y=s.flow_body_y;
-        if(s.valid && bench_height_override>0.0 && hl && lm>0.05){
-          const double k=lm/bench_height_override;
-          flow_send_x*=k;
-          flow_send_y*=k;
+        if(s.valid && bench_height_override>0.0){
+          if(bench_true_camera_height>0.0){
+            // Bench-only fixed-height mode. Do not trust TF-Luna when it is below
+            // its reliable minimum range. ArduPilot receives a synthetic range,
+            // while angular flow is scaled so metric horizontal velocity remains
+            // equal to raw_flow * measured true camera height.
+            double fake_camera_height=bench_height_override;
+            if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+              fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
+            }
+            if(fake_camera_height>0.02){
+              const double k=bench_true_camera_height/fake_camera_height;
+              flow_send_x*=k;
+              flow_send_y*=k;
+            }
+          } else if(hl && lm>0.05){
+            const double k=lm/bench_height_override;
+            flow_send_x*=k;
+            flow_send_y*=k;
+          }
         }
         int64_t flow_send_ns=0;
         if(s.valid){

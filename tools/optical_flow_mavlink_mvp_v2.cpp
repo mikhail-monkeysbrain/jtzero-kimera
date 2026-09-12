@@ -589,7 +589,7 @@ int main(int argc,char** argv){
 
     // Flight-only readiness gate. It does not arm or inhibit ArduPilot; it is an
     // explicit operator indication that the same signals used by the EKF are healthy.
-    const bool flight_ready_gate=!guided && bench_height_override<=0.0;
+    const bool flight_ready_gate=!guided;
     bool flight_ready=false;
     int64_t flight_ready_since_ns=0;
     int64_t flight_gate_begin_ns=monoNs();
@@ -883,8 +883,11 @@ int main(int argc,char** argv){
 
         if(flight_ready_gate && !flight_ready){
           const double speed_h=efresh?std::hypot((double)ep.vx,(double)ep.vy):1e9;
-          const bool luna_ok=hl && lage>=-2.0 && lage<100.0 &&
-                             lm>=kReadyMinRangeM && lm<=kReadyMaxRangeM;
+          const double ready_range=(bench_height_override>0.0)?bench_height_override:lm;
+          const bool luna_ok=(bench_true_camera_height>0.0 && bench_height_override>0.0)
+            ? (ready_range>=kReadyMinRangeM && ready_range<=kReadyMaxRangeM)
+            : (hl && lage>=-2.0 && lage<100.0 &&
+               ready_range>=kReadyMinRangeM && ready_range<=kReadyMaxRangeM);
           const bool flow_ok=s.valid && flow_sent && s.inliers>=30;
           const bool ekf_ok=esfresh &&
                             (es.flags & EKF_ATTITUDE) &&
@@ -899,7 +902,8 @@ int main(int argc,char** argv){
               flight_ready=true;
               std::cerr<<"\n======================================================================\n"
                        <<"FLIGHT READY\n"
-                       <<"range="<<lm<<" m, flow valid, EKF velH/posRel valid, |vH|="
+                       <<"range="<<((bench_height_override>0.0)?bench_height_override:lm)
+                       <<" m, flow valid, EKF velH/posRel valid, |vH|="
                        <<speed_h<<" m/s\n"
                        <<"Состояние было непрерывно стабильным "<<kReadyStableSec<<" с.\n"
                        <<"======================================================================\n";
@@ -912,7 +916,7 @@ int main(int argc,char** argv){
                        <<" flow="<<(flow_ok?"OK":"NO")
                        <<" ekf="<<(ekf_ok?"OK":"NO")
                        <<" local="<<(local_ok?"OK":"NO")
-                       <<" range="<<(hl?lm:-1.0)
+                       <<" range="<<((bench_height_override>0.0)?bench_height_override:(hl?lm:-1.0))
                        <<" vH="<<(efresh?speed_h:-1.0)<<"\n";
               last_not_ready_print_ns=now;
             }
@@ -924,14 +928,32 @@ int main(int argc,char** argv){
           }
         }
 
-        if(return_gui && return_target_set && s.valid && flow_sent && hl && dt>0.0 && dt<0.2){
-          double hcam=lm;
-          if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
-            hcam=lm-(diag_camera_z_m-diag_range_z_m);
+        if(return_gui && return_target_set && s.valid && flow_sent && dt>0.0 && dt<0.2){
+          double hcam=0.0;
+          if(bench_true_camera_height>0.0){
+            hcam=bench_true_camera_height;
+          } else if(hl){
+            hcam=lm;
+            if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+              hcam=lm-(diag_camera_z_m-diag_range_z_m);
+            }
           }
           if(hcam>0.02){
-            return_raw_x += flow_send_x*hcam*dt;
-            return_raw_y += flow_send_y*hcam*dt;
+            // flow_send is already scaled for the synthetic range in fixed-height
+            // bench mode; recover native metric closure with the true camera height
+            // only when no synthetic scaling is active.
+            if(bench_true_camera_height>0.0 && bench_height_override>0.0){
+              double fake_camera_height=bench_height_override;
+              if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+                fake_camera_height=bench_height_override-(diag_camera_z_m-diag_range_z_m);
+              }
+              const double k=(bench_true_camera_height>0.0)?fake_camera_height/bench_true_camera_height:1.0;
+              return_raw_x += flow_send_x*k*hcam*dt;
+              return_raw_y += flow_send_y*k*hcam*dt;
+            } else {
+              return_raw_x += flow_send_x*hcam*dt;
+              return_raw_y += flow_send_y*hcam*dt;
+            }
           }
         }
 

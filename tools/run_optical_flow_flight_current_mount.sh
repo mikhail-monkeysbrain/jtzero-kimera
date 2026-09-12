@@ -8,6 +8,8 @@ cd "$ROOT"
 export JTZERO_FLOW_CAMERA_YAML="$ROOT/params/JTZeroMonoFLU/LeftCameraParams_OF_CurrentMount.yaml"
 export JTZERO_FLOW_FOCAL_SCALE="${JTZERO_FLOW_FOCAL_SCALE:-0.931}"
 export JTZERO_FLOW_FEATURE_ROI="${JTZERO_FLOW_FEATURE_ROI:-0.20 0.32 0.80 0.90}"
+export JTZERO_FLOW_DIAG_CAMERA_Z_M="${JTZERO_FLOW_DIAG_CAMERA_Z_M:-0.050}"
+export JTZERO_FLOW_DIAG_RANGE_Z_M="${JTZERO_FLOW_DIAG_RANGE_Z_M:-0.026}"
 
 bash "$ROOT/tools/audit_optical_flow_current_mount_geometry.sh"
 

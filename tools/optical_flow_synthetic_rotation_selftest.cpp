@@ -147,6 +147,34 @@ int main(int argc,char** argv){
       if(!s.valid || s.inliers<20 || (emag>0.1 && err/emag>0.15) || (emag<0.1 && err>0.08)) fail_count++;
     }
 
+    std::cout<<"\n===== SWEEP ROI: ПАРАЗИТНЫЙ XY FLOW ПРИ YAW =====\n";
+    struct RoiCase { const char* name; FeatureRoi roi; };
+    std::vector<RoiCase> rois{
+      {"ТЕКУЩИЙ", {0.20,0.32,0.80,0.90}},
+      {"СИММЕТРИЧНЫЙ 20-80", {0.20,0.20,0.80,0.80}},
+      {"СИММЕТРИЧНЫЙ 25-75", {0.25,0.25,0.75,0.75}},
+      {"СИММЕТРИЧНЫЙ 30-70", {0.30,0.30,0.70,0.70}},
+      {"НИЖНИЙ ЦЕНТР", {0.25,0.35,0.75,0.85}},
+    };
+    const Case yawp{"КУРС +10°",{0,0,+d10},dt};
+    const Case yawm{"КУРС -10°",{0,0,-d10},dt};
+    for(const auto& rc:rois){
+      g_feature_roi=rc.roi;
+      double worst=0.0;
+      int min_inl=9999;
+      for(const auto& tc:{yawp,yawm}){
+        const cv::Vec3d omega_c=C_R_FRD*tc.omega_b;
+        cv::Mat rot=syntheticRotate(base,test,omega_c,tc.dt);
+        FlowStep s=estimateRawFlow(base,rot,tc.dt,test);
+        worst=std::max(worst,std::hypot(s.flow_body_x,s.flow_body_y));
+        min_inl=std::min(min_inl,s.inliers);
+      }
+      std::cout<<std::left<<std::setw(24)<<rc.name
+               <<" yaw worst="<<std::fixed<<std::setprecision(4)<<worst<<" рад/с"
+               <<"  min_inliers="<<min_inl<<"\n";
+    }
+    g_feature_roi={0.20,0.32,0.80,0.90};
+
     std::cout<<"\nКРИТЕРИЙ:\n"
              <<"  roll/pitch: ошибка по вектору <= 15%\n"
              <<"  yaw: паразитный XY flow <= 0.08 рад/с\n";

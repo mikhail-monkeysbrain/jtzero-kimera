@@ -1,0 +1,40 @@
+%YAML:1.0
+# JT-Zero OpticalFlow current temporary mount, 2026-09-12.
+#
+# Body frame in this file:
+#   B_FLU: +X forward, +Y left, +Z up
+# Camera frame:
+#   C: OpenCV +X image-right, +Y image-down, +Z optical-forward
+#
+# Physical current mount reported by operator:
+#   image top    -> vehicle forward
+#   image right  -> vehicle right
+#   optical axis -> down
+#   camera focal point approximately:
+#     FRD [ +0.0625, 0.0000, +0.0500 ] m from FC IMU
+#
+# Therefore camera axes expressed in body FRD are approximately:
+#   Cx -> +Y_FRD
+#   Cy -> -X_FRD
+#   Cz -> +Z_FRD
+# and in FLU:
+#   Cx -> -Y_FLU
+#   Cy -> -X_FLU
+#   Cz -> -Z_FLU
+
+camera_id: left_cam_of_current_mount
+
+T_BS:
+  cols: 4
+  rows: 4
+  data: [ 0.000000000, -1.000000000,  0.000000000,  0.0625,
+         -1.000000000,  0.000000000,  0.000000000,  0.0000,
+          0.000000000,  0.000000000, -1.000000000, -0.0500,
+          0.000000000,  0.000000000,  0.000000000,  1.0000 ]
+
+rate_hz: 30
+resolution: [640, 480]
+camera_model: pinhole
+intrinsics: [568.53170752165227, 569.68005562865858, 315.98271077441063, 239.88148589100641]
+distortion_model: radial-tangential
+distortion_coefficients: [0.073569192194028493, -0.095253893789117, -0.010810530757187299, -0.0022843373576970235, 0.082177400802757483]

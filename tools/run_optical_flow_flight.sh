@@ -10,6 +10,7 @@ LUNA="${JTZERO_FLOW_LUNA:-/dev/ttyAMA2}"
 FC="${JTZERO_FLOW_FC:-/dev/ttyAMA0}"
 CAMERA_YAML="${JTZERO_FLOW_CAMERA_YAML:-$ROOT/params/JTZeroMonoFLU/LeftCameraParams.yaml}"
 FOCAL_SCALE="${JTZERO_FLOW_FOCAL_SCALE:-1.1060}"
+FEATURE_ROI="${JTZERO_FLOW_FEATURE_ROI:-0.20 0.20 0.80 0.80}"
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="${JTZERO_FLOW_RUN_DIR:-/home/vio/jtzero_runs/${STAMP}_OPTICAL_FLOW_FLIGHT}"
@@ -64,6 +65,7 @@ JT-ZERO — OPTICAL FLOW FLIGHT
   - flow НЕ масштабируется lm/0.60;
   - в FC уходит настоящий TF-Luna range;
   - focal_scale = $FOCAL_SCALE;
+  - feature ROI = $FEATURE_ROI;
   - EK3_FLOW_DELAY должен оставаться 0;
   - publisher работает непрерывно до Ctrl+C.
 
@@ -78,4 +80,5 @@ BUILD:       $BUILD_LOG
 ======================================================================
 EOF
 
-exec "$BIN" "$CAMERA" "$LUNA" "$FC" "$CSV" "$CAMERA_YAML" "$FOCAL_SCALE"
+read -r RX0 RY0 RX1 RY1 <<< "$FEATURE_ROI"
+exec "$BIN" "$CAMERA" "$LUNA" "$FC" "$CSV" "$CAMERA_YAML" "$FOCAL_SCALE"   --feature-roi "$RX0" "$RY0" "$RX1" "$RY1"

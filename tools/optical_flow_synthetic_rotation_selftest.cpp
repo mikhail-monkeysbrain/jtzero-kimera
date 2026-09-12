@@ -74,8 +74,7 @@ void printCase(const Case& tc,const FlowStep& s,const cv::Vec3d& expected_b){
            <<" valid="<<(s.valid?1:0)
            <<" inliers="<<s.inliers<<"/"<<s.tracked
            <<" ratio="<<s.inlier_ratio
-           <<"
-";
+           <<"\n";
 }
 
 }

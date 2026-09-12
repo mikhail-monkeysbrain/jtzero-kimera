@@ -45,8 +45,9 @@ static void write_all(int fd,const uint8_t* p,size_t n){
   }
 }
 
+static mavlink_status_t g_mav_status{};
+
 static bool recv_msg(int fd,mavlink_message_t* out,double timeout_s){
-  mavlink_status_t st{};
   uint8_t buf[4096];
   const int loops=std::max(1,(int)std::ceil(timeout_s*20.0));
   for(int k=0;k<loops;k++){
@@ -57,7 +58,7 @@ static bool recv_msg(int fd,mavlink_message_t* out,double timeout_s){
       if(n<0&&(errno==EAGAIN||errno==EWOULDBLOCK))break;
       if(n<=0)break;
       for(ssize_t i=0;i<n;i++){
-        if(mavlink_parse_char(MAVLINK_COMM_0,buf[i],out,&st)) return true;
+        if(mavlink_parse_char(MAVLINK_COMM_0,buf[i],out,&g_mav_status)) return true;
       }
     }
   }

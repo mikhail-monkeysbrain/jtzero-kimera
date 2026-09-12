@@ -4,7 +4,7 @@ import argparse,csv,math,statistics
 from pathlib import Path
 
 CAM_Z_DEFAULT=0.050
-RANGE_Z_DEFAULT=0.026
+RANGE_Z_DEFAULT=0.071
 
 def f(r,k,d=float("nan")):
     try:return float(r[k])

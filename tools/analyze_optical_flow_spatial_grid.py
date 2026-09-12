@@ -11,6 +11,8 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("csv",type=Path)
     ap.add_argument("--physical-mm",type=float,required=True)
+    ap.add_argument("--camera-z-m",type=float,default=0.0500)
+    ap.add_argument("--luna-z-m",type=float,default=0.0260)
     args=ap.parse_args()
 
     rows=list(csv.DictReader(args.csv.open(newline="")))
@@ -29,8 +31,10 @@ def main():
             bx=f(r,f"c{ci}_bx"); by=f(r,f"c{ci}_by")
             if n<3 or not all(map(math.isfinite,[dt,rng,bx,by])) or not (0<dt<0.2) or rng<=0:
                 continue
-            dx += bx*rng*dt
-            dy += by*rng*dt
+            hcam=rng-(args.camera_z_m-args.luna_z_m)
+            if hcam<=0: continue
+            dx += bx*hcam*dt
+            dy += by*hcam*dt
             used += 1
             nsum += n
         mm=1000*math.hypot(dx,dy)
@@ -38,6 +42,7 @@ def main():
         cells.append((ci,mm,ratio,used,nsum/max(1,used)))
 
     print("===== 3x3 SPATIAL FLOW FORENSIC =====")
+    print(f"camera-height geometry: camera_z={args.camera_z_m:.3f} m luna_z={args.luna_z_m:.3f} m")
     print("Cell indexing inside configured ROI:")
     print("  c0 c1 c2")
     print("  c3 c4 c5")

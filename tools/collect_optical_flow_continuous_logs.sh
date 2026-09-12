@@ -92,6 +92,16 @@ while IFS= read -r -d '' f; do
   esac
 done < <(find "${latest_run}" -type f -print0)
 
+# Copy the newest continuous-series SESSION JSON (stored in RUNS_ROOT, not inside the run dir).
+latest_session="$(
+  find "${ROOT}" -maxdepth 1 -type f -name '*_OPTICAL_FLOW_CONTINUOUS_SERIES.json' \
+    -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-
+)"
+if [[ -n "${latest_session:-}" && -f "${latest_session}" ]]; then
+  cp -a "${latest_session}" "${bundle}/run/"
+  echo "session_json=${latest_session}" >> "${bundle}/summary.txt"
+fi
+
 # Save current source/scripts relevant to this test for exact reproducibility.
 mkdir -p "${bundle}/source"
 for f in \

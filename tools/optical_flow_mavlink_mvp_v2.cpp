@@ -298,6 +298,15 @@ bool sendOpticalFlow(int fd,uint64_t time_usec,float rate_x,float rate_y,uint8_t
   return GroundMotionMavlinkPublisher::writeMessage(fd,msg);
 }
 
+struct FeatureRoi {
+  double x0=0.20;
+  double y0=0.20;
+  double x1=0.80;
+  double y1=0.80;
+};
+
+FeatureRoi g_feature_roi{};
+
 struct FlowStep {
   bool valid=false;
   int features=0,tracked=0,inliers=0;
@@ -313,9 +322,11 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   if(prev.empty()||curr.empty()||!(dt>0&&dt<0.2))return o;
 
   cv::Mat feature_mask(prev.size(),CV_8UC1,cv::Scalar(0));
-  const int x0=prev.cols/5, y0=prev.rows/5;
-  const int rw=prev.cols*3/5, rh=prev.rows*3/5;
-  feature_mask(cv::Rect(x0,y0,rw,rh)).setTo(255);
+  const int x0=std::clamp((int)std::lround(g_feature_roi.x0*prev.cols),0,prev.cols-1);
+  const int y0=std::clamp((int)std::lround(g_feature_roi.y0*prev.rows),0,prev.rows-1);
+  const int x1=std::clamp((int)std::lround(g_feature_roi.x1*prev.cols),x0+1,prev.cols);
+  const int y1=std::clamp((int)std::lround(g_feature_roi.y1*prev.rows),y0+1,prev.rows);
+  feature_mask(cv::Rect(x0,y0,x1-x0,y1-y0)).setTo(255);
 
   std::vector<cv::Point2f> p0,p1;
   cv::goodFeaturesToTrack(prev,p0,500,0.01,7,feature_mask);
@@ -421,6 +432,12 @@ int main(int argc,char** argv){
     else if(a=="--remote-log" && i+1<argc) remote_log_path=argv[++i];
     else if(a=="--pre-static-sec" && i+1<argc) pre_static_sec=std::stod(argv[++i]);
     else if(a=="--post-static-sec" && i+1<argc) post_static_sec=std::stod(argv[++i]);
+    else if(a=="--feature-roi" && i+4<argc){
+      g_feature_roi.x0=std::stod(argv[++i]);
+      g_feature_roi.y0=std::stod(argv[++i]);
+      g_feature_roi.x1=std::stod(argv[++i]);
+      g_feature_roi.y1=std::stod(argv[++i]);
+    }
   }
   if(continuous_guided && (continuous_legs<2 || continuous_legs>30)){
     std::cerr<<"ОШИБКА: --continuous-legs разрешён только 2..30\n";
@@ -440,6 +457,13 @@ int main(int argc,char** argv){
   }
   if(!(focal_scale>0.5&&focal_scale<2.0)){
     std::cerr<<"ОШИБКА: focal_scale вне разумного диапазона 0.5..2.0\n";
+    return 2;
+  }
+  if(!(g_feature_roi.x0>=0.0 && g_feature_roi.y0>=0.0 &&
+       g_feature_roi.x1<=1.0 && g_feature_roi.y1<=1.0 &&
+       g_feature_roi.x1-g_feature_roi.x0>=0.20 &&
+       g_feature_roi.y1-g_feature_roi.y0>=0.20)){
+    std::cerr<<"ОШИБКА: --feature-roi должен быть x0 y0 x1 y1 в 0..1 и иметь размер >=0.20\n";
     return 2;
   }
 

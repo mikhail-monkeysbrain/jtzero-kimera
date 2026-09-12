@@ -20,7 +20,11 @@ BUILD_LOG="$RUN_DIR/build.log"
 mkdir -p "$RUN_DIR"
 
 GUIDED_MODE="${JTZERO_FLOW_GUIDED_MODE:-guided-175}"
+CONTINUOUS_LEGS="${JTZERO_FLOW_CONTINUOUS_LEGS:-0}"
 EXTRA_ARGS=(--guided-mm "$TARGET_MM")
+if [[ "$CONTINUOUS_LEGS" =~ ^[2-9][0-9]*$ ]]; then
+  EXTRA_ARGS+=(--continuous-legs "$CONTINUOUS_LEGS")
+fi
 if [[ "${JTZERO_FLOW_TARGET_IS_NOMINAL:-0}" == "1" ]]; then
   EXTRA_ARGS+=(--nominal-target)
 fi
@@ -92,6 +96,7 @@ CSV:         $CSV
   LOCAL      — LOCAL_POSITION_NED, если ArduPilot считает position/velocity валидными.
 
 РЕЖИМ: guided $TARGET_MM мм.
+$([[ "$CONTINUOUS_LEGS" != "0" ]] && echo "CONTINUOUS LEGS: $CONTINUOUS_LEGS — один camera/MAVLink/DataFlash процесс на всю серию.")
 $([[ "${JTZERO_FLOW_TARGET_IS_NOMINAL:-0}" == "1" ]] && echo "ВАЖНО: $TARGET_MM мм — только номинальная инструкция GUI; эталон вводится после прохода по фактическому измерению.")
 Если JTZERO_FLOW_GUIDED_MODE=armed-gate-open:
   - FC получает bench-высоту 0.60 м;

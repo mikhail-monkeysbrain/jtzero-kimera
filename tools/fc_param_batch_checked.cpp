@@ -12,6 +12,8 @@
 #include <cerrno>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <string>
 #include <vector>

@@ -11,6 +11,8 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("csv",type=Path)
     ap.add_argument("--physical-mm",type=float,default=None)
+    ap.add_argument("--camera-z-m",type=float,default=0.0500)
+    ap.add_argument("--luna-z-m",type=float,default=0.0260)
     args=ap.parse_args()
 
     with args.csv.open(newline="") as fh:
@@ -46,6 +48,23 @@ def main():
         mags.append(math.hypot(fx,fy))
 
     raw_mm=1000*math.hypot(dx,dy)
+
+    dz_cam_luna=args.camera_z_m-args.luna_z_m
+    dx_cam=dy_cam=0.0
+    cam_heights=[]
+    for r in move:
+        if int(f(r,"valid",0))!=1 or int(f(r,"flow_sent",0))!=1:
+            continue
+        dt=f(r,"dt_s")
+        rng=f(r,"range_to_fc_m")
+        fx=f(r,"flow_send_x"); fy=f(r,"flow_send_y")
+        hcam=rng-dz_cam_luna
+        if not all(map(math.isfinite,[dt,hcam,fx,fy])) or not (0<dt<0.2) or hcam<=0:
+            continue
+        dx_cam += fx*hcam*dt
+        dy_cam += fy*hcam*dt
+        cam_heights.append(hcam)
+    raw_cam_mm=1000*math.hypot(dx_cam,dy_cam)
 
     # Robust table-only counterfactual. In this experiment TF-Luna can see the
     # floor beyond the table edge. The dominant low-range cluster is the table;
@@ -104,18 +123,24 @@ def main():
     print(f"range median/min/max = {statistics.median(ranges):.3f}/{min(ranges):.3f}/{max(ranges):.3f} m")
     print(f"table range reference (q20) = {table_ref:.3f} m; table gate <= {table_hi:.3f} m")
     print(f"off-table/floor observations = {off_table}/{len(ranges)} ({100*off_table/max(1,len(ranges)):.1f}%)")
-    print(f"RAW camera-interval integral = {raw_mm:.1f} mm")
+    print(f"RAW using TF-Luna range directly = {raw_mm:.1f} mm")
     print(f"  components (body-rate proxy) = X {dx*1000:+.1f} mm, Y {dy*1000:+.1f} mm")
+    print(f"sensor Z geometry: camera={args.camera_z_m:.3f} m, luna={args.luna_z_m:.3f} m, camera lower by {dz_cam_luna*1000:.1f} mm")
+    print(f"camera height median/min/max = {statistics.median(cam_heights):.3f}/{min(cam_heights):.3f}/{max(cam_heights):.3f} m")
+    print(f"RAW geometry-corrected camera-height integral = {raw_cam_mm:.1f} mm")
     print(f"RAW with fixed table-range counterfactual = {raw_ref_mm:.1f} mm")
     print(f"RAW table-only observed intervals = {raw_table_mm:.1f} mm (used {table_used} samples)")
     print(f"EKF LOCAL displacement = {ekf_mm:.1f} mm")
     print(f"  N/E = {dn*1000:+.1f}/{de*1000:+.1f} mm")
     if math.isfinite(ekf_mm) and raw_mm>1e-9:
-        print(f"EKF/RAW = {ekf_mm/raw_mm:.4f}")
+        print(f"EKF/RAW_LUNA_RANGE = {ekf_mm/raw_mm:.4f}")
+    if math.isfinite(ekf_mm) and raw_cam_mm>1e-9:
+        print(f"EKF/RAW_CAMERA_HEIGHT = {ekf_mm/raw_cam_mm:.4f}")
     if args.physical_mm is not None and args.physical_mm>0:
         print()
         print(f"PHYSICAL = {args.physical_mm:.1f} mm")
-        print(f"RAW/PHYS = {raw_mm/args.physical_mm:.4f}")
+        print(f"RAW_LUNA_RANGE/PHYS = {raw_mm/args.physical_mm:.4f}")
+        print(f"RAW_CAMERA_HEIGHT/PHYS = {raw_cam_mm/args.physical_mm:.4f}")
         print(f"RAW_FIXED_TABLE/PHYS = {raw_ref_mm/args.physical_mm:.4f}")
         print(f"RAW_TABLE_ONLY/PHYS = {raw_table_mm/args.physical_mm:.4f}")
         print(f"EKF/PHYS = {ekf_mm/args.physical_mm:.4f}")

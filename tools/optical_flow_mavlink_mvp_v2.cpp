@@ -824,8 +824,14 @@ int main(int argc,char** argv){
     const std::string rotation_window_name="JT-Zero — Полёт / 3D положение";
     bool traj3d_origin_set=false;
     double traj3d_n0=0.0,traj3d_e0=0.0,traj3d_z0=0.0;
-    double traj3d_halfspan_m=0.50;
-    std::deque<cv::Vec3d> traj3d; // N,E,UP relative to reset point
+    // 3D GUI: fixed operator scale ±500 mm on every axis. Never auto-zoom:
+    // the apparent displacement must remain visually comparable during the test.
+    constexpr double traj3d_halfspan_m=0.50;
+    std::deque<cv::Vec3d> traj3d; // N,E,UP relative to hover/reference point
+    cv::Vec3d traj3d_prev(0,0,0);
+    bool traj3d_prev_set=false;
+    double traj3d_path_total=0.0;              // accumulated 3D path length, m
+    cv::Vec3d traj3d_path_axis(0,0,0);         // accumulated |dN|,|dE|,|dUP|, m
     if(return_gui || rotation_gui) initGuiFont();
     if(return_gui){
       cv::namedWindow(return_window_name,cv::WINDOW_NORMAL);
@@ -1261,20 +1267,35 @@ int main(int argc,char** argv){
             traj3d_n0=ep.x; traj3d_e0=ep.y; traj3d_z0=ep.z;
             traj3d_origin_set=true;
             traj3d.clear();
-            traj3d_halfspan_m=0.50;
+            traj3d_prev=cv::Vec3d(0,0,0);
+            traj3d_prev_set=true;
+            traj3d_path_total=0.0;
+            traj3d_path_axis=cv::Vec3d(0,0,0);
           }
           if(traj3d_origin_set && efresh){
             const cv::Vec3d p3(
               (double)ep.x-traj3d_n0,
               (double)ep.y-traj3d_e0,
-              -((double)ep.z-traj3d_z0)); // UP is positive on screen/report
+              -((double)ep.z-traj3d_z0)); // UP is positive
+            if(traj3d_prev_set){
+              const cv::Vec3d dp=p3-traj3d_prev;
+              // LOCAL_POSITION_NED is ~20 Hz. Ignore sub-mm estimator chatter,
+              // but count real hand-carried motion along each axis.
+              if(cv::norm(dp)>=0.0005){
+                traj3d_path_total += cv::norm(dp);
+                traj3d_path_axis[0] += std::abs(dp[0]);
+                traj3d_path_axis[1] += std::abs(dp[1]);
+                traj3d_path_axis[2] += std::abs(dp[2]);
+                traj3d_prev=p3;
+              }
+            } else {
+              traj3d_prev=p3;
+              traj3d_prev_set=true;
+            }
             if(traj3d.empty() || cv::norm(p3-traj3d.back())>=0.002){
               traj3d.push_back(p3);
               while(traj3d.size()>1200) traj3d.pop_front();
             }
-            traj3d_halfspan_m=std::max(0.25,std::max(traj3d_halfspan_m*0.9995,
-              1.25*std::max({std::abs(p3[0]),std::abs(p3[1]),std::abs(p3[2])})));
-            traj3d_halfspan_m=std::min(traj3d_halfspan_m,10.0);
           }
 
           const double roll_deg=fg_ok?fg.roll*180.0/M_PI:0.0;
@@ -1392,9 +1413,9 @@ int main(int argc,char** argv){
               <<"°  тангаж "<<ca.pitch*180.0/M_PI<<"°";
           } else l4<<"4. FC ХОЧЕТ НАКЛОН: НЕТ ДАННЫХ ОТ ЭТОГО РЕЖИМА";
           if(co_ok){
-            l5<<"5. ВЫХОДЫ FC 1..8:";
-            for(int i=0;i<8;i++) l5<<" "<<co.pwm[i];
-          } else l5<<"5. ВЫХОДЫ FC 1..8: НЕТ ДАННЫХ";
+            l5<<"5. МОТОРЫ 1..4:";
+            for(int i=0;i<4;i++) l5<<" "<<co.pwm[i];
+          } else l5<<"5. МОТОРЫ 1..4: НЕТ ДАННЫХ";
           putGuiText(hud,l1.str(),{55,475},0.55,cv::Scalar(230,230,230),1);
           putGuiText(hud,l2.str(),{55,520},0.55,cv::Scalar(230,230,230),1);
           putGuiText(hud,l3.str(),{55,575},0.55,ct_ok?cv::Scalar(0,255,255):cv::Scalar(0,170,255),1);
@@ -1409,11 +1430,11 @@ int main(int argc,char** argv){
           const cv::Rect box3d(900,500,565,330);
           cv::rectangle(hud,box3d,cv::Scalar(28,28,28),cv::FILLED);
           cv::rectangle(hud,box3d,cv::Scalar(90,90,90),1);
-          putGuiText(hud,"3D ПОЛОЖЕНИЕ ПО ОЦЕНКЕ FC",{920,530},0.62,cv::Scalar(245,245,245),2);
-          putGuiText(hud,"SPACE — текущая точка = 0",{920,558},0.46,cv::Scalar(190,190,190),1);
+          putGuiText(hud,"ПОЗИЦИЯ ОТ ТОЧКИ ЗАВИСАНИЯ (ОЦЕНКА FC)",{920,530},0.56,cv::Scalar(245,245,245),2);
+          putGuiText(hud,"SPACE — запомнить ТЕКУЩУЮ позицию как точку зависания",{920,558},0.40,cv::Scalar(190,190,190),1);
 
-          const cv::Point c3(1180,710);
-          const double sc3=180.0/std::max(0.25,traj3d_halfspan_m);
+          const cv::Point c3(1180,735);
+          const double sc3=360.0; // fixed: 0.50 m -> 180 px; scale never changes
           auto proj3=[&](const cv::Vec3d& p)->cv::Point{
             const double n=p[0],e=p[1],u=p[2];
             const int x=(int)std::lround(c3.x + (e-n)*0.70*sc3);
@@ -1421,9 +1442,9 @@ int main(int argc,char** argv){
             return {std::clamp(x,box3d.x+8,box3d.x+box3d.width-8),
                     std::clamp(y,box3d.y+42,box3d.y+box3d.height-8)};
           };
-          const cv::Vec3d axisN(0.18*traj3d_halfspan_m,0,0);
-          const cv::Vec3d axisE(0,0.18*traj3d_halfspan_m,0);
-          const cv::Vec3d axisU(0,0,0.18*traj3d_halfspan_m);
+          const cv::Vec3d axisN(0.10,0,0);
+          const cv::Vec3d axisE(0,0.10,0);
+          const cv::Vec3d axisU(0,0,0.10);
           cv::circle(hud,c3,5,cv::Scalar(180,180,180),cv::FILLED);
           cv::line(hud,c3,proj3(axisN),cv::Scalar(220,180,80),2,cv::LINE_AA);
           cv::line(hud,c3,proj3(axisE),cv::Scalar(80,220,180),2,cv::LINE_AA);
@@ -1438,14 +1459,33 @@ int main(int argc,char** argv){
             const auto& p3=traj3d.back();
             const cv::Point cur3=proj3(p3);
             cv::circle(hud,cur3,8,cv::Scalar(0,255,255),cv::FILLED,cv::LINE_AA);
+            const double nmm=p3[0]*1000.0, emm=p3[1]*1000.0, umm=p3[2]*1000.0;
             std::ostringstream p3s;
-            p3s<<std::fixed<<std::setprecision(3)
-               <<"ΔN "<<p3[0]<<" м   ΔE "<<p3[1]<<" м   ΔUP "<<p3[2]<<" м";
-            putGuiText(hud,p3s.str(),{920,595},0.50,cv::Scalar(230,230,230),1);
+            p3s<<std::fixed<<std::setprecision(0)
+               <<"X(N) "<<std::showpos<<nmm<<" мм   Y(E) "<<emm<<" мм   Z(UP) "<<umm<<" мм"<<std::noshowpos;
+            putGuiText(hud,p3s.str(),{920,590},0.52,cv::Scalar(230,230,230),2);
+
             std::ostringstream d3s;
-            d3s<<std::fixed<<std::setprecision(3)
-               <<"3D расстояние от 0: "<<cv::norm(p3)<<" м";
-            putGuiText(hud,d3s.str(),{920,625},0.48,cv::Scalar(220,220,220),1);
+            d3s<<std::fixed<<std::setprecision(0)
+               <<"ОТ ТОЧКИ: "<<cv::norm(p3)*1000.0<<" мм";
+            putGuiText(hud,d3s.str(),{920,620},0.46,cv::Scalar(220,220,220),1);
+
+            std::ostringstream paths;
+            paths<<std::fixed<<std::setprecision(0)
+                 <<"ПРОЙДЕНО: всего "<<traj3d_path_total*1000.0
+                 <<" мм | X "<<traj3d_path_axis[0]*1000.0
+                 <<" | Y "<<traj3d_path_axis[1]*1000.0
+                 <<" | Z "<<traj3d_path_axis[2]*1000.0<<" мм";
+            putGuiText(hud,paths.str(),{920,648},0.39,cv::Scalar(200,200,200),1);
+
+            std::ostringstream hint;
+            hint<<std::fixed<<std::setprecision(0)
+                <<"ДЛЯ ВОЗВРАТА: X "<<std::showpos<<(-nmm)
+                <<"  Y "<<(-emm)<<"  Z "<<(-umm)<<" мм"<<std::noshowpos;
+            putGuiText(hud,hint.str(),{920,675},0.43,
+                       cv::norm(p3)<0.015?cv::Scalar(0,255,0):cv::Scalar(0,220,255),2);
+
+            putGuiText(hud,"ФИКСИРОВАННЫЙ МАСШТАБ: ±500 мм ПО X/Y/Z",{920,703},0.36,cv::Scalar(170,170,170),1);
           }else{
             putGuiText(hud,"Ждём СИСТЕМА ГОТОВА для установки нуля",{920,595},0.46,cv::Scalar(0,200,255),1);
           }
@@ -1459,8 +1499,11 @@ int main(int argc,char** argv){
             traj3d_origin_set=true;
             traj3d.clear();
             traj3d.emplace_back(0.0,0.0,0.0);
-            traj3d_halfspan_m=0.50;
-            std::cerr<<"3D GUI RESET: current FC position accepted as N/E/UP = 0/0/0\n";
+            traj3d_prev=cv::Vec3d(0,0,0);
+            traj3d_prev_set=true;
+            traj3d_path_total=0.0;
+            traj3d_path_axis=cv::Vec3d(0,0,0);
+            std::cerr<<"3D GUI HOVER POINT: current FC estimate accepted as X/Y/Z = 0/0/0; path counters reset\n";
           } else if(rkey=='q'||rkey=='Q'||rkey==27) g_running=false;
         }
 

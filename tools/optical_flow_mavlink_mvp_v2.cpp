@@ -1490,7 +1490,7 @@ int main(int argc,char** argv){
                    <<" inliers="<<s.inliers<<"/"<<s.tracked
                    <<" sent="<<flow_sent_total<<" invalid="<<flow_invalid_total
                    <<" stale_reject="<<stale_flow_rejected_total
-                   <<" bridge[h/r/x]="<<bridge_hold_total<<"/"<<bridge_recovered_total<<"/"<<bridge_reset_total
+                   <<" bridge_disabled[h/r/x]="<<bridge_hold_total<<"/"<<bridge_recovered_total<<"/"<<bridge_reset_total
                    <<" cam_drop="<<camera_queue_dropped_total
                    <<" latency="<<frame_pipeline_latency_ms<<"ms"
                    <<" stage_ms[F/L/R/P]="<<s.t_features_ms<<"/"<<s.t_lk_ms<<"/"<<s.t_ransac_ms<<"/"<<s.t_post_ms
@@ -1509,40 +1509,16 @@ int main(int argc,char** argv){
           std::cerr<<"\r"<<std::flush;
         }
 
-        // Anchor policy:
-        // - successful visual step: advance anchor normally;
-        // - geometric failure (tracked/homography/inliers): keep the last anchor
-        //   briefly and let the next frame bridge across the rejected interval;
-        // - too few features on the anchor, bad dt, or excessive anchor age:
-        //   reset immediately so we do not get stuck on an unusable frame.
+        // Anchor policy: always advance to the newest decoded frame.
         //
-        // This prevents a single rejected KLT/RANSAC interval from silently
-        // deleting physical displacement from the integral.
-        constexpr double kMaxBridgeAnchorAgeSec=0.18;
-        if(prev.empty()){
-          prev=gray.clone();
-          prev_ts=ts;
-          bridge_pending=false;
-        } else if(s.valid){
-          if(bridge_pending) ++bridge_recovered_total;
-          prev=gray.clone();
-          prev_ts=ts;
-          bridge_pending=false;
-        } else {
-          const double anchor_age=(prev_ts>0)?(ts-prev_ts)*1e-9:1e9;
-          const bool bridgeable=(s.invalid_reason==3 || s.invalid_reason==4 || s.invalid_reason==5) &&
-                                anchor_age<kMaxBridgeAnchorAgeSec;
-          if(bridgeable){
-            ++bridge_hold_total;
-            bridge_pending=true;
-            // keep prev/prev_ts
-          } else {
-            ++bridge_reset_total;
-            prev=gray.clone();
-            prev_ts=ts;
-            bridge_pending=false;
-          }
-        }
+        // The experimental bridge policy was removed after stress testing:
+        // 23 bridge holds produced 0 successful recoveries, while the retained
+        // old anchor inflated dt into the 100-200 ms range and caused cascaded
+        // few-inliers/bad-dt failures.  Keeping the newest frame minimizes
+        // inter-frame baseline and is therefore the safer production behavior.
+        prev=gray.clone();
+        prev_ts=ts;
+        bridge_pending=false;
     }
 
     g_running=false;

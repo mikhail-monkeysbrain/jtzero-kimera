@@ -467,6 +467,8 @@ struct FlowStep {
   double du_norm=0,dv_norm=0;
   double du_px=0,dv_px=0;
   double yaw_rate_cam_z=0; // fitted optical-axis rotation, rad/s, removed before MAVLink
+  double scale_rate=0;      // fitted isotropic image scale rate, 1/s; removed from XY flow
+  double lk_height_scale=1; // initial KLT scale guess from TF-Luna, curr image / prev image
   double flow_cam_x=0,flow_cam_y=0;
   double flow_body_x=0,flow_body_y=0;
 
@@ -477,7 +479,8 @@ struct FlowStep {
   std::array<double,9> cell_body_y{};
 };
 
-FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const CameraCalib& calib){
+FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const CameraCalib& calib,
+                         double prev_camera_height_m=0.0,double curr_camera_height_m=0.0){
   FlowStep o;
   if(prev.empty()||curr.empty()||!(dt>0&&dt<0.2)){ o.invalid_reason=1; return o; }
 
@@ -496,8 +499,31 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   if(p0.size()<30){ o.invalid_reason=2; return o; }
 
   std::vector<uchar> st; std::vector<float> err;
+
+  // Rapid Z motion creates a radial image scale change. Give LK the expected
+  // first guess from TF-Luna instead of forcing it to discover a large scale
+  // jump from a zero-displacement initialization.
+  int lk_flags=0;
+  if(prev_camera_height_m>0.05 && curr_camera_height_m>0.05 &&
+     std::isfinite(prev_camera_height_m) && std::isfinite(curr_camera_height_m)){
+    const double k=prev_camera_height_m/curr_camera_height_m;
+    // Only use a physically plausible inter-frame change. Outside this range
+    // let normal pyramidal LK handle the pair rather than injecting a bad guess.
+    if(k>=0.70 && k<=1.40){
+      o.lk_height_scale=k;
+      p1.resize(p0.size());
+      for(size_t i=0;i<p0.size();++i){
+        p1[i].x=(float)(calib.cx + k*((double)p0[i].x-calib.cx));
+        p1[i].y=(float)(calib.cy + k*((double)p0[i].y-calib.cy));
+      }
+      lk_flags=cv::OPTFLOW_USE_INITIAL_FLOW;
+    }
+  }
+
   const int64_t t_lk0=monoNs();
-  cv::calcOpticalFlowPyrLK(prev,curr,p0,p1,st,err,{21,21},3);
+  cv::calcOpticalFlowPyrLK(prev,curr,p0,p1,st,err,{21,21},3,
+                           cv::TermCriteria(cv::TermCriteria::COUNT|cv::TermCriteria::EPS,30,0.01),
+                           lk_flags,1e-4);
   o.t_lk_ms=(monoNs()-t_lk0)*1e-6;
   std::vector<cv::Point2f> a,b;
   for(size_t i=0;i<p0.size();++i){if(st[i]){a.push_back(p0[i]);b.push_back(p1[i]);}}
@@ -549,44 +575,48 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
     cell_du[ci].push_back(du);
     cell_dv[ci].push_back(dv);
   }
-  // Separate optical-axis rotation (camera yaw) from image translation.
+  // Separate horizontal translation from two motions that must NOT become
+  // horizontal velocity:
+  //   1) optical-axis rotation (yaw),
+  //   2) isotropic image scaling caused by vertical motion (change of height).
   //
-  // ArduPilot's MAV OpticalFlow backend compensates bodyRate X/Y internally,
-  // but bodyRate Z is not part of OpticalFlow_state. Therefore a plain median
-  // of du/dv leaks yaw image rotation into horizontal velocity whenever the
-  // feature distribution / ROI is not perfectly centro-symmetric.
+  // On undistorted normalized coordinates:
+  //   du = tx + s*x - wz*y
+  //   dv = ty + s*y + wz*x
   //
-  // On undistorted normalized coordinates fit:
-  //   du = tx - wz*y
-  //   dv = ty + wz*x
-  // Unknowns: tx, ty, wz*dt.  tx/ty preserve the constant image motion used
-  // for roll/pitch + translation; only the optical-axis rotational component
-  // is removed before publishing to ArduPilot.
-  cv::Mat A((int)ai.size()*2,3,CV_64F);
+  // tx/ty are the constant image translation that ArduPilot needs. s is the
+  // inter-frame scale change (mainly Z motion) and wz is camera-axis rotation.
+  // The old 3-parameter fit omitted s, so a rapid climb/descent could leak the
+  // radial scale field into tx/ty when features were not perfectly symmetric.
+  cv::Mat A((int)ai.size()*2,4,CV_64F);
   cv::Mat bb((int)ai.size()*2,1,CV_64F);
   for(size_t k=0;k<ai.size();++k){
     const double x=(double)au[k].x;
     const double y=(double)au[k].y;
     const double du=(double)bu[k].x-au[k].x;
     const double dv=(double)bu[k].y-au[k].y;
-    A.at<double>((int)(2*k),0)=1.0;
-    A.at<double>((int)(2*k),1)=0.0;
-    A.at<double>((int)(2*k),2)=-y;
+    A.at<double>((int)(2*k),0)=1.0;   // tx
+    A.at<double>((int)(2*k),1)=0.0;   // ty
+    A.at<double>((int)(2*k),2)=x;     // scale
+    A.at<double>((int)(2*k),3)=-y;    // yaw
     bb.at<double>((int)(2*k),0)=du;
     A.at<double>((int)(2*k+1),0)=0.0;
     A.at<double>((int)(2*k+1),1)=1.0;
-    A.at<double>((int)(2*k+1),2)=x;
+    A.at<double>((int)(2*k+1),2)=y;
+    A.at<double>((int)(2*k+1),3)=x;
     bb.at<double>((int)(2*k+1),0)=dv;
   }
   cv::Mat sol;
   const bool fit_ok=cv::solve(A,bb,sol,cv::DECOMP_SVD);
-  if(fit_ok && sol.rows==3){
+  if(fit_ok && sol.rows==4){
     o.du_norm=sol.at<double>(0,0);
     o.dv_norm=sol.at<double>(1,0);
-    o.yaw_rate_cam_z=sol.at<double>(2,0)/dt;
+    o.scale_rate=sol.at<double>(2,0)/dt;
+    o.yaw_rate_cam_z=sol.at<double>(3,0)/dt;
   } else {
     o.du_norm=median(dun);
     o.dv_norm=median(dvn);
+    o.scale_rate=0.0;
     o.yaw_rate_cam_z=0.0;
   }
   o.du_px=median(dup); o.dv_px=median(dvp);
@@ -619,8 +649,9 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
         if(cy*3+cx!=ci) continue;
         const double x=(double)au[k].x, y=(double)au[k].y;
         const double wzdt=o.yaw_rate_cam_z*dt;
-        cdu_clean.push_back(((double)bu[k].x-au[k].x) + wzdt*y);
-        cdv_clean.push_back(((double)bu[k].y-au[k].y) - wzdt*x);
+        const double sdt=o.scale_rate*dt;
+        cdu_clean.push_back(((double)bu[k].x-au[k].x) - sdt*x + wzdt*y);
+        cdv_clean.push_back(((double)bu[k].y-au[k].y) - sdt*y - wzdt*x);
       }
       const double cdu=cdu_clean.empty()?median(cell_du[ci]):median(cdu_clean);
       const double cdv=cdv_clean.empty()?median(cell_dv[ci]):median(cdv_clean);
@@ -774,12 +805,14 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,invalid_reason,bridge_pending,dt_s,features,tracked,inliers,inlier_ratio,t_features_ms,t_lk_ms,t_ransac_ms,t_post_ms,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,ctrl_target_valid,ctrl_target_x,ctrl_target_y,ctrl_target_vx,ctrl_target_vy,ctrl_target_age_ms,att_target_valid,att_target_roll,att_target_pitch,att_target_yaw,att_target_thrust,att_target_age_ms,outputs_valid,out1,out2,out3,out4,out5,out6,out7,out8,outputs_age_ms,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,invalid_reason,bridge_pending,dt_s,features,tracked,inliers,inlier_ratio,t_features_ms,t_lk_ms,t_ransac_ms,t_post_ms,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,scale_rate,lk_height_scale,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,ctrl_target_valid,ctrl_target_x,ctrl_target_y,ctrl_target_vx,ctrl_target_vy,ctrl_target_age_ms,att_target_valid,att_target_roll,att_target_pitch,att_target_yaw,att_target_thrust,att_target_age_ms,outputs_valid,out1,out2,out3,out4,out5,out6,out7,out8,outputs_age_ms,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
 
     cv::Mat prev; int64_t prev_ts=0; uint64_t frame=0;
+    double prev_camera_height_m=0.0;
+    bool prev_camera_height_valid=false;
     uint64_t flow_sent_total=0,flow_invalid_total=0,range_sent_total=0;
     uint64_t camera_queue_dropped_total=0, stale_flow_rejected_total=0;
     uint64_t bridge_hold_total=0, bridge_recovered_total=0, bridge_reset_total=0;
@@ -1055,9 +1088,25 @@ int main(int argc,char** argv){
           if(range_sent)++range_sent_total;
         }
 
+        double current_camera_height_m=0.0;
+        bool current_camera_height_valid=hl && lage<100.0 && lm>0.05;
+        if(current_camera_height_valid){
+          current_camera_height_m=lm;
+          // Convert rangefinder optical origin to camera optical origin using
+          // the already audited current-mount Z offsets.
+          if(std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
+            current_camera_height_m=lm-(diag_camera_z_m-diag_range_z_m);
+          }
+          if(!(current_camera_height_m>0.05 && std::isfinite(current_camera_height_m)))
+            current_camera_height_valid=false;
+        }
+
         const double dt=prev_ts?(ts-prev_ts)*1e-9:0.0;
         FlowStep s;
-        if(!prev.empty())s=estimateRawFlow(prev,gray,dt,calib);
+        if(!prev.empty())s=estimateRawFlow(
+          prev,gray,dt,calib,
+          prev_camera_height_valid?prev_camera_height_m:0.0,
+          current_camera_height_valid?current_camera_height_m:0.0);
 
         // Consume the FC gyro for THIS processed camera interval before any
         // bench-only range remapping.  Pure rotational optical flow must remain
@@ -1149,6 +1198,7 @@ int main(int argc,char** argv){
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
            <<s.t_features_ms<<','<<s.t_lk_ms<<','<<s.t_ransac_ms<<','<<s.t_post_ms<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','<<s.yaw_rate_cam_z<<','
+           <<s.scale_rate<<','<<s.lk_height_scale<<','
            <<s.flow_cam_x<<','<<s.flow_cam_y<<','<<s.flow_body_x<<','<<s.flow_body_y<<','
            <<(int)quality<<','<<lm<<','<<lage<<','<<range_to_fc<<','<<flow_send_x<<','<<flow_send_y<<','<<(flow_sent?1:0)<<','<<(range_sent?1:0)<<','
            <<(arm_ok?(arm_now?1:0):-1)<<','
@@ -1833,6 +1883,7 @@ int main(int argc,char** argv){
           std::cerr<<"OF frame="<<frame
                    <<" valid="<<(s.valid?1:0)
                    <<" rateFRD=("<<s.flow_body_x<<","<<s.flow_body_y<<") rad/s"
+                   <<" scaleRate="<<s.scale_rate<<"/s lkScale="<<s.lk_height_scale
                    <<" inliers="<<s.inliers<<"/"<<s.tracked
                    <<" sent="<<flow_sent_total<<" invalid="<<flow_invalid_total
                    <<" stale_reject="<<stale_flow_rejected_total
@@ -1864,6 +1915,8 @@ int main(int argc,char** argv){
         // inter-frame baseline and is therefore the safer production behavior.
         prev=gray.clone();
         prev_ts=ts;
+        prev_camera_height_m=current_camera_height_m;
+        prev_camera_height_valid=current_camera_height_valid;
         bridge_pending=false;
     }
 

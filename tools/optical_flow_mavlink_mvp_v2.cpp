@@ -1344,13 +1344,11 @@ int main(int argc,char** argv){
           // SPACE defines the operator's hover reference from the FC's own LOCAL_POSITION_NED
           // estimate. Repeated SPACE replaces that reference and resets distance counters.
           if(traj3d_origin_set && efresh){
-            const double z_up = (traj3d_range_origin_set && gui_range_ok)
-              ? (gui_range_vertical-traj3d_range_vertical0)
-              : -((double)ep.z-traj3d_z0);
+            const double z_up = -((double)ep.z-traj3d_z0);
             const cv::Vec3d p3(
               (double)ep.x-traj3d_n0,
               (double)ep.y-traj3d_e0,
-              z_up); // Z prefers tilt-compensated TF-Luna; falls back to FC Z
+              z_up); // 3D Z is EKF/baro vertical position; TF-Luna is surface distance only
 
             traj3d_peak_abs[0]=std::max(traj3d_peak_abs[0],std::abs(p3[0]));
             traj3d_peak_abs[1]=std::max(traj3d_peak_abs[1],std::abs(p3[1]));
@@ -1427,16 +1425,12 @@ int main(int argc,char** argv){
           const bool have_preview_p3=!traj3d_origin_set&&traj3d_preview_origin_set&&efresh;
           const bool have_p3=have_locked_p3||have_preview_p3;
           if(have_locked_p3){
-            const double z_up=(traj3d_range_origin_set && gui_range_ok)
-              ? (gui_range_vertical-traj3d_range_vertical0)
-              : -((double)ep.z-traj3d_z0);
+            const double z_up=-((double)ep.z-traj3d_z0);
             p3=cv::Vec3d((double)ep.x-traj3d_n0,
                          (double)ep.y-traj3d_e0,
                          z_up);
           } else if(have_preview_p3){
-            const double z_up=(traj3d_preview_range_origin_set && gui_range_ok)
-              ? (gui_range_vertical-traj3d_preview_range_vertical0)
-              : -((double)ep.z-traj3d_preview_z0);
+            const double z_up=-((double)ep.z-traj3d_preview_z0);
             p3=cv::Vec3d((double)ep.x-traj3d_preview_n0,
                          (double)ep.y-traj3d_preview_e0,
                          z_up);
@@ -1511,10 +1505,12 @@ int main(int argc,char** argv){
             putGuiText(hud,pos.str(),{1025,172},0.64,cv::Scalar(255,255,255),1);
             std::ostringstream zsrc;
             zsrc<<std::fixed<<std::setprecision(0)
-                <<"Z: TF-Luna с компенсацией наклона";
-            if(efresh)
-              zsrc<<"   |   Z FC "<<std::showpos
-                  <<(-((double)ep.z-traj3d_z0))*1000.0<<" мм"<<std::noshowpos;
+                <<"Z = EKF/баро";
+            if(traj3d_range_origin_set && gui_range_ok){
+              const double agl_delta_mm=(gui_range_vertical-traj3d_range_vertical0)*1000.0;
+              zsrc<<"   |   до поверхности "
+                  <<std::showpos<<agl_delta_mm<<" мм"<<std::noshowpos;
+            }
             putGuiText(hud,zsrc.str(),{1025,198},0.34,cv::Scalar(155,155,155),1);
 
             std::ostringstream ret;
@@ -1589,7 +1585,7 @@ int main(int argc,char** argv){
           std::ostringstream health;
           health<<"ОЦЕНКА FC: "<<((posrel_ok&&velh_ok)?"OK":"НЕТ ПОЗИЦИИ")
                 <<"   OF "<<(s.valid?"OK":"BAD")
-                <<"   TF-Luna "<<std::fixed<<std::setprecision(2)<<(hl?lm:-1.0)<<" м";
+                <<"   до поверхности "<<std::fixed<<std::setprecision(2)<<(hl?lm:-1.0)<<" м";
           putGuiText(hud,health.str(),{1025,562},0.43,
                      (posrel_ok&&velh_ok)?cv::Scalar(0,220,0):cv::Scalar(0,80,255),1);
 

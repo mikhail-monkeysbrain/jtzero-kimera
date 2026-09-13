@@ -1539,10 +1539,10 @@ int main(int argc,char** argv){
             putGuiText(hud,pos.str(),{1025,172},0.64,cv::Scalar(255,255,255),1);
             std::ostringstream zsrc;
             zsrc<<std::fixed<<std::setprecision(0)
-                <<"Z = EKF/баро";
+                <<"Z = оценка FC (EKF)";
             if(traj3d_range_origin_set && gui_range_ok){
               const double agl_delta_mm=(gui_range_vertical-traj3d_range_vertical0)*1000.0;
-              zsrc<<"   |   до поверхности "
+              zsrc<<"   |   Δ до поверхности "
                   <<std::showpos<<agl_delta_mm<<" мм"<<std::noshowpos;
             }
             putGuiText(hud,zsrc.str(),{1025,198},0.34,cv::Scalar(155,155,155),1);

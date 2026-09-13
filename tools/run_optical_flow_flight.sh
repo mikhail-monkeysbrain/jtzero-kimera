@@ -64,13 +64,16 @@ JT-ZERO — OPTICAL FLOW FLIGHT
 РЕАЛЬНЫЙ FLIGHT-КОНТУР:
 
   OV9281 -> OPTICAL_FLOW
-  TF-Luna -> DISTANCE_SENSOR
+  TF-Luna -> DISTANCE_SENSOR (дистанция до текущей поверхности)
+  Barometer -> EKF vertical position
   ArduPilot EKF3 -> horizontal velocity/relative position
 
 КРИТИЧЕСКИ:
   - synthetic bench height: ${BENCH_HEIGHT:-НЕТ};
   - если bench height задан, это ТОЛЬКО диагностика без взлёта;
   - без bench height в FC уходит настоящий TF-Luna range;
+  - EK3_SRC1_POSZ=1: Z EKF берётся от барометра, а НЕ от TF-Luna;
+  - это предотвращает ложный скачок Z при стол -> пол -> стол;
   - focal_scale = $FOCAL_SCALE;
   - feature ROI = $FEATURE_ROI;
   - max features = $MAX_FEATURES;

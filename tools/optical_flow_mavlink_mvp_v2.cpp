@@ -1399,8 +1399,8 @@ int main(int argc,char** argv){
           putGuiText(hud,return_target_set?l1.str():"ОЖИДАНИЕ ГОТОВНОСТИ / ТОЧКИ A",{35,40},0.85,cv::Scalar(240,240,240),2);
           putGuiText(hud,"6-DoF РЕГРЕССИЯ • CAP=500 • BRIDGE=OFF",{920,40},0.50,cv::Scalar(170,220,255),1);
           if(bench_height_override>0.0){
-            putGuiText(hud,"BENCH ONLY • СИНТЕТИЧЕСКАЯ ВЫСОТА • НЕ ARM / НЕ ВЗЛЕТАТЬ",
-                       {920,70},0.48,cv::Scalar(0,80,255),2);
+            putGuiText(hud,"РУЧНОЙ ТЕСТ • FC RANGE=0.60 м • МАСШТАБ ПО REAL TF-LUNA",
+                       {920,70},0.48,cv::Scalar(0,180,255),2);
           }
           putGuiText(hud,l2.str(),{35,75},0.65,cv::Scalar(220,220,220),2);
           putGuiText(hud,l3.str(),{35,105},0.65,cv::Scalar(220,220,220),2);

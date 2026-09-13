@@ -1260,27 +1260,17 @@ int main(int argc,char** argv){
         if(rotation_gui){
           cv::Mat hud(900,1500,CV_8UC3,cv::Scalar(18,18,18));
 
-          // 3D trajectory is the FC/EKF estimate, not an independent physical truth.
-          // Origin is set automatically once the flight-ready gate is achieved;
-          // SPACE lets the operator redefine the origin at any time.
-          if(flight_ready && efresh && !traj3d_origin_set){
-            traj3d_n0=ep.x; traj3d_e0=ep.y; traj3d_z0=ep.z;
-            traj3d_origin_set=true;
-            traj3d.clear();
-            traj3d_prev=cv::Vec3d(0,0,0);
-            traj3d_prev_set=true;
-            traj3d_path_total=0.0;
-            traj3d_path_axis=cv::Vec3d(0,0,0);
-          }
+          // This GUI is intentionally a POSITION/HOVER monitor, not a rotation diagnostic.
+          // SPACE defines the operator's hover reference from the FC's own LOCAL_POSITION_NED
+          // estimate. Repeated SPACE replaces that reference and resets distance counters.
           if(traj3d_origin_set && efresh){
             const cv::Vec3d p3(
               (double)ep.x-traj3d_n0,
               (double)ep.y-traj3d_e0,
-              -((double)ep.z-traj3d_z0)); // UP is positive
+              -((double)ep.z-traj3d_z0)); // UP positive
+
             if(traj3d_prev_set){
               const cv::Vec3d dp=p3-traj3d_prev;
-              // LOCAL_POSITION_NED is ~20 Hz. Ignore sub-mm estimator chatter,
-              // but count real hand-carried motion along each axis.
               if(cv::norm(dp)>=0.0005){
                 traj3d_path_total += cv::norm(dp);
                 traj3d_path_axis[0] += std::abs(dp[0]);
@@ -1292,205 +1282,186 @@ int main(int argc,char** argv){
               traj3d_prev=p3;
               traj3d_prev_set=true;
             }
+
             if(traj3d.empty() || cv::norm(p3-traj3d.back())>=0.002){
               traj3d.push_back(p3);
-              while(traj3d.size()>1200) traj3d.pop_front();
+              while(traj3d.size()>1600) traj3d.pop_front();
             }
           }
 
-          const double roll_deg=fg_ok?fg.roll*180.0/M_PI:0.0;
-          const double pitch_deg=fg_ok?fg.pitch*180.0/M_PI:0.0;
-          const double yaw_deg=fg_ok?fg.yaw*180.0/M_PI:0.0;
-          const double gx=fg_ok?fg.x:0.0, gy=fg_ok?fg.y:0.0;
-          const double flowx=s.valid?s.flow_body_x:0.0, flowy=s.valid?s.flow_body_y:0.0;
-          // ArduPilot MAV optical-flow backend subtracts body rotation internally.
-          // For a rotation-only diagnostic, this is the instantaneous uncompensated residual.
-          const double rx=flowx-gx;
-          const double ry=flowy-gy;
-          const double rmag=std::hypot(rx,ry);
-          double hcam=hl?lm:0.0;
-          if(hl && std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){
-            hcam=lm-(diag_camera_z_m-diag_range_z_m);
-          }
-          const double false_speed=(hcam>0.02)?rmag*hcam:0.0;
-          const double vh=efresh?std::hypot((double)ep.vx,(double)ep.vy):0.0;
+          // ------------------------------------------------------------------
+          // LEFT: large fixed-scale 3D plot. Range is ALWAYS +/-500 mm/axis.
+          // ------------------------------------------------------------------
+          const cv::Rect graph(20,20,960,850);
+          cv::rectangle(hud,graph,cv::Scalar(24,24,24),cv::FILLED);
+          cv::rectangle(hud,graph,cv::Scalar(95,95,95),1);
 
-          putGuiText(hud,"JT-ZERO — ДИАГНОСТИКА ВРАЩЕНИЯ",{35,45},0.95,cv::Scalar(240,240,240),2);
-          std::string status = flight_ready ? "СИСТЕМА ГОТОВА" : "ЖДИТЕ ГОТОВНОСТИ";
-          putGuiText(hud,status,{35,85},0.72,flight_ready?cv::Scalar(0,220,0):cv::Scalar(0,200,255),2);
+          putGuiText(hud,"ПОЛОЖЕНИЕ ОТ ТОЧКИ ЗАВИСАНИЯ",{45,55},0.72,cv::Scalar(240,240,240),1);
+          putGuiText(hud,"фиксированный масштаб ±500 мм по X / Y / Z",{45,83},0.43,cv::Scalar(165,165,165),1);
 
-          cv::rectangle(hud,cv::Rect(30,110,820,160),cv::Scalar(30,30,30),cv::FILLED);
-          cv::rectangle(hud,cv::Rect(30,110,820,160),cv::Scalar(100,100,100),1);
-          putGuiText(hud,"ПРОТОКОЛ",{50,140},0.68,cv::Scalar(0,255,255),2);
-          putGuiText(hud,"1. Дождитесь «СИСТЕМА ГОТОВА».",{50,172},0.52,cv::Scalar(230,230,230),1);
-          putGuiText(hud,"2. Коротко наклоните аппарат по КРЕНУ примерно на ±5° и верните.",{50,202},0.52,cv::Scalar(230,230,230),1);
-          putGuiText(hud,"3. Затем по ТАНГАЖУ примерно на ±5° и верните.",{50,232},0.52,cv::Scalar(230,230,230),1);
-          putGuiText(hud,"4. Не переносите аппарат по XY. После теста нажмите Q.",{50,262},0.52,cv::Scalar(230,230,230),1);
-
-          std::ostringstream a1,a2,a3,a4,a5,a6;
-          a1<<std::fixed<<std::setprecision(1)<<"КРЕН / ТАНГАЖ / КУРС: "<<roll_deg<<" / "<<pitch_deg<<" / "<<yaw_deg<<" °";
-          a2<<std::fixed<<std::setprecision(3)<<"GYRO X/Y: "<<gx<<" / "<<gy<<" рад/с";
-          a3<<std::fixed<<std::setprecision(3)<<"FLOW X/Y: "<<flowx<<" / "<<flowy<<" рад/с";
-          a4<<std::fixed<<std::setprecision(3)<<"ОСТАТОК FLOW-GYRO: "<<rx<<" / "<<ry<<" рад/с   |.|="<<rmag;
-          a5<<std::fixed<<std::setprecision(3)<<"ЭКВИВАЛЕНТНАЯ ЛОЖНАЯ СКОРОСТЬ: "<<false_speed<<" м/с";
-          a6<<std::fixed<<std::setprecision(3)<<"EKF |Vxy|: "<<vh<<" м/с   TF-Luna: "<<(hl?lm:-1.0)<<" м   задержка кадра: "<<frame_pipeline_latency_ms<<" мс";
-
-          putGuiText(hud,a1.str(),{45,330},0.66,cv::Scalar(230,230,230),2);
-          putGuiText(hud,a2.str(),{45,375},0.66,cv::Scalar(230,230,230),2);
-          putGuiText(hud,a3.str(),{45,420},0.66,cv::Scalar(230,230,230),2);
-          putGuiText(hud,a4.str(),{45,465},0.66,rmag<0.08?cv::Scalar(0,220,0):cv::Scalar(0,120,255),2);
-          putGuiText(hud,a5.str(),{45,510},0.66,false_speed<0.03?cv::Scalar(0,220,0):cv::Scalar(0,120,255),2);
-          putGuiText(hud,a6.str(),{45,555},0.56,cv::Scalar(190,190,190),1);
-
-          // Visual bars for gyro, flow and residual magnitude.
-          const double bar_scale=350.0;
-          auto draw_bar=[&](int y,double v,cv::Scalar col,const std::string& name){
-            putGuiText(hud,name,{45,y-8},0.50,cv::Scalar(190,190,190),1);
-            cv::line(hud,{300,y},{760,y},cv::Scalar(80,80,80),2);
-            const int x2=std::clamp(530+(int)std::lround(v*bar_scale),300,760);
-            cv::line(hud,{530,y},{x2,y},col,8,cv::LINE_AA);
+          const cv::Point c3(500,500);
+          const double sc3=400.0; // px/m, fixed. 500 mm = 200 px per single axis.
+          auto proj3=[&](const cv::Vec3d& p)->cv::Point{
+            const double n=std::clamp(p[0],-0.50,0.50);
+            const double e=std::clamp(p[1],-0.50,0.50);
+            const double u=std::clamp(p[2],-0.50,0.50);
+            const int x=(int)std::lround(c3.x + (e-n)*0.70*sc3);
+            const int y=(int)std::lround(c3.y + (e+n)*0.32*sc3 - u*0.95*sc3);
+            return {x,y};
           };
-          draw_bar(620,std::hypot(gx,gy),cv::Scalar(255,180,0),"|GYRO XY|");
-          draw_bar(675,std::hypot(flowx,flowy),cv::Scalar(0,255,255),"|FLOW|");
-          draw_bar(730,rmag,cv::Scalar(0,100,255),"|ОСТАТОК|");
 
-          // Live camera panel.
+          // Floor grid z=0, every 100 mm.
+          for(int k=-5;k<=5;k++){
+            const double v=0.1*k;
+            cv::line(hud,proj3(cv::Vec3d(-0.5,v,0)),proj3(cv::Vec3d(0.5,v,0)),
+                     k==0?cv::Scalar(85,85,85):cv::Scalar(48,48,48),1,cv::LINE_AA);
+            cv::line(hud,proj3(cv::Vec3d(v,-0.5,0)),proj3(cv::Vec3d(v,0.5,0)),
+                     k==0?cv::Scalar(85,85,85):cv::Scalar(48,48,48),1,cv::LINE_AA);
+          }
+
+          // Main axes, each from -500 to +500 mm.
+          cv::line(hud,proj3(cv::Vec3d(-0.5,0,0)),proj3(cv::Vec3d(0.5,0,0)),cv::Scalar(210,170,75),2,cv::LINE_AA);
+          cv::line(hud,proj3(cv::Vec3d(0,-0.5,0)),proj3(cv::Vec3d(0,0.5,0)),cv::Scalar(75,210,170),2,cv::LINE_AA);
+          cv::line(hud,proj3(cv::Vec3d(0,0,-0.5)),proj3(cv::Vec3d(0,0,0.5)),cv::Scalar(180,180,245),2,cv::LINE_AA);
+
+          putGuiText(hud,"X(N) +500",proj3(cv::Vec3d(0.5,0,0))+cv::Point(8,-4),0.38,cv::Scalar(210,170,75),1);
+          putGuiText(hud,"X -500",proj3(cv::Vec3d(-0.5,0,0))+cv::Point(-75,18),0.38,cv::Scalar(210,170,75),1);
+          putGuiText(hud,"Y(E) +500",proj3(cv::Vec3d(0,0.5,0))+cv::Point(8,-4),0.38,cv::Scalar(75,210,170),1);
+          putGuiText(hud,"Y -500",proj3(cv::Vec3d(0,-0.5,0))+cv::Point(-75,18),0.38,cv::Scalar(75,210,170),1);
+          putGuiText(hud,"Z +500",proj3(cv::Vec3d(0,0,0.5))+cv::Point(8,0),0.38,cv::Scalar(180,180,245),1);
+          putGuiText(hud,"Z -500",proj3(cv::Vec3d(0,0,-0.5))+cv::Point(8,16),0.38,cv::Scalar(180,180,245),1);
+
+          // Hover/reference point is always the graph origin.
+          cv::circle(hud,c3,12,cv::Scalar(0,220,0),2,cv::LINE_AA);
+          cv::circle(hud,c3,3,cv::Scalar(0,255,0),cv::FILLED,cv::LINE_AA);
+          putGuiText(hud,"ТОЧКА ЗАВИСАНИЯ",{c3.x+16,c3.y-10},0.40,cv::Scalar(0,220,0),1);
+
+          cv::Vec3d p3(0,0,0);
+          bool have_p3=traj3d_origin_set&&efresh;
+          if(have_p3){
+            p3=cv::Vec3d((double)ep.x-traj3d_n0,
+                         (double)ep.y-traj3d_e0,
+                         -((double)ep.z-traj3d_z0));
+
+            for(size_t i=1;i<traj3d.size();++i)
+              cv::line(hud,proj3(traj3d[i-1]),proj3(traj3d[i]),cv::Scalar(0,170,255),2,cv::LINE_AA);
+
+            const cv::Point cur=proj3(p3);
+            cv::circle(hud,cur,10,cv::Scalar(0,255,255),cv::FILLED,cv::LINE_AA);
+            cv::line(hud,c3,cur,cv::Scalar(90,90,90),1,cv::LINE_AA);
+
+            const bool outside=std::abs(p3[0])>0.5||std::abs(p3[1])>0.5||std::abs(p3[2])>0.5;
+            if(outside)
+              putGuiText(hud,"ВНЕ ДИАПАЗОНА ±500 мм",{45,118},0.52,cv::Scalar(0,80,255),1);
+          } else {
+            putGuiText(hud,"НАЖМИТЕ SPACE, ЧТОБЫ ЗАДАТЬ ТОЧКУ ЗАВИСАНИЯ",{170,435},0.62,cv::Scalar(0,210,255),1);
+          }
+
+          // ------------------------------------------------------------------
+          // RIGHT: only information needed for this PosHold experiment.
+          // ------------------------------------------------------------------
+          const cv::Rect info(1000,20,480,850);
+          cv::rectangle(hud,info,cv::Scalar(24,24,24),cv::FILLED);
+          cv::rectangle(hud,info,cv::Scalar(95,95,95),1);
+
+          putGuiText(hud,"POSHOLD — КОНТРОЛЬ ТОЧКИ",{1025,55},0.62,cv::Scalar(240,240,240),1);
+
+          std::string arm_text="ARM: НЕТ ДАННЫХ";
+          cv::Scalar arm_col(0,170,255);
+          if(arm_ok){
+            arm_text=arm_now?"ARM: ВКЛЮЧЕН (МОТОРЫ РАЗРЕШЕНЫ)":"ARM: ВЫКЛЮЧЕН";
+            arm_col=arm_now?cv::Scalar(0,220,0):cv::Scalar(190,190,190);
+          }
+          putGuiText(hud,arm_text,{1025,92},0.48,arm_col,1);
+
+          if(have_p3){
+            const double xmm=p3[0]*1000.0, ymm=p3[1]*1000.0, zmm=p3[2]*1000.0;
+            std::ostringstream pos;
+            pos<<std::fixed<<std::setprecision(0)<<std::showpos
+               <<"X "<<xmm<<" мм   Y "<<ymm<<" мм   Z "<<zmm<<" мм"<<std::noshowpos;
+            putGuiText(hud,"ТЕКУЩЕЕ ОТКЛОНЕНИЕ:",{1025,137},0.46,cv::Scalar(180,180,180),1);
+            putGuiText(hud,pos.str(),{1025,172},0.64,cv::Scalar(255,255,255),1);
+
+            std::ostringstream ret;
+            ret<<std::fixed<<std::setprecision(0)<<std::showpos
+               <<"X "<<(-xmm)<<"   Y "<<(-ymm)<<"   Z "<<(-zmm)<<" мм"<<std::noshowpos;
+            putGuiText(hud,"ДЛЯ ВОЗВРАТА К НУЛЮ:",{1025,218},0.46,cv::Scalar(180,180,180),1);
+            putGuiText(hud,ret.str(),{1025,253},0.61,
+                       cv::norm(p3)<0.015?cv::Scalar(0,255,0):cv::Scalar(0,220,255),1);
+
+            std::ostringstream dist;
+            dist<<std::fixed<<std::setprecision(0)
+                <<"РАССТОЯНИЕ ОТ ТОЧКИ: "<<cv::norm(p3)*1000.0<<" мм";
+            putGuiText(hud,dist.str(),{1025,302},0.48,cv::Scalar(220,220,220),1);
+
+            std::ostringstream walked;
+            walked<<std::fixed<<std::setprecision(0)
+                  <<"ВСЕГО: "<<traj3d_path_total*1000.0<<" мм";
+            putGuiText(hud,"ПРОЙДЕННЫЙ ПУТЬ:",{1025,352},0.46,cv::Scalar(180,180,180),1);
+            putGuiText(hud,walked.str(),{1025,385},0.50,cv::Scalar(230,230,230),1);
+
+            std::ostringstream axes;
+            axes<<std::fixed<<std::setprecision(0)
+                <<"X "<<traj3d_path_axis[0]*1000.0
+                <<"   Y "<<traj3d_path_axis[1]*1000.0
+                <<"   Z "<<traj3d_path_axis[2]*1000.0<<" мм";
+            putGuiText(hud,axes.str(),{1025,417},0.46,cv::Scalar(210,210,210),1);
+          } else {
+            putGuiText(hud,"Точка зависания ещё не задана.",{1025,145},0.48,cv::Scalar(0,210,255),1);
+          }
+
+          FlowFcTarget ct{}; FlowFcAttTarget ca{}; FlowFcOutputs co{};
+          double ct_age=1e9,ca_age=1e9,co_age=1e9;
+          fc.latestControl(&ct,&ca,&co,&ct_age,&ca_age,&co_age);
+          const bool ca_ok=ca.valid&&ca_age<500.0;
+          const bool co_ok=co.valid&&co_age<500.0;
+
+          putGuiText(hud,"КОМАНДА FC:",{1025,475},0.46,cv::Scalar(180,180,180),1);
+          if(ca_ok){
+            std::ostringstream at;
+            at<<std::fixed<<std::setprecision(1)
+              <<"крен "<<ca.roll*180.0/M_PI<<"°   тангаж "<<ca.pitch*180.0/M_PI<<"°";
+            putGuiText(hud,at.str(),{1025,508},0.50,cv::Scalar(230,230,230),1);
+          }else{
+            putGuiText(hud,"крен/тангаж: нет данных",{1025,508},0.46,cv::Scalar(150,150,150),1);
+          }
+
+          if(co_ok){
+            std::ostringstream motors;
+            motors<<"M1 "<<co.pwm[0]<<"  M2 "<<co.pwm[1]
+                  <<"  M3 "<<co.pwm[2]<<"  M4 "<<co.pwm[3];
+            putGuiText(hud,motors.str(),{1025,542},0.45,cv::Scalar(0,220,0),1);
+          }else{
+            putGuiText(hud,"M1..M4: нет данных",{1025,542},0.45,cv::Scalar(150,150,150),1);
+          }
+
+          const bool posrel_ok=esfresh && (es.flags & EKF_POS_HORIZ_REL);
+          const bool velh_ok=esfresh && (es.flags & EKF_VELOCITY_HORIZ);
+          std::ostringstream health;
+          health<<"ОЦЕНКА FC: "<<((posrel_ok&&velh_ok)?"OK":"НЕТ ПОЗИЦИИ")
+                <<"   OF "<<(s.valid?"OK":"BAD")
+                <<"   TF-Luna "<<std::fixed<<std::setprecision(2)<<(hl?lm:-1.0)<<" м";
+          putGuiText(hud,health.str(),{1025,598},0.43,
+                     (posrel_ok&&velh_ok)?cv::Scalar(0,220,0):cv::Scalar(0,80,255),1);
+
+          // Small live camera: useful, but no longer dominates the GUI.
           cv::Mat cam_bgr,cam_view;
           cv::cvtColor(gray,cam_bgr,cv::COLOR_GRAY2BGR);
-          const int cam_w=560;
+          const int cam_w=430;
           const int cam_h=(int)std::lround((double)cam_bgr.rows*cam_w/cam_bgr.cols);
           cv::resize(cam_bgr,cam_view,cv::Size(cam_w,cam_h),0,0,cv::INTER_AREA);
-          const int cam_x=910, cam_y=120;
+          const int cam_x=1025, cam_y=625;
           if(cam_y+cam_h<=hud.rows && cam_x+cam_w<=hud.cols){
             cam_view.copyTo(hud(cv::Rect(cam_x,cam_y,cam_w,cam_h)));
             const int rx0=cam_x+(int)std::lround(g_feature_roi.x0*cam_w);
             const int ry0=cam_y+(int)std::lround(g_feature_roi.y0*cam_h);
             const int rx1=cam_x+(int)std::lround(g_feature_roi.x1*cam_w);
             const int ry1=cam_y+(int)std::lround(g_feature_roi.y1*cam_h);
-            cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),cv::Scalar(0,255,255),2,cv::LINE_AA);
-            putGuiText(hud,"OV9281 — ЖИВОЕ ВИДЕО",{cam_x,85},0.76,cv::Scalar(240,240,240),2);
-            if(bench_height_override<=0.0){
-              putGuiText(hud,"FLIGHT MONITOR • REAL TF-LUNA • CAP=500",
-                         {45,55},0.68,cv::Scalar(0,255,0),2);
-              const bool posrel_ok=esfresh && (es.flags & EKF_POS_HORIZ_REL);
-              const bool velh_ok=esfresh && (es.flags & EKF_VELOCITY_HORIZ);
-              std::ostringstream fs;
-              fs<<"EKF relative aiding: "<<(posrel_ok&&velh_ok?"OK":"NO")
-                <<"   OF valid: "<<(s.valid?1:0)
-                <<"   sent: "<<(flow_sent?1:0)
-                <<"   stale: "<<stale_flow_rejected_total
-                <<"   invalid: "<<flow_invalid_total;
-              putGuiText(hud,fs.str(),{45,105},0.52,
-                         (posrel_ok&&velh_ok)?cv::Scalar(0,220,0):cv::Scalar(0,80,255),2);
-            }
-          }
-          // POSHOLD CONTROL CHAIN — одна панель показывает всю причинную цепочку.
-          // Важно: POSITION_TARGET_LOCAL_NED/ATTITUDE_TARGET могут не публиковаться
-          // конкретным режимом ArduCopter. В таком случае показываем НЕТ ДАННЫХ,
-          // а не подменяем желаемое состояние фактическим.
-          FlowFcTarget ct{}; FlowFcAttTarget ca{}; FlowFcOutputs co{};
-          double ct_age=1e9,ca_age=1e9,co_age=1e9;
-          fc.latestControl(&ct,&ca,&co,&ct_age,&ca_age,&co_age);
-          const bool ct_ok=ct.valid&&ct_age<500.0;
-          const bool ca_ok=ca.valid&&ca_age<500.0;
-          const bool co_ok=co.valid&&co_age<500.0;
-
-          cv::rectangle(hud,cv::Rect(35,390,830,420),cv::Scalar(28,28,28),cv::FILLED);
-          putGuiText(hud,"ЦЕПОЧКА УПРАВЛЕНИЯ POSHOLD",{55,425},0.70,cv::Scalar(255,255,255),2);
-          std::ostringstream l1,l2,l3,l4,l5;
-          if(efresh){
-            l1<<std::fixed<<std::setprecision(3)
-              <<"1. FC СЧИТАЕТ СКОРОСТЬ: N "<<ep.vx<<"  E "<<ep.vy<<" м/с";
-            l2<<"2. FC СЧИТАЕТ ПОЛОЖЕНИЕ: N "<<ep.x<<"  E "<<ep.y<<" м";
-          } else { l1<<"1. FC СЧИТАЕТ СКОРОСТЬ: НЕТ ДАННЫХ"; l2<<"2. FC СЧИТАЕТ ПОЛОЖЕНИЕ: НЕТ ДАННЫХ"; }
-          if(ct_ok){
-            l3<<std::fixed<<std::setprecision(3)
-              <<"3. FC ХОЧЕТ СКОРОСТЬ: N "<<ct.vx<<"  E "<<ct.vy<<" м/с";
-          } else l3<<"3. FC ХОЧЕТ СКОРОСТЬ: НЕТ ДАННЫХ ОТ ЭТОГО РЕЖИМА";
-          if(ca_ok){
-            l4<<std::fixed<<std::setprecision(1)
-              <<"4. FC ХОЧЕТ НАКЛОН: крен "<<ca.roll*180.0/M_PI
-              <<"°  тангаж "<<ca.pitch*180.0/M_PI<<"°";
-          } else l4<<"4. FC ХОЧЕТ НАКЛОН: НЕТ ДАННЫХ ОТ ЭТОГО РЕЖИМА";
-          if(co_ok){
-            l5<<"5. МОТОРЫ 1..4:";
-            for(int i=0;i<4;i++) l5<<" "<<co.pwm[i];
-          } else l5<<"5. МОТОРЫ 1..4: НЕТ ДАННЫХ";
-          putGuiText(hud,l1.str(),{55,475},0.55,cv::Scalar(230,230,230),1);
-          putGuiText(hud,l2.str(),{55,520},0.55,cv::Scalar(230,230,230),1);
-          putGuiText(hud,l3.str(),{55,575},0.55,ct_ok?cv::Scalar(0,255,255):cv::Scalar(0,170,255),1);
-          putGuiText(hud,l4.str(),{55,630},0.55,ca_ok?cv::Scalar(0,255,255):cv::Scalar(0,170,255),1);
-          putGuiText(hud,l5.str(),{55,685},0.48,co_ok?cv::Scalar(0,255,0):cv::Scalar(0,170,255),1);
-          putGuiText(hud,"Сначала DISARMED. Перемещайте аппарат рукой и смотрите знаки N/E.",
-                     {55,745},0.48,cv::Scalar(200,200,200),1);
-          putGuiText(hud,"НЕТ ДАННЫХ означает: FC не выдаёт этот MAVLink-показатель; значение не угадывается.",
-                     {55,780},0.43,cv::Scalar(170,170,170),1);
-          // 3D position panel (FC estimate). Isometric projection:
-          // N = north, E = east, U = up. This makes vertical motion visible too.
-          const cv::Rect box3d(900,500,565,330);
-          cv::rectangle(hud,box3d,cv::Scalar(28,28,28),cv::FILLED);
-          cv::rectangle(hud,box3d,cv::Scalar(90,90,90),1);
-          putGuiText(hud,"ПОЗИЦИЯ ОТ ТОЧКИ ЗАВИСАНИЯ (ОЦЕНКА FC)",{920,530},0.56,cv::Scalar(245,245,245),2);
-          putGuiText(hud,"SPACE — запомнить ТЕКУЩУЮ позицию как точку зависания",{920,558},0.40,cv::Scalar(190,190,190),1);
-
-          const cv::Point c3(1180,735);
-          const double sc3=360.0; // fixed: 0.50 m -> 180 px; scale never changes
-          auto proj3=[&](const cv::Vec3d& p)->cv::Point{
-            const double n=p[0],e=p[1],u=p[2];
-            const int x=(int)std::lround(c3.x + (e-n)*0.70*sc3);
-            const int y=(int)std::lround(c3.y + (e+n)*0.32*sc3 - u*0.95*sc3);
-            return {std::clamp(x,box3d.x+8,box3d.x+box3d.width-8),
-                    std::clamp(y,box3d.y+42,box3d.y+box3d.height-8)};
-          };
-          const cv::Vec3d axisN(0.10,0,0);
-          const cv::Vec3d axisE(0,0.10,0);
-          const cv::Vec3d axisU(0,0,0.10);
-          cv::circle(hud,c3,5,cv::Scalar(180,180,180),cv::FILLED);
-          cv::line(hud,c3,proj3(axisN),cv::Scalar(220,180,80),2,cv::LINE_AA);
-          cv::line(hud,c3,proj3(axisE),cv::Scalar(80,220,180),2,cv::LINE_AA);
-          cv::line(hud,c3,proj3(axisU),cv::Scalar(180,180,255),2,cv::LINE_AA);
-          putGuiText(hud,"N",proj3(axisN)+cv::Point(4,-4),0.42,cv::Scalar(220,180,80),1);
-          putGuiText(hud,"E",proj3(axisE)+cv::Point(4,-4),0.42,cv::Scalar(80,220,180),1);
-          putGuiText(hud,"UP",proj3(axisU)+cv::Point(4,-4),0.42,cv::Scalar(180,180,255),1);
-
-          if(traj3d_origin_set && !traj3d.empty()){
-            for(size_t i=1;i<traj3d.size();++i)
-              cv::line(hud,proj3(traj3d[i-1]),proj3(traj3d[i]),cv::Scalar(0,190,255),2,cv::LINE_AA);
-            const auto& p3=traj3d.back();
-            const cv::Point cur3=proj3(p3);
-            cv::circle(hud,cur3,8,cv::Scalar(0,255,255),cv::FILLED,cv::LINE_AA);
-            const double nmm=p3[0]*1000.0, emm=p3[1]*1000.0, umm=p3[2]*1000.0;
-            std::ostringstream p3s;
-            p3s<<std::fixed<<std::setprecision(0)
-               <<"X(N) "<<std::showpos<<nmm<<" мм   Y(E) "<<emm<<" мм   Z(UP) "<<umm<<" мм"<<std::noshowpos;
-            putGuiText(hud,p3s.str(),{920,590},0.52,cv::Scalar(230,230,230),2);
-
-            std::ostringstream d3s;
-            d3s<<std::fixed<<std::setprecision(0)
-               <<"ОТ ТОЧКИ: "<<cv::norm(p3)*1000.0<<" мм";
-            putGuiText(hud,d3s.str(),{920,620},0.46,cv::Scalar(220,220,220),1);
-
-            std::ostringstream paths;
-            paths<<std::fixed<<std::setprecision(0)
-                 <<"ПРОЙДЕНО: всего "<<traj3d_path_total*1000.0
-                 <<" мм | X "<<traj3d_path_axis[0]*1000.0
-                 <<" | Y "<<traj3d_path_axis[1]*1000.0
-                 <<" | Z "<<traj3d_path_axis[2]*1000.0<<" мм";
-            putGuiText(hud,paths.str(),{920,648},0.39,cv::Scalar(200,200,200),1);
-
-            std::ostringstream hint;
-            hint<<std::fixed<<std::setprecision(0)
-                <<"ДЛЯ ВОЗВРАТА: X "<<std::showpos<<(-nmm)
-                <<"  Y "<<(-emm)<<"  Z "<<(-umm)<<" мм"<<std::noshowpos;
-            putGuiText(hud,hint.str(),{920,675},0.43,
-                       cv::norm(p3)<0.015?cv::Scalar(0,255,0):cv::Scalar(0,220,255),2);
-
-            putGuiText(hud,"ФИКСИРОВАННЫЙ МАСШТАБ: ±500 мм ПО X/Y/Z",{920,703},0.36,cv::Scalar(170,170,170),1);
-          }else{
-            putGuiText(hud,"Ждём СИСТЕМА ГОТОВА для установки нуля",{920,595},0.46,cv::Scalar(0,200,255),1);
+            cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),cv::Scalar(0,255,255),1,cv::LINE_AA);
           }
 
-          putGuiText(hud,"Q / ESC — ЗАВЕРШИТЬ ТЕСТ",{45,855},0.58,cv::Scalar(180,180,180),1);
+          putGuiText(hud,"SPACE — новая точка зависания      Q / ESC — выход",
+                     {1025,852},0.39,cv::Scalar(170,170,170),1);
 
           cv::imshow(rotation_window_name,hud);
           const int rkey=cv::waitKey(1)&0xff;
@@ -1504,7 +1475,9 @@ int main(int argc,char** argv){
             traj3d_path_total=0.0;
             traj3d_path_axis=cv::Vec3d(0,0,0);
             std::cerr<<"3D GUI HOVER POINT: current FC estimate accepted as X/Y/Z = 0/0/0; path counters reset\n";
-          } else if(rkey=='q'||rkey=='Q'||rkey==27) g_running=false;
+          } else if(rkey=='q'||rkey=='Q'||rkey==27){
+            g_running=false;
+          }
         }
 
         if(return_gui){

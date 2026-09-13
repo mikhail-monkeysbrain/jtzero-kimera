@@ -821,7 +821,11 @@ int main(int argc,char** argv){
     double return_b_ned_n=0.0,return_b_ned_e=0.0;
     int pending_return_event=0; // 1=A/target, 2=B/turn, 3=H/physical-home mark
     const std::string return_window_name="JT-Zero — Возврат в исходную точку";
-    const std::string rotation_window_name="JT-Zero — Диагностика вращения";
+    const std::string rotation_window_name="JT-Zero — Полёт / 3D положение";
+    bool traj3d_origin_set=false;
+    double traj3d_n0=0.0,traj3d_e0=0.0,traj3d_z0=0.0;
+    double traj3d_halfspan_m=0.50;
+    std::deque<cv::Vec3d> traj3d; // N,E,UP relative to reset point
     if(return_gui || rotation_gui) initGuiFont();
     if(return_gui){
       cv::namedWindow(return_window_name,cv::WINDOW_NORMAL);
@@ -832,8 +836,8 @@ int main(int argc,char** argv){
     if(rotation_gui){
       cv::namedWindow(rotation_window_name,cv::WINDOW_NORMAL);
       cv::resizeWindow(rotation_window_name,1500,900);
-      std::cerr<<"GUI ВРАЩЕНИЯ: отдельная диагностика roll/pitch/yaw без A/B/H.\n"
-               <<"Клавиши: Q/ESC=выход.\n";
+      std::cerr<<"GUI ПОЛЁТА: состояние Optical Flow + 3D положение по оценке FC.\n"
+               <<"SPACE = принять текущую точку за новый 0; Q/ESC = выход.\n";
     }
 
     std::atomic<int> guide_stage{0}; // 0=pre-static, 1=move, 2=post-static, 3=wait-next, 4=done
@@ -1250,6 +1254,29 @@ int main(int argc,char** argv){
         if(rotation_gui){
           cv::Mat hud(900,1500,CV_8UC3,cv::Scalar(18,18,18));
 
+          // 3D trajectory is the FC/EKF estimate, not an independent physical truth.
+          // Origin is set automatically once the flight-ready gate is achieved;
+          // SPACE lets the operator redefine the origin at any time.
+          if(flight_ready && efresh && !traj3d_origin_set){
+            traj3d_n0=ep.x; traj3d_e0=ep.y; traj3d_z0=ep.z;
+            traj3d_origin_set=true;
+            traj3d.clear();
+            traj3d_halfspan_m=0.50;
+          }
+          if(traj3d_origin_set && efresh){
+            const cv::Vec3d p3(
+              (double)ep.x-traj3d_n0,
+              (double)ep.y-traj3d_e0,
+              -((double)ep.z-traj3d_z0)); // UP is positive on screen/report
+            if(traj3d.empty() || cv::norm(p3-traj3d.back())>=0.002){
+              traj3d.push_back(p3);
+              while(traj3d.size()>1200) traj3d.pop_front();
+            }
+            traj3d_halfspan_m=std::max(0.25,std::max(traj3d_halfspan_m*0.9995,
+              1.25*std::max({std::abs(p3[0]),std::abs(p3[1]),std::abs(p3[2])})));
+            traj3d_halfspan_m=std::min(traj3d_halfspan_m,10.0);
+          }
+
           const double roll_deg=fg_ok?fg.roll*180.0/M_PI:0.0;
           const double pitch_deg=fg_ok?fg.pitch*180.0/M_PI:0.0;
           const double yaw_deg=fg_ok?fg.yaw*180.0/M_PI:0.0;
@@ -1377,11 +1404,64 @@ int main(int argc,char** argv){
                      {55,745},0.48,cv::Scalar(200,200,200),1);
           putGuiText(hud,"НЕТ ДАННЫХ означает: FC не выдаёт этот MAVLink-показатель; значение не угадывается.",
                      {55,780},0.43,cv::Scalar(170,170,170),1);
+          // 3D position panel (FC estimate). Isometric projection:
+          // N = north, E = east, U = up. This makes vertical motion visible too.
+          const cv::Rect box3d(900,500,565,330);
+          cv::rectangle(hud,box3d,cv::Scalar(28,28,28),cv::FILLED);
+          cv::rectangle(hud,box3d,cv::Scalar(90,90,90),1);
+          putGuiText(hud,"3D ПОЛОЖЕНИЕ ПО ОЦЕНКЕ FC",{920,530},0.62,cv::Scalar(245,245,245),2);
+          putGuiText(hud,"SPACE — текущая точка = 0",{920,558},0.46,cv::Scalar(190,190,190),1);
+
+          const cv::Point c3(1180,710);
+          const double sc3=180.0/std::max(0.25,traj3d_halfspan_m);
+          auto proj3=[&](const cv::Vec3d& p)->cv::Point{
+            const double n=p[0],e=p[1],u=p[2];
+            const int x=(int)std::lround(c3.x + (e-n)*0.70*sc3);
+            const int y=(int)std::lround(c3.y + (e+n)*0.32*sc3 - u*0.95*sc3);
+            return {std::clamp(x,box3d.x+8,box3d.x+box3d.width-8),
+                    std::clamp(y,box3d.y+42,box3d.y+box3d.height-8)};
+          };
+          const cv::Vec3d axisN(0.18*traj3d_halfspan_m,0,0);
+          const cv::Vec3d axisE(0,0.18*traj3d_halfspan_m,0);
+          const cv::Vec3d axisU(0,0,0.18*traj3d_halfspan_m);
+          cv::circle(hud,c3,5,cv::Scalar(180,180,180),cv::FILLED);
+          cv::line(hud,c3,proj3(axisN),cv::Scalar(220,180,80),2,cv::LINE_AA);
+          cv::line(hud,c3,proj3(axisE),cv::Scalar(80,220,180),2,cv::LINE_AA);
+          cv::line(hud,c3,proj3(axisU),cv::Scalar(180,180,255),2,cv::LINE_AA);
+          putGuiText(hud,"N",proj3(axisN)+cv::Point(4,-4),0.42,cv::Scalar(220,180,80),1);
+          putGuiText(hud,"E",proj3(axisE)+cv::Point(4,-4),0.42,cv::Scalar(80,220,180),1);
+          putGuiText(hud,"UP",proj3(axisU)+cv::Point(4,-4),0.42,cv::Scalar(180,180,255),1);
+
+          if(traj3d_origin_set && !traj3d.empty()){
+            for(size_t i=1;i<traj3d.size();++i)
+              cv::line(hud,proj3(traj3d[i-1]),proj3(traj3d[i]),cv::Scalar(0,190,255),2,cv::LINE_AA);
+            const auto& p3=traj3d.back();
+            const cv::Point cur3=proj3(p3);
+            cv::circle(hud,cur3,8,cv::Scalar(0,255,255),cv::FILLED,cv::LINE_AA);
+            std::ostringstream p3s;
+            p3s<<std::fixed<<std::setprecision(3)
+               <<"ΔN "<<p3[0]<<" м   ΔE "<<p3[1]<<" м   ΔUP "<<p3[2]<<" м";
+            putGuiText(hud,p3s.str(),{920,595},0.50,cv::Scalar(230,230,230),1);
+            std::ostringstream d3s;
+            d3s<<std::fixed<<std::setprecision(3)
+               <<"3D расстояние от 0: "<<cv::norm(p3)<<" м";
+            putGuiText(hud,d3s.str(),{920,625},0.48,cv::Scalar(220,220,220),1);
+          }else{
+            putGuiText(hud,"Ждём СИСТЕМА ГОТОВА для установки нуля",{920,595},0.46,cv::Scalar(0,200,255),1);
+          }
+
           putGuiText(hud,"Q / ESC — ЗАВЕРШИТЬ ТЕСТ",{45,855},0.58,cv::Scalar(180,180,180),1);
 
           cv::imshow(rotation_window_name,hud);
           const int rkey=cv::waitKey(1)&0xff;
-          if(rkey=='q'||rkey=='Q'||rkey==27) g_running=false;
+          if(rkey==' ' && efresh){
+            traj3d_n0=ep.x; traj3d_e0=ep.y; traj3d_z0=ep.z;
+            traj3d_origin_set=true;
+            traj3d.clear();
+            traj3d.emplace_back(0.0,0.0,0.0);
+            traj3d_halfspan_m=0.50;
+            std::cerr<<"3D GUI RESET: current FC position accepted as N/E/UP = 0/0/0\n";
+          } else if(rkey=='q'||rkey=='Q'||rkey==27) g_running=false;
         }
 
         if(return_gui){

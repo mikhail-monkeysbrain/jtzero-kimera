@@ -40,10 +40,10 @@ cv::Ptr<cv::freetype::FreeType2> g_gui_font;
 bool initGuiFont(){
 #if JTZERO_GUI_FREETYPE
   const std::array<const char*,6> candidates{{
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
     "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
     "/usr/share/fonts/opentype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans.ttf"
   }};
@@ -67,7 +67,9 @@ void putGuiText(cv::Mat& img,const std::string& text,cv::Point org,
 #if JTZERO_GUI_FREETYPE
   if(g_gui_font){
     const int h=std::max(12,(int)std::lround(31.0*scale));
-    g_gui_font->putText(img,text,org,h,color,thickness,cv::LINE_AA,true);
+    // FreeType: thickness > 0 draws only the glyph contour. That produced the
+    // hollow/outlined text seen in the GUI. Use filled anti-aliased glyphs.
+    g_gui_font->putText(img,text,org,h,color,-1,cv::LINE_AA,true);
     return;
   }
 #endif
@@ -832,6 +834,8 @@ int main(int argc,char** argv){
     bool traj3d_prev_set=false;
     double traj3d_path_total=0.0;              // accumulated 3D path length, m
     cv::Vec3d traj3d_path_axis(0,0,0);         // accumulated |dN|,|dE|,|dUP|, m
+    bool traj3d_preview_origin_set=false;       // live preview before SPACE
+    double traj3d_preview_n0=0.0,traj3d_preview_e0=0.0,traj3d_preview_z0=0.0
     if(return_gui || rotation_gui) initGuiFont();
     if(return_gui){
       cv::namedWindow(return_window_name,cv::WINDOW_NORMAL);
@@ -1260,6 +1264,14 @@ int main(int argc,char** argv){
         if(rotation_gui){
           cv::Mat hud(900,1500,CV_8UC3,cv::Scalar(18,18,18));
 
+          // Before SPACE, still show that the graph is live by using the first
+          // available FC position as a temporary preview origin. SPACE replaces
+          // it with the operator-selected hover point and resets all counters.
+          if(efresh && !traj3d_preview_origin_set){
+            traj3d_preview_n0=ep.x; traj3d_preview_e0=ep.y; traj3d_preview_z0=ep.z;
+            traj3d_preview_origin_set=true;
+          }
+
           // This GUI is intentionally a POSITION/HOVER monitor, not a rotation diagnostic.
           // SPACE defines the operator's hover reference from the FC's own LOCAL_POSITION_NED
           // estimate. Repeated SPACE replaces that reference and resets distance counters.
@@ -1337,24 +1349,32 @@ int main(int argc,char** argv){
           putGuiText(hud,"ТОЧКА ЗАВИСАНИЯ",{c3.x+16,c3.y-10},0.40,cv::Scalar(0,220,0),1);
 
           cv::Vec3d p3(0,0,0);
-          bool have_p3=traj3d_origin_set&&efresh;
-          if(have_p3){
+          const bool have_locked_p3=traj3d_origin_set&&efresh;
+          const bool have_preview_p3=!traj3d_origin_set&&traj3d_preview_origin_set&&efresh;
+          const bool have_p3=have_locked_p3||have_preview_p3;
+          if(have_locked_p3){
             p3=cv::Vec3d((double)ep.x-traj3d_n0,
                          (double)ep.y-traj3d_e0,
                          -((double)ep.z-traj3d_z0));
+          } else if(have_preview_p3){
+            p3=cv::Vec3d((double)ep.x-traj3d_preview_n0,
+                         (double)ep.y-traj3d_preview_e0,
+                         -((double)ep.z-traj3d_preview_z0));
+          }
 
-            for(size_t i=1;i<traj3d.size();++i)
-              cv::line(hud,proj3(traj3d[i-1]),proj3(traj3d[i]),cv::Scalar(0,170,255),2,cv::LINE_AA);
+          if(have_p3){
+            if(have_locked_p3){
+              for(size_t i=1;i<traj3d.size();++i)
+                cv::line(hud,proj3(traj3d[i-1]),proj3(traj3d[i]),cv::Scalar(0,170,255),2,cv::LINE_AA);
+            }
 
             const cv::Point cur=proj3(p3);
-            cv::circle(hud,cur,10,cv::Scalar(0,255,255),cv::FILLED,cv::LINE_AA);
+            cv::circle(hud,cur,11,have_locked_p3?cv::Scalar(0,255,255):cv::Scalar(220,220,220),cv::FILLED,cv::LINE_AA);
             cv::line(hud,c3,cur,cv::Scalar(90,90,90),1,cv::LINE_AA);
 
             const bool outside=std::abs(p3[0])>0.5||std::abs(p3[1])>0.5||std::abs(p3[2])>0.5;
             if(outside)
               putGuiText(hud,"ВНЕ ДИАПАЗОНА ±500 мм",{45,118},0.52,cv::Scalar(0,80,255),1);
-          } else {
-            putGuiText(hud,"НАЖМИТЕ SPACE, ЧТОБЫ ЗАДАТЬ ТОЧКУ ЗАВИСАНИЯ",{170,435},0.62,cv::Scalar(0,210,255),1);
           }
 
           // ------------------------------------------------------------------
@@ -1407,7 +1427,15 @@ int main(int argc,char** argv){
                 <<"   Z "<<traj3d_path_axis[2]*1000.0<<" мм";
             putGuiText(hud,axes.str(),{1025,417},0.46,cv::Scalar(210,210,210),1);
           } else {
-            putGuiText(hud,"Точка зависания ещё не задана.",{1025,145},0.48,cv::Scalar(0,210,255),1);
+            putGuiText(hud,"ТОЧКА ЗАВИСАНИЯ НЕ ЗАДАНА",{1025,145},0.48,cv::Scalar(0,210,255),1);
+            putGuiText(hud,"Нажмите SPACE в нужной физической точке.",{1025,178},0.43,cv::Scalar(220,220,220),1);
+            if(have_preview_p3){
+              const double xmm=p3[0]*1000.0, ymm=p3[1]*1000.0, zmm=p3[2]*1000.0;
+              std::ostringstream prev;
+              prev<<std::fixed<<std::setprecision(0)<<std::showpos
+                  <<"живое превью: X "<<xmm<<"  Y "<<ymm<<"  Z "<<zmm<<" мм"<<std::noshowpos;
+              putGuiText(hud,prev.str(),{1025,211},0.41,cv::Scalar(180,180,180),1);
+            }
           }
 
           FlowFcTarget ct{}; FlowFcAttTarget ca{}; FlowFcOutputs co{};
@@ -1416,23 +1444,23 @@ int main(int argc,char** argv){
           const bool ca_ok=ca.valid&&ca_age<500.0;
           const bool co_ok=co.valid&&co_age<500.0;
 
-          putGuiText(hud,"КОМАНДА FC:",{1025,475},0.46,cv::Scalar(180,180,180),1);
+          putGuiText(hud,"КОМАНДА FC:",{1025,450},0.46,cv::Scalar(180,180,180),1);
           if(ca_ok){
             std::ostringstream at;
             at<<std::fixed<<std::setprecision(1)
               <<"крен "<<ca.roll*180.0/M_PI<<"°   тангаж "<<ca.pitch*180.0/M_PI<<"°";
-            putGuiText(hud,at.str(),{1025,508},0.50,cv::Scalar(230,230,230),1);
+            putGuiText(hud,at.str(),{1025,482},0.50,cv::Scalar(230,230,230),1);
           }else{
-            putGuiText(hud,"крен/тангаж: нет данных",{1025,508},0.46,cv::Scalar(150,150,150),1);
+            putGuiText(hud,"крен/тангаж: нет данных",{1025,482},0.46,cv::Scalar(150,150,150),1);
           }
 
           if(co_ok){
             std::ostringstream motors;
             motors<<"M1 "<<co.pwm[0]<<"  M2 "<<co.pwm[1]
                   <<"  M3 "<<co.pwm[2]<<"  M4 "<<co.pwm[3];
-            putGuiText(hud,motors.str(),{1025,542},0.45,cv::Scalar(0,220,0),1);
+            putGuiText(hud,motors.str(),{1025,514},0.45,cv::Scalar(0,220,0),1);
           }else{
-            putGuiText(hud,"M1..M4: нет данных",{1025,542},0.45,cv::Scalar(150,150,150),1);
+            putGuiText(hud,"M1..M4: нет данных",{1025,514},0.45,cv::Scalar(150,150,150),1);
           }
 
           const bool posrel_ok=esfresh && (es.flags & EKF_POS_HORIZ_REL);
@@ -1441,32 +1469,34 @@ int main(int argc,char** argv){
           health<<"ОЦЕНКА FC: "<<((posrel_ok&&velh_ok)?"OK":"НЕТ ПОЗИЦИИ")
                 <<"   OF "<<(s.valid?"OK":"BAD")
                 <<"   TF-Luna "<<std::fixed<<std::setprecision(2)<<(hl?lm:-1.0)<<" м";
-          putGuiText(hud,health.str(),{1025,598},0.43,
+          putGuiText(hud,health.str(),{1025,552},0.43,
                      (posrel_ok&&velh_ok)?cv::Scalar(0,220,0):cv::Scalar(0,80,255),1);
 
-          // Small live camera: useful, but no longer dominates the GUI.
+          // Compact live camera preview. Previous 430x322 image did not fit into
+          // the 900px HUD at y=625, so it was silently not drawn.
+          putGuiText(hud,"КАМЕРА OV9281",{1025,598},0.42,cv::Scalar(190,190,190),1);
           cv::Mat cam_bgr,cam_view;
           cv::cvtColor(gray,cam_bgr,cv::COLOR_GRAY2BGR);
-          const int cam_w=430;
+          const int cam_w=300;
           const int cam_h=(int)std::lround((double)cam_bgr.rows*cam_w/cam_bgr.cols);
           cv::resize(cam_bgr,cam_view,cv::Size(cam_w,cam_h),0,0,cv::INTER_AREA);
-          const int cam_x=1025, cam_y=625;
-          if(cam_y+cam_h<=hud.rows && cam_x+cam_w<=hud.cols){
-            cam_view.copyTo(hud(cv::Rect(cam_x,cam_y,cam_w,cam_h)));
-            const int rx0=cam_x+(int)std::lround(g_feature_roi.x0*cam_w);
-            const int ry0=cam_y+(int)std::lround(g_feature_roi.y0*cam_h);
-            const int rx1=cam_x+(int)std::lround(g_feature_roi.x1*cam_w);
-            const int ry1=cam_y+(int)std::lround(g_feature_roi.y1*cam_h);
-            cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),cv::Scalar(0,255,255),1,cv::LINE_AA);
-          }
+          const int cam_x=1025, cam_y=612;
+          cam_view.copyTo(hud(cv::Rect(cam_x,cam_y,cam_w,cam_h)));
+          const int rx0=cam_x+(int)std::lround(g_feature_roi.x0*cam_w);
+          const int ry0=cam_y+(int)std::lround(g_feature_roi.y0*cam_h);
+          const int rx1=cam_x+(int)std::lround(g_feature_roi.x1*cam_w);
+          const int ry1=cam_y+(int)std::lround(g_feature_roi.y1*cam_h);
+          cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),cv::Scalar(0,255,255),1,cv::LINE_AA);
 
-          putGuiText(hud,"SPACE — новая точка зависания      Q / ESC — выход",
-                     {1025,852},0.39,cv::Scalar(170,170,170),1);
+          putGuiText(hud,"SPACE — задать/сменить точку      Q / ESC — выход",
+                     {1025,862},0.38,cv::Scalar(170,170,170),1);
 
           cv::imshow(rotation_window_name,hud);
           const int rkey=cv::waitKey(1)&0xff;
           if(rkey==' ' && efresh){
             traj3d_n0=ep.x; traj3d_e0=ep.y; traj3d_z0=ep.z;
+            traj3d_preview_n0=ep.x; traj3d_preview_e0=ep.y; traj3d_preview_z0=ep.z;
+            traj3d_preview_origin_set=true;
             traj3d_origin_set=true;
             traj3d.clear();
             traj3d.emplace_back(0.0,0.0,0.0);

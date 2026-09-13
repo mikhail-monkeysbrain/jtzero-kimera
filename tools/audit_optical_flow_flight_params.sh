@@ -63,7 +63,6 @@ expected={
   "FLOW_FXSCALER":0,
   "FLOW_FYSCALER":0,
   "EK3_FLOW_DELAY":0,
-  "EK3_FLOW_MAX":4.0,
   "EK3_SRC1_POSXY":0,
   "EK3_SRC1_VELXY":5,
   "EK3_SRC1_POSZ":2,
@@ -99,6 +98,11 @@ if fail:
     print("RESULT: FAIL")
     print("Flight launcher НЕ запускать до устранения несоответствий.")
     raise SystemExit(1)
+
+flow_max=vals.get("EK3_FLOW_MAX")
+if flow_max is not None:
+    print(f"INFO  EK3_FLOW_MAX       = {flow_max:g} rad/s (read-only; не меняется этим preflight)")
+    print("      Это tuning-предел EKF, а не автоматически равный пределу publisher.")
 
 print("RESULT: PASS")
 print("FC source configuration соответствует проверенному OpticalFlow flight-контуру.")

@@ -47,7 +47,7 @@ for line in text.splitlines():
 exp={
  "INS_POS1_X":0.0, "INS_POS1_Y":0.0, "INS_POS1_Z":0.0,
  "FLOW_POS_X":0.0625, "FLOW_POS_Y":0.0, "FLOW_POS_Z":0.0500,
- "RNGFND1_POS_X":-0.0150, "RNGFND1_POS_Y":0.0, "RNGFND1_POS_Z":0.0710,
+ "RNGFND1_POS_X":0.0855, "RNGFND1_POS_Y":0.0, "RNGFND1_POS_Z":0.0550,
 }
 failed=[]
 for k,e in exp.items():
@@ -64,5 +64,5 @@ if failed:
     for s in failed: print("  "+s)
     raise SystemExit(1)
 print("RESULT: PASS")
-print("Current temporary-mount sensor offsets match the validated bench geometry.")
+print("Current temporary-mount sensor offsets match the relocated TF-Luna geometry.")
 PY

@@ -834,6 +834,7 @@ int main(int argc,char** argv){
     bool traj3d_prev_set=false;
     double traj3d_path_total=0.0;              // accumulated 3D path length, m
     cv::Vec3d traj3d_path_axis(0,0,0);         // accumulated |dN|,|dE|,|dUP|, m
+    cv::Vec3d traj3d_peak_abs(0,0,0);           // max |X|,|Y|,|Z| since SPACE
     bool traj3d_preview_origin_set=false;       // live preview before SPACE
     double traj3d_preview_n0=0.0,traj3d_preview_e0=0.0,traj3d_preview_z0=0.0;
     bool traj3d_range_origin_set=false;
@@ -1301,6 +1302,9 @@ int main(int argc,char** argv){
               (double)ep.y-traj3d_e0,
               z_up); // Z prefers tilt-compensated TF-Luna; falls back to FC Z
 
+            traj3d_peak_abs[0]=std::max(traj3d_peak_abs[0],std::abs(p3[0]));
+            traj3d_peak_abs[1]=std::max(traj3d_peak_abs[1],std::abs(p3[1]));
+            traj3d_peak_abs[2]=std::max(traj3d_peak_abs[2],std::abs(p3[2]));
             if(traj3d_prev_set){
               const cv::Vec3d dp=p3-traj3d_prev;
               if(cv::norm(dp)>=0.0005){
@@ -1332,7 +1336,7 @@ int main(int argc,char** argv){
           putGuiText(hud,"фиксированный масштаб ±500 мм по X / Y / Z",{45,83},0.43,cv::Scalar(165,165,165),1);
 
           const cv::Point c3(500,500);
-          const double sc3=400.0; // px/m, fixed. 500 mm = 200 px per single axis.
+          const double sc3=500.0; // px/m, fixed. 500 mm = 250 px per single axis.
           auto proj3=[&](const cv::Vec3d& p)->cv::Point{
             const double n=std::clamp(p[0],-0.50,0.50);
             const double e=std::clamp(p[1],-0.50,0.50);
@@ -1403,6 +1407,34 @@ int main(int argc,char** argv){
               putGuiText(hud,"ВНЕ ДИАПАЗОНА ±500 мм",{45,118},0.52,cv::Scalar(0,80,255),1);
           }
 
+          // High-resolution center inset. The main graph stays fixed at ±500 mm,
+          // while this inset makes small false motion from roll/pitch visible.
+          const cv::Rect zoom(690,105,260,260);
+          cv::rectangle(hud,zoom,cv::Scalar(20,20,20),cv::FILLED);
+          cv::rectangle(hud,zoom,cv::Scalar(100,100,100),1);
+          putGuiText(hud,"ЦЕНТР ±100 мм",{zoom.x+12,zoom.y+24},0.38,cv::Scalar(190,190,190),1);
+          const cv::Point zc(zoom.x+zoom.width/2,zoom.y+zoom.height/2+10);
+          const double zsc=900.0; // 100 mm = 90 px per horizontal axis
+          auto projZoom=[&](const cv::Vec3d& p)->cv::Point{
+            const double n=std::clamp(p[0],-0.10,0.10);
+            const double e=std::clamp(p[1],-0.10,0.10);
+            const double u=std::clamp(p[2],-0.10,0.10);
+            return {(int)std::lround(zc.x+(e-n)*0.55*zsc),
+                    (int)std::lround(zc.y+(e+n)*0.23*zsc-u*0.75*zsc)};
+          };
+          for(int k=-2;k<=2;k++){
+            const double v=0.05*k;
+            cv::line(hud,projZoom(cv::Vec3d(-0.1,v,0)),projZoom(cv::Vec3d(0.1,v,0)),cv::Scalar(42,42,42),1,cv::LINE_AA);
+            cv::line(hud,projZoom(cv::Vec3d(v,-0.1,0)),projZoom(cv::Vec3d(v,0.1,0)),cv::Scalar(42,42,42),1,cv::LINE_AA);
+          }
+          cv::line(hud,projZoom(cv::Vec3d(-0.1,0,0)),projZoom(cv::Vec3d(0.1,0,0)),cv::Scalar(130,105,55),1,cv::LINE_AA);
+          cv::line(hud,projZoom(cv::Vec3d(0,-0.1,0)),projZoom(cv::Vec3d(0,0.1,0)),cv::Scalar(55,130,105),1,cv::LINE_AA);
+          cv::line(hud,projZoom(cv::Vec3d(0,0,-0.1)),projZoom(cv::Vec3d(0,0,0.1)),cv::Scalar(120,120,170),1,cv::LINE_AA);
+          cv::circle(hud,zc,5,cv::Scalar(0,210,0),1,cv::LINE_AA);
+          if(have_p3){
+            cv::circle(hud,projZoom(p3),7,cv::Scalar(0,255,255),cv::FILLED,cv::LINE_AA);
+          }
+
           // ------------------------------------------------------------------
           // RIGHT: only information needed for this PosHold experiment.
           // ------------------------------------------------------------------
@@ -1459,6 +1491,12 @@ int main(int argc,char** argv){
                 <<"   Y "<<traj3d_path_axis[1]*1000.0
                 <<"   Z "<<traj3d_path_axis[2]*1000.0<<" мм";
             putGuiText(hud,axes.str(),{1025,422},0.46,cv::Scalar(210,210,210),1);
+            std::ostringstream peaks;
+            peaks<<std::fixed<<std::setprecision(0)
+                 <<"МАКС. ОТКЛОНЕНИЕ: X "<<traj3d_peak_abs[0]*1000.0
+                 <<"  Y "<<traj3d_peak_abs[1]*1000.0
+                 <<"  Z "<<traj3d_peak_abs[2]*1000.0<<" мм";
+            putGuiText(hud,peaks.str(),{1025,444},0.34,cv::Scalar(170,170,170),1);
           } else {
             putGuiText(hud,"ТОЧКА ЗАВИСАНИЯ НЕ ЗАДАНА",{1025,145},0.48,cv::Scalar(0,210,255),1);
             putGuiText(hud,"Нажмите SPACE в нужной физической точке.",{1025,178},0.43,cv::Scalar(220,220,220),1);
@@ -1477,21 +1515,21 @@ int main(int argc,char** argv){
           const bool ca_ok=ca.valid&&ca_age<500.0;
           const bool co_ok=co.valid&&co_age<500.0;
 
-          putGuiText(hud,"КОМАНДА FC:",{1025,450},0.46,cv::Scalar(180,180,180),1);
+          putGuiText(hud,"КОМАНДА FC:",{1025,468},0.46,cv::Scalar(180,180,180),1);
           if(ca_ok){
             std::ostringstream at;
             at<<std::fixed<<std::setprecision(1)
               <<"крен "<<ca.roll*180.0/M_PI<<"°   тангаж "<<ca.pitch*180.0/M_PI<<"°";
-            putGuiText(hud,at.str(),{1025,482},0.50,cv::Scalar(230,230,230),1);
+            putGuiText(hud,at.str(),{1025,496},0.50,cv::Scalar(230,230,230),1);
           }else{
-            putGuiText(hud,"крен/тангаж: нет данных",{1025,482},0.46,cv::Scalar(150,150,150),1);
+            putGuiText(hud,"крен/тангаж: нет данных",{1025,496},0.46,cv::Scalar(150,150,150),1);
           }
 
           if(co_ok){
             std::ostringstream motors;
             motors<<"M1 "<<co.pwm[0]<<"  M2 "<<co.pwm[1]
                   <<"  M3 "<<co.pwm[2]<<"  M4 "<<co.pwm[3];
-            putGuiText(hud,motors.str(),{1025,514},0.45,cv::Scalar(0,220,0),1);
+            putGuiText(hud,motors.str(),{1025,527},0.45,cv::Scalar(0,220,0),1);
           }else{
             putGuiText(hud,"M1..M4: нет данных",{1025,514},0.45,cv::Scalar(150,150,150),1);
           }
@@ -1502,18 +1540,18 @@ int main(int argc,char** argv){
           health<<"ОЦЕНКА FC: "<<((posrel_ok&&velh_ok)?"OK":"НЕТ ПОЗИЦИИ")
                 <<"   OF "<<(s.valid?"OK":"BAD")
                 <<"   TF-Luna "<<std::fixed<<std::setprecision(2)<<(hl?lm:-1.0)<<" м";
-          putGuiText(hud,health.str(),{1025,552},0.43,
+          putGuiText(hud,health.str(),{1025,562},0.43,
                      (posrel_ok&&velh_ok)?cv::Scalar(0,220,0):cv::Scalar(0,80,255),1);
 
           // Compact live camera preview. Previous 430x322 image did not fit into
           // the 900px HUD at y=625, so it was silently not drawn.
-          putGuiText(hud,"КАМЕРА OV9281",{1025,598},0.42,cv::Scalar(190,190,190),1);
+          putGuiText(hud,"КАМЕРА OV9281",{1025,600},0.42,cv::Scalar(190,190,190),1);
           cv::Mat cam_bgr,cam_view;
           cv::cvtColor(gray,cam_bgr,cv::COLOR_GRAY2BGR);
           const int cam_w=300;
           const int cam_h=(int)std::lround((double)cam_bgr.rows*cam_w/cam_bgr.cols);
           cv::resize(cam_bgr,cam_view,cv::Size(cam_w,cam_h),0,0,cv::INTER_AREA);
-          const int cam_x=1025, cam_y=612;
+          const int cam_x=1025, cam_y=614;
           cam_view.copyTo(hud(cv::Rect(cam_x,cam_y,cam_w,cam_h)));
           const int rx0=cam_x+(int)std::lround(g_feature_roi.x0*cam_w);
           const int ry0=cam_y+(int)std::lround(g_feature_roi.y0*cam_h);
@@ -1545,6 +1583,7 @@ int main(int argc,char** argv){
             traj3d_prev_set=true;
             traj3d_path_total=0.0;
             traj3d_path_axis=cv::Vec3d(0,0,0);
+            traj3d_peak_abs=cv::Vec3d(0,0,0);
             std::cerr<<"3D GUI HOVER POINT: current FC estimate accepted as X/Y/Z = 0/0/0; path counters reset\n";
           } else if(rkey=='q'||rkey=='Q'||rkey==27){
             g_running=false;

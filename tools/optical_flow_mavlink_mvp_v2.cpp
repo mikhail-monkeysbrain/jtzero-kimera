@@ -395,6 +395,7 @@ struct FeatureRoi {
 };
 
 FeatureRoi g_feature_roi{};
+int g_max_features=500; // production default; diagnostic sweeps may override in-process
 
 struct FlowStep {
   bool valid=false;
@@ -428,7 +429,7 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
 
   std::vector<cv::Point2f> p0,p1;
   const int64_t t_feat0=monoNs();
-  cv::goodFeaturesToTrack(prev,p0,500,0.01,7,feature_mask);
+  cv::goodFeaturesToTrack(prev,p0,g_max_features,0.01,7,feature_mask);
   o.t_features_ms=(monoNs()-t_feat0)*1e-6;
   o.features=(int)p0.size();
   if(p0.size()<30){ o.invalid_reason=2; return o; }

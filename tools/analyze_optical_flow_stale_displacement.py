@@ -63,15 +63,20 @@ def main():
     ev=[(j,ii(r,"return_event")) for j,r in enumerate(rows) if ii(r,"return_event") in (1,2,3)]
     ia=next((j for j,e in ev if e==1),None)
     ib=next((j for j,e in ev if e==2 and ia is not None and j>ia),None)
-    ih=next((j for j,e in ev if e==3 and ib is not None and j>ib),None)
-    if ia is None or ib is None or ih is None:
-        raise SystemExit(f"Нужны A/B/H events, найдено: {ev}")
+    ih=next((j for j,e in ev if e==3 and ia is not None and j>ia),None)
+    if ia is None or ih is None:
+        raise SystemExit(f"Нужны как минимум A/H events, найдено: {ev}")
 
     print("===== RAW DISPLACEMENT — SENT / STALE / ALL-VALID =====")
     print(f"CSV: {a.csv}")
-    print(f"events: A={ia} B={ib} H={ih}")
+    print(f"events: A={ia} B={ib if ib is not None else 'нет'} H={ih}")
 
-    for name,lo,hi in [("A->B",ia,ib),("B->H",ib,ih),("A->H",ia,ih)]:
+    segments=[]
+    if ib is not None and ia < ib < ih:
+        segments += [("A->B",ia,ib),("B->H",ib,ih)]
+    segments += [("A->H",ia,ih)]
+
+    for name,lo,hi in segments:
         seg=rows[lo:hi+1]
         sent=acc(seg,lambda r: ii(r,"valid")==1 and ii(r,"flow_sent")==1)
         stale=acc(seg,lambda r: ii(r,"valid")==1 and ii(r,"flow_sent")!=1)
@@ -92,12 +97,13 @@ def main():
 
     # EKF marked-point displacement for comparison
     an,ae=f(rows[ia],"ekf_x_ned"),f(rows[ia],"ekf_y_ned")
-    bn,be=f(rows[ib],"ekf_x_ned"),f(rows[ib],"ekf_y_ned")
     hn,he=f(rows[ih],"ekf_x_ned"),f(rows[ih],"ekf_y_ned")
     print()
     print("EKF MARKED POINTS")
-    print(f"  A->B = {math.hypot(bn-an,be-ae)*1000:.1f} mm")
-    print(f"  B->H = {math.hypot(hn-bn,he-be)*1000:.1f} mm")
+    if ib is not None and ia < ib < ih:
+        bn,be=f(rows[ib],"ekf_x_ned"),f(rows[ib],"ekf_y_ned")
+        print(f"  A->B = {math.hypot(bn-an,be-ae)*1000:.1f} mm")
+        print(f"  B->H = {math.hypot(hn-bn,he-be)*1000:.1f} mm")
     print(f"  A->H = {math.hypot(hn-an,he-ae)*1000:.1f} mm")
 
     print()

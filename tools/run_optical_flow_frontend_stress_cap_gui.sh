@@ -5,10 +5,11 @@ cd "$ROOT"
 
 CAP="${1:-}"
 case "$CAP" in
-  500|200) ;;
+  500|300|200) ;;
   *)
     echo "Использование:"
     echo "  bash tools/run_optical_flow_frontend_stress_cap_gui.sh 500"
+    echo "  bash tools/run_optical_flow_frontend_stress_cap_gui.sh 300"
     echo "  bash tools/run_optical_flow_frontend_stress_cap_gui.sh 200"
     exit 2
     ;;

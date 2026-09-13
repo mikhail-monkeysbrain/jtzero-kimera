@@ -98,6 +98,26 @@ struct FlowFcGyro {
   bool valid=false;
 };
 
+struct FlowFcTarget {
+  float x=0,y=0,vx=0,vy=0;
+  uint16_t type_mask=0;
+  int64_t recv_ns=0;
+  bool valid=false;
+};
+
+struct FlowFcAttTarget {
+  double roll=0,pitch=0,yaw=0;
+  float thrust=0;
+  int64_t recv_ns=0;
+  bool valid=false;
+};
+
+struct FlowFcOutputs {
+  std::array<uint16_t,8> pwm{};
+  int64_t recv_ns=0;
+  bool valid=false;
+};
+
 struct FlowFc {
   int fd=-1;
   std::thread th;
@@ -105,6 +125,9 @@ struct FlowFc {
   FlowFcLocal local{};
   FlowEkfStatus ekf{};
   FlowFcGyro gyro{};
+  FlowFcTarget target{};
+  FlowFcAttTarget att_target{};
+  FlowFcOutputs outputs{};
   uint64_t local_count=0;
   uint64_t ekf_count=0;
   uint64_t gyro_count=0;
@@ -204,6 +227,9 @@ struct FlowFc {
       requestRate(fd,sys,comp,MAVLINK_MSG_ID_LOCAL_POSITION_NED,20);
       requestRate(fd,sys,comp,MAVLINK_MSG_ID_EKF_STATUS_REPORT,5);
       requestRate(fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE,100);
+      requestRate(fd,sys,comp,MAVLINK_MSG_ID_POSITION_TARGET_LOCAL_NED,20);
+      requestRate(fd,sys,comp,MAVLINK_MSG_ID_ATTITUDE_TARGET,20);
+      requestRate(fd,sys,comp,MAVLINK_MSG_ID_SERVO_OUTPUT_RAW,20);
 
       while(g_running){
         pollfd p{fd,POLLIN,0};
@@ -258,6 +284,29 @@ struct FlowFc {
               local.x=q.x; local.y=q.y; local.z=q.z;
               local.vx=q.vx; local.vy=q.vy; local.vz=q.vz;
               local.recv_ns=monoNs(); local.valid=true; ++local_count;
+            } else if(m.msgid==MAVLINK_MSG_ID_POSITION_TARGET_LOCAL_NED){
+              mavlink_position_target_local_ned_t q{}; mavlink_msg_position_target_local_ned_decode(&m,&q);
+              std::lock_guard<std::mutex> l(mu);
+              target.x=q.x; target.y=q.y; target.vx=q.vx; target.vy=q.vy;
+              target.type_mask=q.type_mask; target.recv_ns=monoNs(); target.valid=true;
+            } else if(m.msgid==MAVLINK_MSG_ID_ATTITUDE_TARGET){
+              mavlink_attitude_target_t q{}; mavlink_msg_attitude_target_decode(&m,&q);
+              // MAVLink quaternion is [w,x,y,z]. Convert only for display.
+              const double w=q.q[0], x=q.q[1], y=q.q[2], z=q.q[3];
+              const double sinr=2.0*(w*x+y*z), cosr=1.0-2.0*(x*x+y*y);
+              const double sinp=2.0*(w*y-z*x);
+              const double siny=2.0*(w*z+x*y), cosy=1.0-2.0*(y*y+z*z);
+              std::lock_guard<std::mutex> l(mu);
+              att_target.roll=std::atan2(sinr,cosr);
+              att_target.pitch=std::asin(std::clamp(sinp,-1.0,1.0));
+              att_target.yaw=std::atan2(siny,cosy);
+              att_target.thrust=q.thrust; att_target.recv_ns=monoNs(); att_target.valid=true;
+            } else if(m.msgid==MAVLINK_MSG_ID_SERVO_OUTPUT_RAW){
+              mavlink_servo_output_raw_t q{}; mavlink_msg_servo_output_raw_decode(&m,&q);
+              std::lock_guard<std::mutex> l(mu);
+              outputs.pwm={q.servo1_raw,q.servo2_raw,q.servo3_raw,q.servo4_raw,
+                           q.servo5_raw,q.servo6_raw,q.servo7_raw,q.servo8_raw};
+              outputs.recv_ns=monoNs(); outputs.valid=true;
             } else if(m.msgid==MAVLINK_MSG_ID_EKF_STATUS_REPORT){
               mavlink_ekf_status_report_t q{}; mavlink_msg_ekf_status_report_decode(&m,&q);
               std::lock_guard<std::mutex> l(mu);
@@ -355,6 +404,16 @@ struct FlowFc {
     }
     if(age_ms)*age_ms=(monoNs()-gyro.recv_ns)*1e-6;
     return true;
+  }
+
+  bool latestControl(FlowFcTarget* t,FlowFcAttTarget* a,FlowFcOutputs* o,
+                     double* t_age,double* a_age,double* o_age){
+    std::lock_guard<std::mutex> l(mu);
+    const int64_t now=monoNs();
+    if(t){*t=target;if(t_age)*t_age=target.valid?(now-target.recv_ns)*1e-6:1e9;}
+    if(a){*a=att_target;if(a_age)*a_age=att_target.valid?(now-att_target.recv_ns)*1e-6:1e9;}
+    if(o){*o=outputs;if(o_age)*o_age=outputs.valid?(now-outputs.recv_ns)*1e-6:1e9;}
+    return target.valid || att_target.valid || outputs.valid;
   }
 
   bool latestEkf(FlowEkfStatus* out,double* age_ms,uint64_t* count=nullptr){
@@ -1265,6 +1324,47 @@ int main(int argc,char** argv){
                          (posrel_ok&&velh_ok)?cv::Scalar(0,220,0):cv::Scalar(0,80,255),2);
             }
           }
+          // POSHOLD CONTROL CHAIN — одна панель показывает всю причинную цепочку.
+          // Важно: POSITION_TARGET_LOCAL_NED/ATTITUDE_TARGET могут не публиковаться
+          // конкретным режимом ArduCopter. В таком случае показываем НЕТ ДАННЫХ,
+          // а не подменяем желаемое состояние фактическим.
+          FlowFcTarget ct{}; FlowFcAttTarget ca{}; FlowFcOutputs co{};
+          double ct_age=1e9,ca_age=1e9,co_age=1e9;
+          fc.latestControl(&ct,&ca,&co,&ct_age,&ca_age,&co_age);
+          const bool ct_ok=ct.valid&&ct_age<500.0;
+          const bool ca_ok=ca.valid&&ca_age<500.0;
+          const bool co_ok=co.valid&&co_age<500.0;
+
+          cv::rectangle(hud,cv::Rect(35,390,830,420),cv::Scalar(28,28,28),cv::FILLED);
+          putGuiText(hud,"ЦЕПОЧКА УПРАВЛЕНИЯ POSHOLD",{55,425},0.70,cv::Scalar(255,255,255),2);
+          std::ostringstream l1,l2,l3,l4,l5;
+          if(efresh){
+            l1<<std::fixed<<std::setprecision(3)
+              <<"1. FC СЧИТАЕТ СКОРОСТЬ: N "<<ep.vx<<"  E "<<ep.vy<<" м/с";
+            l2<<"2. FC СЧИТАЕТ ПОЛОЖЕНИЕ: N "<<ep.x<<"  E "<<ep.y<<" м";
+          } else { l1<<"1. FC СЧИТАЕТ СКОРОСТЬ: НЕТ ДАННЫХ"; l2<<"2. FC СЧИТАЕТ ПОЛОЖЕНИЕ: НЕТ ДАННЫХ"; }
+          if(ct_ok){
+            l3<<std::fixed<<std::setprecision(3)
+              <<"3. FC ХОЧЕТ СКОРОСТЬ: N "<<ct.vx<<"  E "<<ct.vy<<" м/с";
+          } else l3<<"3. FC ХОЧЕТ СКОРОСТЬ: НЕТ ДАННЫХ ОТ ЭТОГО РЕЖИМА";
+          if(ca_ok){
+            l4<<std::fixed<<std::setprecision(1)
+              <<"4. FC ХОЧЕТ НАКЛОН: крен "<<ca.roll*180.0/M_PI
+              <<"°  тангаж "<<ca.pitch*180.0/M_PI<<"°";
+          } else l4<<"4. FC ХОЧЕТ НАКЛОН: НЕТ ДАННЫХ ОТ ЭТОГО РЕЖИМА";
+          if(co_ok){
+            l5<<"5. ВЫХОДЫ FC 1..8:";
+            for(int i=0;i<8;i++) l5<<" "<<co.pwm[i];
+          } else l5<<"5. ВЫХОДЫ FC 1..8: НЕТ ДАННЫХ";
+          putGuiText(hud,l1.str(),{55,475},0.55,cv::Scalar(230,230,230),1);
+          putGuiText(hud,l2.str(),{55,520},0.55,cv::Scalar(230,230,230),1);
+          putGuiText(hud,l3.str(),{55,575},0.55,ct_ok?cv::Scalar(0,255,255):cv::Scalar(0,170,255),1);
+          putGuiText(hud,l4.str(),{55,630},0.55,ca_ok?cv::Scalar(0,255,255):cv::Scalar(0,170,255),1);
+          putGuiText(hud,l5.str(),{55,685},0.48,co_ok?cv::Scalar(0,255,0):cv::Scalar(0,170,255),1);
+          putGuiText(hud,"Сначала DISARMED. Перемещайте аппарат рукой и смотрите знаки N/E.",
+                     {55,745},0.48,cv::Scalar(200,200,200),1);
+          putGuiText(hud,"НЕТ ДАННЫХ означает: FC не выдаёт этот MAVLink-показатель; значение не угадывается.",
+                     {55,780},0.43,cv::Scalar(170,170,170),1);
           putGuiText(hud,"Q / ESC — ЗАВЕРШИТЬ ТЕСТ",{45,855},0.58,cv::Scalar(180,180,180),1);
 
           cv::imshow(rotation_window_name,hud);

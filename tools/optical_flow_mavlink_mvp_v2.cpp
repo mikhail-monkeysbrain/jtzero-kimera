@@ -1250,6 +1250,20 @@ int main(int argc,char** argv){
             const int ry1=cam_y+(int)std::lround(g_feature_roi.y1*cam_h);
             cv::rectangle(hud,cv::Point(rx0,ry0),cv::Point(rx1,ry1),cv::Scalar(0,255,255),2,cv::LINE_AA);
             putGuiText(hud,"OV9281 — ЖИВОЕ ВИДЕО",{cam_x,85},0.76,cv::Scalar(240,240,240),2);
+            if(bench_height_override<=0.0){
+              putGuiText(hud,"FLIGHT MONITOR • REAL TF-LUNA • CAP=500",
+                         {45,55},0.68,cv::Scalar(0,255,0),2);
+              const bool posrel_ok=esfresh && (es.flags & EKF_POS_HORIZ_REL);
+              const bool velh_ok=esfresh && (es.flags & EKF_VELOCITY_HORIZ);
+              std::ostringstream fs;
+              fs<<"EKF relative aiding: "<<(posrel_ok&&velh_ok?"OK":"NO")
+                <<"   OF valid: "<<(s.valid?1:0)
+                <<"   sent: "<<(flow_sent?1:0)
+                <<"   stale: "<<stale_flow_rejected_total
+                <<"   invalid: "<<flow_invalid_total;
+              putGuiText(hud,fs.str(),{45,105},0.52,
+                         (posrel_ok&&velh_ok)?cv::Scalar(0,220,0):cv::Scalar(0,80,255),2);
+            }
           }
           putGuiText(hud,"Q / ESC — ЗАВЕРШИТЬ ТЕСТ",{45,855},0.58,cv::Scalar(180,180,180),1);
 
@@ -1384,6 +1398,10 @@ int main(int argc,char** argv){
              <<"°   TF-Luna: "<<(hl?lm:-1.0)<<" м";
           putGuiText(hud,return_target_set?l1.str():"ОЖИДАНИЕ ГОТОВНОСТИ / ТОЧКИ A",{35,40},0.85,cv::Scalar(240,240,240),2);
           putGuiText(hud,"6-DoF РЕГРЕССИЯ • CAP=500 • BRIDGE=OFF",{920,40},0.50,cv::Scalar(170,220,255),1);
+          if(bench_height_override>0.0){
+            putGuiText(hud,"BENCH ONLY • СИНТЕТИЧЕСКАЯ ВЫСОТА • НЕ ARM / НЕ ВЗЛЕТАТЬ",
+                       {920,70},0.48,cv::Scalar(0,80,255),2);
+          }
           putGuiText(hud,l2.str(),{35,75},0.65,cv::Scalar(220,220,220),2);
           putGuiText(hud,l3.str(),{35,105},0.65,cv::Scalar(220,220,220),2);
           putGuiText(hud,l6.str(),{35,140},0.58,cv::Scalar(190,190,190),1);

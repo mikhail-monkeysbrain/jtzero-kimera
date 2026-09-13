@@ -462,6 +462,7 @@ struct FlowStep {
   bool valid=false;
   int invalid_reason=0; // 0=OK,1=DT,2=FEATURES,3=TRACKED,4=HOMOGRAPHY,5=INLIERS,6=MAGNITUDE
   int features=0,tracked=0,inliers=0;
+  bool feature_fallback=false;
   double t_features_ms=0.0,t_lk_ms=0.0,t_ransac_ms=0.0,t_post_ms=0.0;
   double inlier_ratio=0;
   double du_norm=0,dv_norm=0;
@@ -494,36 +495,41 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   std::vector<cv::Point2f> p0,p1;
   const int64_t t_feat0=monoNs();
   cv::goodFeaturesToTrack(prev,p0,g_max_features,0.01,7,feature_mask);
+
+  // If the normal ROI becomes texture-starved (typical when crossing a sharp
+  // table/floor boundary), widen only the ground-facing part of the image and
+  // relax the corner detector slightly. The top quarter stays excluded so the
+  // frame/cables cannot become navigation features.
+  if(p0.size()<30){
+    cv::Mat fallback_mask(prev.size(),CV_8UC1,cv::Scalar(0));
+    const int fx0=std::clamp((int)std::lround(0.05*prev.cols),0,prev.cols-1);
+    const int fy0=std::clamp((int)std::lround(0.25*prev.rows),0,prev.rows-1);
+    const int fx1=std::clamp((int)std::lround(0.95*prev.cols),fx0+1,prev.cols);
+    const int fy1=std::clamp((int)std::lround(0.98*prev.rows),fy0+1,prev.rows);
+    fallback_mask(cv::Rect(fx0,fy0,fx1-fx0,fy1-fy0)).setTo(255);
+    std::vector<cv::Point2f> pf;
+    cv::goodFeaturesToTrack(prev,pf,g_max_features,0.005,5,fallback_mask);
+    if(pf.size()>p0.size()){
+      p0.swap(pf);
+      o.feature_fallback=true;
+    }
+  }
+
   o.t_features_ms=(monoNs()-t_feat0)*1e-6;
   o.features=(int)p0.size();
   if(p0.size()<30){ o.invalid_reason=2; return o; }
 
   std::vector<uchar> st; std::vector<float> err;
 
-  // Rapid Z motion creates a radial image scale change. Give LK the expected
-  // first guess from TF-Luna instead of forcing it to discover a large scale
-  // jump from a zero-displacement initialization.
-  int lk_flags=0;
-  if(prev_camera_height_m>0.05 && curr_camera_height_m>0.05 &&
-     std::isfinite(prev_camera_height_m) && std::isfinite(curr_camera_height_m)){
-    const double k=prev_camera_height_m/curr_camera_height_m;
-    // Only use a physically plausible inter-frame change. Outside this range
-    // let normal pyramidal LK handle the pair rather than injecting a bad guess.
-    if(k>=0.70 && k<=1.40){
-      o.lk_height_scale=k;
-      p1.resize(p0.size());
-      for(size_t i=0;i<p0.size();++i){
-        p1[i].x=(float)(calib.cx + k*((double)p0[i].x-calib.cx));
-        p1[i].y=(float)(calib.cy + k*((double)p0[i].y-calib.cy));
-      }
-      lk_flags=cv::OPTFLOW_USE_INITIAL_FLOW;
-    }
-  }
+  // Do not derive KLT image scale directly from TF-Luna. At a terrain step the
+  // range can jump although the vehicle did not move vertically. The visual
+  // 4-parameter fit below estimates image scale from tracked features instead.
+  o.lk_height_scale=1.0;
 
   const int64_t t_lk0=monoNs();
   cv::calcOpticalFlowPyrLK(prev,curr,p0,p1,st,err,{21,21},3,
                            cv::TermCriteria(cv::TermCriteria::COUNT|cv::TermCriteria::EPS,30,0.01),
-                           lk_flags,1e-4);
+                           0,1e-4);
   o.t_lk_ms=(monoNs()-t_lk0)*1e-6;
   std::vector<cv::Point2f> a,b;
   for(size_t i=0;i<p0.size();++i){if(st[i]){a.push_back(p0[i]);b.push_back(p1[i]);}}
@@ -1879,7 +1885,8 @@ int main(int argc,char** argv){
           std::cerr<<"OF frame="<<frame
                    <<" valid="<<(s.valid?1:0)
                    <<" rateFRD=("<<s.flow_body_x<<","<<s.flow_body_y<<") rad/s"
-                   <<" scaleRate="<<s.scale_rate<<"/s lkScale="<<s.lk_height_scale
+                   <<" scaleRate="<<s.scale_rate<<"/s"
+                   <<" featFB="<<(s.feature_fallback?1:0)
                    <<" inliers="<<s.inliers<<"/"<<s.tracked
                    <<" sent="<<flow_sent_total<<" invalid="<<flow_invalid_total
                    <<" stale_reject="<<stale_flow_rejected_total

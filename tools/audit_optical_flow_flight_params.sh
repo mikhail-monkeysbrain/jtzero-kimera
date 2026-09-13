@@ -65,7 +65,7 @@ expected={
   "EK3_FLOW_DELAY":0,
   "EK3_SRC1_POSXY":0,
   "EK3_SRC1_VELXY":5,
-  "EK3_SRC1_POSZ":1,
+  "EK3_SRC1_POSZ":None,
   "EK3_SRC1_VELZ":0,
   "EK3_SRC1_YAW":0,
 }
@@ -85,7 +85,17 @@ for name in order:
         print(f"FAIL  {name:<18} : не прочитан")
         fail=True
         continue
-    v=vals[name]; e=float(expected[name])
+    v=vals[name]; e=expected[name]
+    if name=="EK3_SRC1_POSZ":
+        ok=v in (1.0,2.0)
+        if ok:
+            src="Baro" if v==1.0 else "RangeFinder"
+            print(f"INFO  {name:<18} = {v:g} ({src})")
+        else:
+            print(f"FAIL  {name:<18} = {v:g} expected 1(Baro) or 2(RangeFinder)")
+            fail=True
+        continue
+    e=float(e)
     ok=math.isclose(v,e,rel_tol=0.0,abs_tol=max(1e-6,abs(e)*1e-5))
     if ok:
         print(f"PASS  {name:<18} = {v:g}")
@@ -105,9 +115,9 @@ if flow_max is not None:
     print("      Это tuning-предел EKF, а не автоматически равный пределу publisher.")
 
 print()
-print("INFO  EK3_SRC1_POSZ=1 (Baro): вертикальная позиция EKF не должна прыгать")
-print("      при смене поверхности под дальномером. TF-Luna остаётся активным")
-print("      как DISTANCE_SENSOR для Optical Flow / расстояния до поверхности.")
+print("INFO  POSZ не фиксируется этим audit:")
+print("      1=Baro соответствует стандартной схеме ArduPilot, но может дрейфовать;")
+print("      2=RangeFinder стабилен над ровной поверхностью, но прыгает на ступенях/краях.")
 print("RESULT: PASS")
 print("FC source configuration соответствует проверенному OpticalFlow flight-контуру.")
 PY

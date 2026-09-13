@@ -648,6 +648,9 @@ int main(int argc,char** argv){
       g_feature_roi.x1=std::stod(argv[++i]);
       g_feature_roi.y1=std::stod(argv[++i]);
     }
+    else if(a=="--max-features" && i+1<argc){
+      g_max_features=std::stoi(argv[++i]);
+    }
   }
   if(continuous_guided && (continuous_legs<2 || continuous_legs>30)){
     std::cerr<<"ОШИБКА: --continuous-legs разрешён только 2..30\n";
@@ -682,6 +685,10 @@ int main(int argc,char** argv){
        g_feature_roi.x1-g_feature_roi.x0>=0.20 &&
        g_feature_roi.y1-g_feature_roi.y0>=0.20)){
     std::cerr<<"ОШИБКА: --feature-roi должен быть x0 y0 x1 y1 в 0..1 и иметь размер >=0.20\n";
+    return 2;
+  }
+  if(g_max_features<100 || g_max_features>1000){
+    std::cerr<<"ОШИБКА: --max-features разрешён только 100..1000\n";
     return 2;
   }
 
@@ -899,6 +906,7 @@ int main(int argc,char** argv){
              <<"camera="<<camdev<<"\n"
              <<"fx/fy effective="<<calib.fx<<" / "<<calib.fy
              <<" (focal_scale="<<focal_scale<<")\n"
+             <<"max_features="<<g_max_features<<"\n"
              <<"ВАЖНО: publisher выдаёт body-FRD flow; ожидается FLOW_ORIENT_YAW=0, FLOW_OPTIONS=0\n"
              <<"DIAG: запрошен EKF_STATUS_REPORT 5 Hz; LOCAL_POSITION_NED 20 Hz; ATTITUDE 100 Hz\n";
     if(return_gui && std::isfinite(diag_camera_z_m) && std::isfinite(diag_range_z_m)){

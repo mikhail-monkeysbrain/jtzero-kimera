@@ -835,7 +835,11 @@ int main(int argc,char** argv){
     double traj3d_path_total=0.0;              // accumulated 3D path length, m
     cv::Vec3d traj3d_path_axis(0,0,0);         // accumulated |dN|,|dE|,|dUP|, m
     bool traj3d_preview_origin_set=false;       // live preview before SPACE
-    double traj3d_preview_n0=0.0,traj3d_preview_e0=0.0,traj3d_preview_z0=0.0
+    double traj3d_preview_n0=0.0,traj3d_preview_e0=0.0,traj3d_preview_z0=0.0;
+    bool traj3d_range_origin_set=false;
+    double traj3d_range_vertical0=0.0;           // tilt-compensated TF-Luna vertical distance at SPACE
+    bool traj3d_preview_range_origin_set=false;
+    double traj3d_preview_range_vertical0=0.0;
     if(return_gui || rotation_gui) initGuiFont();
     if(return_gui){
       cv::namedWindow(return_window_name,cv::WINDOW_NORMAL);
@@ -1267,19 +1271,35 @@ int main(int argc,char** argv){
           // Before SPACE, still show that the graph is live by using the first
           // available FC position as a temporary preview origin. SPACE replaces
           // it with the operator-selected hover point and resets all counters.
+          const bool gui_range_ok=hl && std::isfinite(lm) && lm>0.02 &&
+                                  fg_ok && std::isfinite(fg.roll) && std::isfinite(fg.pitch);
+          // TF-Luna measures along its own/body-down axis. For vertical Z on a flat
+          // surface use the vertical component, otherwise roll/pitch alone would
+          // look like a height change.
+          const double gui_range_vertical=gui_range_ok
+              ? lm*std::cos(fg.roll)*std::cos(fg.pitch)
+              : std::numeric_limits<double>::quiet_NaN();
+
           if(efresh && !traj3d_preview_origin_set){
             traj3d_preview_n0=ep.x; traj3d_preview_e0=ep.y; traj3d_preview_z0=ep.z;
             traj3d_preview_origin_set=true;
+          }
+          if(gui_range_ok && !traj3d_preview_range_origin_set){
+            traj3d_preview_range_vertical0=gui_range_vertical;
+            traj3d_preview_range_origin_set=true;
           }
 
           // This GUI is intentionally a POSITION/HOVER monitor, not a rotation diagnostic.
           // SPACE defines the operator's hover reference from the FC's own LOCAL_POSITION_NED
           // estimate. Repeated SPACE replaces that reference and resets distance counters.
           if(traj3d_origin_set && efresh){
+            const double z_up = (traj3d_range_origin_set && gui_range_ok)
+              ? (gui_range_vertical-traj3d_range_vertical0)
+              : -((double)ep.z-traj3d_z0);
             const cv::Vec3d p3(
               (double)ep.x-traj3d_n0,
               (double)ep.y-traj3d_e0,
-              -((double)ep.z-traj3d_z0)); // UP positive
+              z_up); // Z prefers tilt-compensated TF-Luna; falls back to FC Z
 
             if(traj3d_prev_set){
               const cv::Vec3d dp=p3-traj3d_prev;
@@ -1353,13 +1373,19 @@ int main(int argc,char** argv){
           const bool have_preview_p3=!traj3d_origin_set&&traj3d_preview_origin_set&&efresh;
           const bool have_p3=have_locked_p3||have_preview_p3;
           if(have_locked_p3){
+            const double z_up=(traj3d_range_origin_set && gui_range_ok)
+              ? (gui_range_vertical-traj3d_range_vertical0)
+              : -((double)ep.z-traj3d_z0);
             p3=cv::Vec3d((double)ep.x-traj3d_n0,
                          (double)ep.y-traj3d_e0,
-                         -((double)ep.z-traj3d_z0));
+                         z_up);
           } else if(have_preview_p3){
+            const double z_up=(traj3d_preview_range_origin_set && gui_range_ok)
+              ? (gui_range_vertical-traj3d_preview_range_vertical0)
+              : -((double)ep.z-traj3d_preview_z0);
             p3=cv::Vec3d((double)ep.x-traj3d_preview_n0,
                          (double)ep.y-traj3d_preview_e0,
-                         -((double)ep.z-traj3d_preview_z0));
+                         z_up);
           }
 
           if(have_p3){
@@ -1401,31 +1427,38 @@ int main(int argc,char** argv){
                <<"X "<<xmm<<" мм   Y "<<ymm<<" мм   Z "<<zmm<<" мм"<<std::noshowpos;
             putGuiText(hud,"ТЕКУЩЕЕ ОТКЛОНЕНИЕ:",{1025,137},0.46,cv::Scalar(180,180,180),1);
             putGuiText(hud,pos.str(),{1025,172},0.64,cv::Scalar(255,255,255),1);
+            std::ostringstream zsrc;
+            zsrc<<std::fixed<<std::setprecision(0)
+                <<"Z: TF-Luna с компенсацией наклона";
+            if(efresh)
+              zsrc<<"   |   Z FC "<<std::showpos
+                  <<(-((double)ep.z-traj3d_z0))*1000.0<<" мм"<<std::noshowpos;
+            putGuiText(hud,zsrc.str(),{1025,198},0.34,cv::Scalar(155,155,155),1);
 
             std::ostringstream ret;
             ret<<std::fixed<<std::setprecision(0)<<std::showpos
                <<"X "<<(-xmm)<<"   Y "<<(-ymm)<<"   Z "<<(-zmm)<<" мм"<<std::noshowpos;
-            putGuiText(hud,"ДЛЯ ВОЗВРАТА К НУЛЮ:",{1025,218},0.46,cv::Scalar(180,180,180),1);
-            putGuiText(hud,ret.str(),{1025,253},0.61,
+            putGuiText(hud,"ДЛЯ ВОЗВРАТА К НУЛЮ:",{1025,230},0.46,cv::Scalar(180,180,180),1);
+            putGuiText(hud,ret.str(),{1025,262},0.61,
                        cv::norm(p3)<0.015?cv::Scalar(0,255,0):cv::Scalar(0,220,255),1);
 
             std::ostringstream dist;
             dist<<std::fixed<<std::setprecision(0)
                 <<"РАССТОЯНИЕ ОТ ТОЧКИ: "<<cv::norm(p3)*1000.0<<" мм";
-            putGuiText(hud,dist.str(),{1025,302},0.48,cv::Scalar(220,220,220),1);
+            putGuiText(hud,dist.str(),{1025,310},0.48,cv::Scalar(220,220,220),1);
 
             std::ostringstream walked;
             walked<<std::fixed<<std::setprecision(0)
                   <<"ВСЕГО: "<<traj3d_path_total*1000.0<<" мм";
-            putGuiText(hud,"ПРОЙДЕННЫЙ ПУТЬ:",{1025,352},0.46,cv::Scalar(180,180,180),1);
-            putGuiText(hud,walked.str(),{1025,385},0.50,cv::Scalar(230,230,230),1);
+            putGuiText(hud,"ПРОЙДЕННЫЙ ПУТЬ:",{1025,360},0.46,cv::Scalar(180,180,180),1);
+            putGuiText(hud,walked.str(),{1025,392},0.50,cv::Scalar(230,230,230),1);
 
             std::ostringstream axes;
             axes<<std::fixed<<std::setprecision(0)
                 <<"X "<<traj3d_path_axis[0]*1000.0
                 <<"   Y "<<traj3d_path_axis[1]*1000.0
                 <<"   Z "<<traj3d_path_axis[2]*1000.0<<" мм";
-            putGuiText(hud,axes.str(),{1025,417},0.46,cv::Scalar(210,210,210),1);
+            putGuiText(hud,axes.str(),{1025,422},0.46,cv::Scalar(210,210,210),1);
           } else {
             putGuiText(hud,"ТОЧКА ЗАВИСАНИЯ НЕ ЗАДАНА",{1025,145},0.48,cv::Scalar(0,210,255),1);
             putGuiText(hud,"Нажмите SPACE в нужной физической точке.",{1025,178},0.43,cv::Scalar(220,220,220),1);
@@ -1497,6 +1530,14 @@ int main(int argc,char** argv){
             traj3d_n0=ep.x; traj3d_e0=ep.y; traj3d_z0=ep.z;
             traj3d_preview_n0=ep.x; traj3d_preview_e0=ep.y; traj3d_preview_z0=ep.z;
             traj3d_preview_origin_set=true;
+            if(gui_range_ok){
+              traj3d_range_vertical0=gui_range_vertical;
+              traj3d_range_origin_set=true;
+              traj3d_preview_range_vertical0=gui_range_vertical;
+              traj3d_preview_range_origin_set=true;
+            } else {
+              traj3d_range_origin_set=false;
+            }
             traj3d_origin_set=true;
             traj3d.clear();
             traj3d.emplace_back(0.0,0.0,0.0);

@@ -705,7 +705,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,invalid_reason,dt_s,features,tracked,inliers,inlier_ratio,t_features_ms,t_lk_ms,t_ransac_ms,t_post_ms,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,invalid_reason,bridge_pending,dt_s,features,tracked,inliers,inlier_ratio,t_features_ms,t_lk_ms,t_ransac_ms,t_post_ms,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -713,6 +713,8 @@ int main(int argc,char** argv){
     cv::Mat prev; int64_t prev_ts=0; uint64_t frame=0;
     uint64_t flow_sent_total=0,flow_invalid_total=0,range_sent_total=0;
     uint64_t camera_queue_dropped_total=0, stale_flow_rejected_total=0;
+    uint64_t bridge_hold_total=0, bridge_recovered_total=0, bridge_reset_total=0;
+    bool bridge_pending=false;
     int64_t last_range_send_ns=0;
     constexpr double kMaxFlowPipelineAgeMs=80.0;
 
@@ -1049,7 +1051,7 @@ int main(int argc,char** argv){
 
         csv<<now<<','<<ts<<','<<flow_send_ns<<','<<frame_pipeline_latency_ms<<','
            <<camera_queue_dropped<<','<<camera_queue_dropped_total<<','
-           <<frame<<','<<guide_leg.load()<<','<<guide_stage.load()<<','<<(s.valid?1:0)<<','<<s.invalid_reason<<','<<dt<<','
+           <<frame<<','<<guide_leg.load()<<','<<guide_stage.load()<<','<<(s.valid?1:0)<<','<<s.invalid_reason<<','<<(bridge_pending?1:0)<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
            <<s.t_features_ms<<','<<s.t_lk_ms<<','<<s.t_ransac_ms<<','<<s.t_post_ms<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','<<s.yaw_rate_cam_z<<','
@@ -1488,6 +1490,7 @@ int main(int argc,char** argv){
                    <<" inliers="<<s.inliers<<"/"<<s.tracked
                    <<" sent="<<flow_sent_total<<" invalid="<<flow_invalid_total
                    <<" stale_reject="<<stale_flow_rejected_total
+                   <<" bridge[h/r/x]="<<bridge_hold_total<<"/"<<bridge_recovered_total<<"/"<<bridge_reset_total
                    <<" cam_drop="<<camera_queue_dropped_total
                    <<" latency="<<frame_pipeline_latency_ms<<"ms"
                    <<" stage_ms[F/L/R/P]="<<s.t_features_ms<<"/"<<s.t_lk_ms<<"/"<<s.t_ransac_ms<<"/"<<s.t_post_ms
@@ -1506,8 +1509,40 @@ int main(int argc,char** argv){
           std::cerr<<"\r"<<std::flush;
         }
 
-        // Как в BlueOS: любой успешно декодированный кадр становится новым prev.
-        prev=gray.clone(); prev_ts=ts;
+        // Anchor policy:
+        // - successful visual step: advance anchor normally;
+        // - geometric failure (tracked/homography/inliers): keep the last anchor
+        //   briefly and let the next frame bridge across the rejected interval;
+        // - too few features on the anchor, bad dt, or excessive anchor age:
+        //   reset immediately so we do not get stuck on an unusable frame.
+        //
+        // This prevents a single rejected KLT/RANSAC interval from silently
+        // deleting physical displacement from the integral.
+        constexpr double kMaxBridgeAnchorAgeSec=0.18;
+        if(prev.empty()){
+          prev=gray.clone();
+          prev_ts=ts;
+          bridge_pending=false;
+        } else if(s.valid){
+          if(bridge_pending) ++bridge_recovered_total;
+          prev=gray.clone();
+          prev_ts=ts;
+          bridge_pending=false;
+        } else {
+          const double anchor_age=(prev_ts>0)?(ts-prev_ts)*1e-9:1e9;
+          const bool bridgeable=(s.invalid_reason==3 || s.invalid_reason==4 || s.invalid_reason==5) &&
+                                anchor_age<kMaxBridgeAnchorAgeSec;
+          if(bridgeable){
+            ++bridge_hold_total;
+            bridge_pending=true;
+            // keep prev/prev_ts
+          } else {
+            ++bridge_reset_total;
+            prev=gray.clone();
+            prev_ts=ts;
+            bridge_pending=false;
+          }
+        }
     }
 
     g_running=false;
@@ -1525,6 +1560,9 @@ int main(int argc,char** argv){
              <<" flow_sent="<<flow_sent_total
              <<" invalid="<<flow_invalid_total
              <<" stale_reject="<<stale_flow_rejected_total
+             <<" bridge_hold="<<bridge_hold_total
+             <<" bridge_recovered="<<bridge_recovered_total
+             <<" bridge_reset="<<bridge_reset_total
              <<" camera_queue_dropped="<<camera_queue_dropped_total
              <<" range_sent="<<range_sent_total<<"\n";
     return 0;

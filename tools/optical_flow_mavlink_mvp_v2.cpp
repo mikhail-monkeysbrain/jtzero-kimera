@@ -400,6 +400,7 @@ struct FlowStep {
   bool valid=false;
   int invalid_reason=0; // 0=OK,1=DT,2=FEATURES,3=TRACKED,4=HOMOGRAPHY,5=INLIERS,6=MAGNITUDE
   int features=0,tracked=0,inliers=0;
+  double t_features_ms=0.0,t_lk_ms=0.0,t_ransac_ms=0.0,t_post_ms=0.0;
   double inlier_ratio=0;
   double du_norm=0,dv_norm=0;
   double du_px=0,dv_px=0;
@@ -426,19 +427,30 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   feature_mask(cv::Rect(x0,y0,x1-x0,y1-y0)).setTo(255);
 
   std::vector<cv::Point2f> p0,p1;
+  const int64_t t_feat0=monoNs();
   cv::goodFeaturesToTrack(prev,p0,500,0.01,7,feature_mask);
+  o.t_features_ms=(monoNs()-t_feat0)*1e-6;
   o.features=(int)p0.size();
   if(p0.size()<30){ o.invalid_reason=2; return o; }
 
   std::vector<uchar> st; std::vector<float> err;
+  const int64_t t_lk0=monoNs();
   cv::calcOpticalFlowPyrLK(prev,curr,p0,p1,st,err,{21,21},3);
+  o.t_lk_ms=(monoNs()-t_lk0)*1e-6;
   std::vector<cv::Point2f> a,b;
   for(size_t i=0;i<p0.size();++i){if(st[i]){a.push_back(p0[i]);b.push_back(p1[i]);}}
   o.tracked=(int)a.size();
   if(a.size()<20){ o.invalid_reason=3; return o; }
 
   cv::Mat mask;
-  cv::findHomography(a,b,cv::RANSAC,2.0,mask);
+  const int64_t t_ransac0=monoNs();
+  // Bound worst-case runtime. With low inlier ratio OpenCV's default 2000
+  // RANSAC iterations can dominate the camera interval and make the most
+  // informative high-motion frames stale before MAVLink transmit.
+  constexpr int kHomographyMaxIters=350;
+  constexpr double kHomographyConfidence=0.99;
+  cv::findHomography(a,b,cv::RANSAC,2.0,mask,kHomographyMaxIters,kHomographyConfidence);
+  o.t_ransac_ms=(monoNs()-t_ransac0)*1e-6;
   if(mask.empty()){ o.invalid_reason=4; return o; }
 
   std::vector<cv::Point2f> ai,bi;
@@ -447,6 +459,7 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   o.inlier_ratio=a.empty()?0.0:(double)ai.size()/a.size();
   if(ai.size()<20){ o.invalid_reason=5; return o; }
 
+  const int64_t t_post0=monoNs();
   std::vector<cv::Point2f> au,bu;
   cv::undistortPoints(ai,au,calib.K,calib.D);
   cv::undistortPoints(bi,bu,calib.K,calib.D);
@@ -560,6 +573,7 @@ FlowStep estimateRawFlow(const cv::Mat& prev,const cv::Mat& curr,double dt,const
   const double mag=std::hypot(o.flow_body_x,o.flow_body_y);
   o.valid=std::isfinite(mag) && mag<4.0;
   o.invalid_reason=o.valid?0:6;
+  o.t_post_ms=(monoNs()-t_post0)*1e-6;
   return o;
 }
 
@@ -691,7 +705,7 @@ int main(int argc,char** argv){
     range_pub.component_id=FlowFc::self_comp;
 
     std::ofstream csv(csvpath,std::ios::trunc);
-    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,invalid_reason,dt_s,features,tracked,inliers,inlier_ratio,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
+    csv<<"mono_ns,camera_ts_ns,flow_send_ns,frame_pipeline_latency_ms,camera_queue_dropped,camera_queue_dropped_total,frame,guide_leg,guide_stage,valid,invalid_reason,dt_s,features,tracked,inliers,inlier_ratio,t_features_ms,t_lk_ms,t_ransac_ms,t_post_ms,du_px,dv_px,du_norm,dv_norm,yaw_rate_cam_z,flow_cam_x,flow_cam_y,flow_body_x,flow_body_y,quality,luna_m,luna_age_ms,range_to_fc_m,flow_send_x,flow_send_y,flow_sent,range_sent,fc_armed,ekf_local_valid,ekf_x_ned,ekf_y_ned,ekf_z_ned,ekf_vx_ned,ekf_vy_ned,ekf_vz_ned,ekf_age_ms,ekf_count,ekf_status_valid,ekf_flags,ekf_status_age_ms,ekf_status_count,ekf_vel_var,ekf_pos_h_var,ekf_pos_v_var,ekf_compass_var,ekf_terrain_var,return_event,fc_roll,fc_pitch,fc_yaw,fc_gyro_x,fc_gyro_y,fc_gyro_z,fc_gyro_age_ms,fc_gyro_samples,c0_n,c0_bx,c0_by,c1_n,c1_bx,c1_by,c2_n,c2_bx,c2_by,c3_n,c3_bx,c3_by,c4_n,c4_bx,c4_by,c5_n,c5_bx,c5_by,c6_n,c6_bx,c6_by,c7_n,c7_bx,c7_by,c8_n,c8_bx,c8_by\n";
 
     cv::setNumThreads(1);
     std::signal(SIGINT,onSignal); std::signal(SIGTERM,onSignal);
@@ -1037,6 +1051,7 @@ int main(int argc,char** argv){
            <<camera_queue_dropped<<','<<camera_queue_dropped_total<<','
            <<frame<<','<<guide_leg.load()<<','<<guide_stage.load()<<','<<(s.valid?1:0)<<','<<s.invalid_reason<<','<<dt<<','
            <<s.features<<','<<s.tracked<<','<<s.inliers<<','<<s.inlier_ratio<<','
+           <<s.t_features_ms<<','<<s.t_lk_ms<<','<<s.t_ransac_ms<<','<<s.t_post_ms<<','
            <<s.du_px<<','<<s.dv_px<<','<<s.du_norm<<','<<s.dv_norm<<','<<s.yaw_rate_cam_z<<','
            <<s.flow_cam_x<<','<<s.flow_cam_y<<','<<s.flow_body_x<<','<<s.flow_body_y<<','
            <<(int)quality<<','<<lm<<','<<lage<<','<<range_to_fc<<','<<flow_send_x<<','<<flow_send_y<<','<<(flow_sent?1:0)<<','<<(range_sent?1:0)<<','
@@ -1475,6 +1490,7 @@ int main(int argc,char** argv){
                    <<" stale_reject="<<stale_flow_rejected_total
                    <<" cam_drop="<<camera_queue_dropped_total
                    <<" latency="<<frame_pipeline_latency_ms<<"ms"
+                   <<" stage_ms[F/L/R/P]="<<s.t_features_ms<<"/"<<s.t_lk_ms<<"/"<<s.t_ransac_ms<<"/"<<s.t_post_ms
                    <<" range="<<range_sent_total
                    <<" luna="<<(hl?lm:-1.0)<<"m age="<<(hl?lage:-1.0)<<"ms";
           if(esfresh){

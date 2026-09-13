@@ -1295,13 +1295,13 @@ int main(int argc,char** argv){
             step_color=cv::Scalar(0,255,255);
           } else if(!return_b_marked){
             step_title="ШАГ 3 / 5 — ПЕРЕНЕСИТЕ A → B";
-            step_line1="Естественно перенесите аппарат примерно на 300–500 мм.";
-            step_line2="В точке B остановитесь на 2–3 секунды и нажмите B.";
+            step_line1="Перенесите аппарат примерно на 200–400 мм с естественными roll/pitch/yaw.";
+            step_line2="Без резких рывков. В B остановитесь на 2–3 секунды и нажмите B.";
             step_color=cv::Scalar(0,255,0);
           } else if(!return_home_marked){
             step_title="ШАГ 4 / 5 — ФИЗИЧЕСКИ ВЕРНИТЕСЬ В A";
-            step_line1="Вернитесь в реальную исходную точку, НЕ по метке EKF.";
-            step_line2="Полностью остановитесь на 2–3 секунды и нажмите H.";
+            step_line1="Вернитесь в реальную исходную точку естественным движением, НЕ по метке EKF.";
+            step_line2="Полностью остановитесь на 3–5 секунд и нажмите H.";
             step_color=cv::Scalar(0,180,255);
           } else {
             step_title="ШАГ 5 / 5 — ТЕСТ ЗАВЕРШЁН";
@@ -1383,6 +1383,7 @@ int main(int argc,char** argv){
           l10<<std::fixed<<std::setprecision(1)<<"КРЕН/ТАНГАЖ/КУРС: "<<roll_deg<<"/"<<pitch_deg<<"/"<<yaw_deg
              <<"°   TF-Luna: "<<(hl?lm:-1.0)<<" м";
           putGuiText(hud,return_target_set?l1.str():"ОЖИДАНИЕ ГОТОВНОСТИ / ТОЧКИ A",{35,40},0.85,cv::Scalar(240,240,240),2);
+          putGuiText(hud,"6-DoF РЕГРЕССИЯ • CAP=500 • BRIDGE=OFF",{920,40},0.50,cv::Scalar(170,220,255),1);
           putGuiText(hud,l2.str(),{35,75},0.65,cv::Scalar(220,220,220),2);
           putGuiText(hud,l3.str(),{35,105},0.65,cv::Scalar(220,220,220),2);
           putGuiText(hud,l6.str(),{35,140},0.58,cv::Scalar(190,190,190),1);

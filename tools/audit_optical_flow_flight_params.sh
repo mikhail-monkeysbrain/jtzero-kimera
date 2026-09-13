@@ -65,7 +65,7 @@ expected={
   "EK3_FLOW_DELAY":0,
   "EK3_SRC1_POSXY":0,
   "EK3_SRC1_VELXY":5,
-  "EK3_SRC1_POSZ":2,
+  "EK3_SRC1_POSZ":1,
   "EK3_SRC1_VELZ":0,
   "EK3_SRC1_YAW":0,
 }
@@ -104,6 +104,10 @@ if flow_max is not None:
     print(f"INFO  EK3_FLOW_MAX       = {flow_max:g} rad/s (read-only; не меняется этим preflight)")
     print("      Это tuning-предел EKF, а не автоматически равный пределу publisher.")
 
+print()
+print("INFO  EK3_SRC1_POSZ=1 (Baro): вертикальная позиция EKF не должна прыгать")
+print("      при смене поверхности под дальномером. TF-Luna остаётся активным")
+print("      как DISTANCE_SENSOR для Optical Flow / расстояния до поверхности.")
 print("RESULT: PASS")
 print("FC source configuration соответствует проверенному OpticalFlow flight-контуру.")
 PY

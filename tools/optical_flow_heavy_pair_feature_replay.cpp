@@ -74,7 +74,12 @@ int main(int argc,char**argv){
     std::vector<PairDiag> cand;
     g_max_features=500;
 
+    std::cerr<<"Поиск тяжёлых пар: 0/"<<meta.size()<<"\r"<<std::flush;
     for(size_t ia=0;ia<meta.size();++ia){
+      if(ia%200==0){
+        std::cerr<<"Поиск тяжёлых пар: "<<ia<<"/"<<meta.size()
+                 <<" candidates="<<cand.size()<<"\r"<<std::flush;
+      }
       cv::Mat a=load(bin,meta[ia]); if(a.empty())continue;
       for(int64_t target:targets_ns){
         const int64_t want=meta[ia].ts+target;
@@ -90,6 +95,8 @@ int main(int argc,char**argv){
         cand.push_back({ia,ib,dt,disp,s.valid?1:0,s.tracked,s.inliers});
       }
     }
+    std::cerr<<"Поиск тяжёлых пар: "<<meta.size()<<"/"<<meta.size()
+             <<" candidates="<<cand.size()<<"\n";
 
     // Deduplicate same pair and sort by measured displacement first, then prefer valid baseline.
     std::sort(cand.begin(),cand.end(),[](const PairDiag&x,const PairDiag&y){

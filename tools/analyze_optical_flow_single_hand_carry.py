@@ -33,7 +33,7 @@ def window_stats(rows, lo, hi):
         "vh":med([hypot2(f(r,"ekf_vx_ned",0),f(r,"ekf_vy_ned",0)) for r in seg]),
     }
 
-def integrate_raw(rows, lo, hi):
+def integrate_raw(rows, lo, hi, include_stale=False, camera_minus_range_z=-0.021):
     n=e=0.0
     used=0
     stale=invalid=0
@@ -46,10 +46,16 @@ def integrate_raw(rows, lo, hi):
             continue
         if not sent:
             stale+=1
-            continue
+            if not include_stale:
+                continue
         if not (0<dt<0.2):
             continue
+        # TF-Luna measures distance from the rangefinder. Camera optical centre is
+        # ~21 mm higher in the current mount (camera_z=0.050, range_z=0.071),
+        # so camera-to-ground height is range - (camera_z-range_z) = range + 0.021 m.
         h=f(r,"luna_m",float("nan"))
+        if math.isfinite(h):
+            h = h - camera_minus_range_z
         if not math.isfinite(h) or h<=0.02: continue
         fx=f(r,"flow_body_x",float("nan")); fy=f(r,"flow_body_y",float("nan"))
         gx=f(r,"fc_gyro_x",float("nan")); gy=f(r,"fc_gyro_y",float("nan"))
@@ -115,8 +121,10 @@ def main():
     B=window_stats(rows,post_lo,post_hi)
     dn=B["x"]-A["x"]; de=B["y"]-A["y"]
     ekf_dist=hypot2(dn,de)
-    rn,re,used,invalid,stale=integrate_raw(rows,pre_hi,post_lo)
+    rn,re,used,invalid,stale=integrate_raw(rows,pre_hi,post_lo,include_stale=False)
     raw_dist=hypot2(rn,re)
+    ran,rae,used_all,invalid_all,stale_all=integrate_raw(rows,pre_hi,post_lo,include_stale=True)
+    raw_all_dist=hypot2(ran,rae)
 
     t0=f(rows[pre_hi],"mono_ns",0)/1e9
     t1=f(rows[post_lo],"mono_ns",0)/1e9
@@ -143,11 +151,17 @@ def main():
     print(f"  ΔN/E = {dn*1000:+.1f} / {de*1000:+.1f} мм")
     print(f"  горизонтальное перемещение = {ekf_dist*1000:.1f} мм")
     print()
-    print("RAW CAMERA — независимая интеграция отправленного Optical Flow")
-    print("  (с компенсацией вращения FC и реальным TF-Luna, теми же знаками, что использует наш return GUI)")
-    print(f"  ΔN/E = {rn*1000:+.1f} / {re*1000:+.1f} мм")
-    print(f"  горизонтальное перемещение = {raw_dist*1000:.1f} мм")
-    print(f"  использовано кадров = {used}; invalid внутри окна = {invalid}; valid-but-not-sent = {stale}")
+    print("RAW CAMERA — независимая интеграция Optical Flow")
+    print("  Учитывается смещение по высоте между камерой и TF-Luna: camera-range = -21 мм.")
+    print("  SENT-ONLY (только реально отправленные FC измерения):")
+    print(f"    ΔN/E = {rn*1000:+.1f} / {re*1000:+.1f} мм")
+    print(f"    горизонтальное перемещение = {raw_dist*1000:.1f} мм")
+    print(f"    использовано кадров = {used}; invalid = {invalid}; valid-but-not-sent = {stale}")
+    print("  ALL-VALID (включая valid кадры, отброшенные stale-gate):")
+    print(f"    ΔN/E = {ran*1000:+.1f} / {rae*1000:+.1f} мм")
+    print(f"    горизонтальное перемещение = {raw_all_dist*1000:.1f} мм")
+    print(f"    использовано кадров = {used_all}")
+    print(f"  Потеря из-за stale-gate по вектору = {(raw_all_dist-raw_dist)*1000:+.1f} мм по модулю (ориентир, не скалярная сумма пути)")
     print()
     print("ДИНАМИКА")
     print(f"  max |Vxy| FC = {max_v:.3f} м/с")
@@ -157,14 +171,17 @@ def main():
     print()
     print("СРАВНЕНИЕ С ФИЗИЧЕСКИМ ПЕРЕНОСОМ")
     print("  Физически оператор сообщил примерно 400–500 мм.")
-    if 0.4 <= raw_dist <= 0.55:
-        print("  RAW CAMERA близка к физическому переносу → искать расхождение между камерой и EKF.")
-    elif raw_dist < 0.30:
-        print("  RAW CAMERA сама существенно недооценивает перенос → проблема возникает ДО EKF.")
+    ref=raw_all_dist
+    if 0.4 <= ref <= 0.55:
+        print("  ALL-VALID RAW близка к физическому переносу → значимая часть ошибки может быть между frontend/stale policy и EKF.")
+    elif ref < 0.30:
+        print("  Даже ALL-VALID RAW существенно меньше 400–500 мм → недоизмерение действительно возникает до EKF.")
     else:
-        print("  RAW CAMERA не попадает однозначно в ожидаемые 400–500 мм → вывод по масштабу пока не делать.")
+        print("  ALL-VALID RAW находится между ожидаемым и явно неверным диапазоном → одного этого прогона недостаточно для окончательного вывода о масштабе.")
     if raw_dist>0.05:
-        print(f"  EKF / RAW по модулю = {ekf_dist/raw_dist:.3f}")
+        print(f"  EKF / SENT-RAW по модулю = {ekf_dist/raw_dist:.3f}")
+    if raw_all_dist>0.05:
+        print(f"  EKF / ALL-VALID-RAW по модулю = {ekf_dist/raw_all_dist:.3f}")
     print()
     print("ПРИМЕЧАНИЕ: границы движения выбраны автоматически. Если они не совпали с фактическим переносом,")
     print("этот вывод не считать доказательством — скрипт печатает выбранный интервал именно для проверки.")

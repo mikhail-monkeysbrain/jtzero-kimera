@@ -822,8 +822,15 @@ int main(int argc,char** argv){
     uint64_t flow_sent_total=0,flow_invalid_total=0,range_sent_total=0;
     uint64_t camera_queue_dropped_total=0, stale_flow_rejected_total=0;
     uint64_t bridge_hold_total=0, bridge_recovered_total=0, bridge_reset_total=0;
+    uint64_t terrain_step_reject_total=0;
     bool bridge_pending=false;
     int64_t last_range_send_ns=0;
+    double terrain_prev_range_m=0.0;
+    bool terrain_prev_range_valid=false;
+    int64_t terrain_guard_until_ns=0;
+    constexpr double kTerrainStepAbsM=0.18;
+    constexpr double kTerrainStepRatio=1.50;
+    constexpr int64_t kTerrainGuardNs=400000000LL; // 0.4 s
     constexpr double kMaxFlowPipelineAgeMs=80.0;
 
     // Flight-only readiness gate. It does not arm or inhibit ArduPilot; it is an
@@ -1088,6 +1095,26 @@ int main(int argc,char** argv){
         const double lage=hl?(now-lns)*1e-6:1e9;
         bool range_sent=false;
         const double range_to_fc=(bench_height_override>0.0)?bench_height_override:lm;
+
+        // A downward rangefinder can jump from table to floor (or back) while the
+        // vehicle itself has not moved vertically. During that short transition
+        // the camera often sees BOTH depth planes, so there is no single metric
+        // scale for optical flow. Do not feed those mixed-plane frames to EKF.
+        // Resume automatically after 0.4 s with the newest frame anchor.
+        if(bench_height_override<=0.0 && hl && lage<100.0 && lm>0.05){
+          if(terrain_prev_range_valid){
+            const double d=std::abs(lm-terrain_prev_range_m);
+            const double ratio=std::max(lm,terrain_prev_range_m)/
+                               std::max(0.05,std::min(lm,terrain_prev_range_m));
+            if(d>=kTerrainStepAbsM && ratio>=kTerrainStepRatio){
+              terrain_guard_until_ns=now+kTerrainGuardNs;
+            }
+          }
+          terrain_prev_range_m=lm;
+          terrain_prev_range_valid=true;
+        }
+        const bool terrain_step_guard = now < terrain_guard_until_ns;
+
         if(hl&&lage<200&&(last_range_send_ns==0||now-last_range_send_ns>=50000000LL)){
           range_sent=range_pub.sendDistanceSensor(fc.fd,(uint32_t)(now/1000000LL),range_to_fc);
           last_range_send_ns=now;
@@ -1162,7 +1189,7 @@ int main(int argc,char** argv){
           (ts>0) ? (flow_send_ns-ts)*1e-6 : -1.0;
         const bool flow_fresh = frame_pipeline_latency_ms>=0.0 &&
                                 frame_pipeline_latency_ms<=kMaxFlowPipelineAgeMs;
-        if(s.valid && flow_fresh){
+        if(s.valid && flow_fresh && !terrain_step_guard){
           quality=255;
           // AP_OpticalFlow_MAV currently timestamps measurement by RECEIVE time,
           // not packet.time_usec, so low pipeline latency is mandatory.
@@ -1172,6 +1199,7 @@ int main(int argc,char** argv){
         } else {
           if(!prev.empty() && !s.valid) ++flow_invalid_total;
           if(s.valid && !flow_fresh) ++stale_flow_rejected_total;
+          if(s.valid && flow_fresh && terrain_step_guard) ++terrain_step_reject_total;
         }
 
         FlowFcLocal ep{}; double eage=1e9; uint64_t ec=0;
@@ -1890,6 +1918,7 @@ int main(int argc,char** argv){
                    <<" inliers="<<s.inliers<<"/"<<s.tracked
                    <<" sent="<<flow_sent_total<<" invalid="<<flow_invalid_total
                    <<" stale_reject="<<stale_flow_rejected_total
+                   <<" terrain_guard="<<terrain_step_reject_total
                    <<" bridge_disabled[h/r/x]="<<bridge_hold_total<<"/"<<bridge_recovered_total<<"/"<<bridge_reset_total
                    <<" cam_drop="<<camera_queue_dropped_total
                    <<" latency="<<frame_pipeline_latency_ms<<"ms"
@@ -1938,6 +1967,7 @@ int main(int argc,char** argv){
              <<" flow_sent="<<flow_sent_total
              <<" invalid="<<flow_invalid_total
              <<" stale_reject="<<stale_flow_rejected_total
+             <<" terrain_guard="<<terrain_step_reject_total
              <<" bridge_hold="<<bridge_hold_total
              <<" bridge_recovered="<<bridge_recovered_total
              <<" bridge_reset="<<bridge_reset_total
